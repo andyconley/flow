@@ -262,7 +262,20 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
                     "execution_configured": kind in {"local", "openai-subscription"} or selected.provider.get("permission_requests") in {"interactive", "stock-openhands"}})
             except (ValueError, OSError) as exc:
                 routes.append({"profile": profile, "role": role["name"], "error": str(exc)})
-    from openhands_policy import subscription_readiness, specialist_selections
+    from openhands_policy import subscription_readiness, specialist_selections, local_eligibility
+    framework = read_toml(FRAMEWORK_ROLES.parent / 'flow.toml')
+    admin_path = user_overlay / 'flow.toml'
+    admin = read_toml(admin_path) if admin_path.is_file() else {}
+    local_candidates = []
+    for candidate in admin.get('provider_candidates', framework.get('provider_candidates', [])):
+        if candidate.get('provider') == 'ollama':
+            profile = config.get('profiles', {}).get(candidate.get('runtime_profile', 'ollama'), {})
+            reasons = local_eligibility(candidate, profile)
+            if candidate.get('enabled') is False:
+                reasons.append('candidate disabled')
+            local_candidates.append({'candidate_id': candidate['candidate_id'],
+                'model': profile.get('model'), 'context_tokens': profile.get('max_input_tokens'),
+                'local_capability_eligible': not reasons, 'ineligibility_reasons': reasons})
     implementation = {}
     try:
         coordinator = select(root, 'implement', config=config, user_overlay=user_overlay)
@@ -277,4 +290,5 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
     return {"default_profile": config.get("default_profile"), "routes": routes,
             'implementation_profile': config.get('stages', {}).get('implement', {}).get('profile'),
             'subscription': subscription_readiness(), 'implementation': implementation,
+            'local_candidates': local_candidates,
             "note": "Configuration only: no authentication, model availability or effective permissions verified. Skills/AGENTS discovery and PROJECT.md are composed at execution. SDK readiness alone does not mean execution is configured."}

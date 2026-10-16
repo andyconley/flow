@@ -28,9 +28,9 @@ kind = "local"
 # kind = "local"
 # model = "ollama_chat/your-tool-capable-model"
 # base_url = "http://127.0.0.1:11434"
-# max_input_tokens = 12288
+# max_input_tokens = 16384
 # max_output_tokens = 2048
-# condenser_max_tokens = 9216
+# condenser_max_tokens = 13312
 # [roles.tech-writer]
 # profile = "local-worker"
 # tools = ["file_editor"]

@@ -52,6 +52,8 @@ def register_policy_task_tool():
             self.delegate = delegate
             self.bindings = dict(bindings)
             self.tasks = {}
+            self.task_routes = {}
+            self.failed_local_roles = set()
 
         def __call__(self, action, conversation=None):
             if action.subagent_type not in self.bindings or (
@@ -59,10 +61,43 @@ def register_policy_task_tool():
             ):
                 return TaskObservation.from_text(text='Role or resume is outside the approved Flow roster.',
                     task_id='rejected', subagent=action.subagent_type, status='error', is_error=True)
-            mapped = action.model_copy(update={'subagent_type': self.bindings[action.subagent_type]})
-            result = self.delegate(mapped, conversation)
+            binding = self.bindings[action.subagent_type]
+            routes = binding if isinstance(binding, dict) else {'primary': binding}
+            route = self.task_routes.get(action.resume, routes['primary'])
+            if not action.resume and action.subagent_type in self.failed_local_roles and routes.get('fallback'):
+                route = routes['fallback']
+            lock = None
+            if routes.get('local') and route == routes['primary']:
+                import fcntl
+                from pathlib import Path
+                directory = Path.home() / '.flow/state'
+                directory.mkdir(parents=True, exist_ok=True)
+                lock = (directory / 'openhands-local-worker.lock').open('a')
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    lock.close()
+                    lock = None
+                    if not action.resume and routes.get('fallback'):
+                        route = routes['fallback']
+                    else:
+                        return TaskObservation.from_text(text='Local worker slot is busy; no model was started.',
+                            task_id='rejected', subagent=action.subagent_type, status='error', is_error=True)
+            mapped = action.model_copy(update={'subagent_type': route})
+            try:
+                result = self.delegate(mapped, conversation)
+            finally:
+                if lock is not None:
+                    lock.close()
             if not result.is_error:
                 self.tasks[result.task_id] = action.subagent_type
+                self.task_routes[result.task_id] = route
+            elif routes.get('local') and route == routes['primary'] and routes.get('fallback'):
+                self.failed_local_roles.add(action.subagent_type)
+                from openhands.sdk import TextContent
+                result = result.model_copy(update={'content': [*result.content, TextContent(text=
+                    'Local execution failed. Inspect any partial edits before retrying. A fresh task for this role '
+                    'will use its policy-selected hosted fallback; no automatic replay was performed.')]})
             return result
 
         def close(self):

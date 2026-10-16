@@ -8,6 +8,20 @@ from flowtoml import read_toml
 from paths import USER_OVERLAY_DIR
 from provider_selection import merge_selection_policy, select_candidate
 
+# Pinned SDK 1.54 rejects smaller windows before a model call.
+SDK_MIN_CONTEXT = 16384
+
+
+def local_eligibility(candidate, profile):
+    reasons = []
+    if 'sdk_tool_calling' not in candidate.get('capabilities', []):
+        reasons.append('SDK tool-use validation is not declared')
+    context = profile.get('max_input_tokens')
+    if context is None or context < SDK_MIN_CONTEXT:
+        reasons.append(f'configured SDK context must be at least {SDK_MIN_CONTEXT} tokens')
+    return reasons
+
+
 
 def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR):
     from openhands_config import FRAMEWORK_ROLES, RuntimeConfigurationError, select
@@ -19,6 +33,11 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
     policy = merge_selection_policy(framework.get('provider_selection', {}),
                                    admin.get('provider_selection'), project.get('provider_selection'))
     catalog = admin.get('provider_candidates', framework.get('provider_candidates', []))
+    explicit_order = any('provider_order' in layer.get('provider_selection', {})
+                         for layer in (admin, project))
+    preferences = dict(framework.get('implementation_routing', {}).get('hosted_preferences', {}))
+    for layer in (admin, project):
+        preferences.update(layer.get('implementation_routing', {}).get('hosted_preferences', {}))
     _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent, user_overlay=user_overlay)
     declarations = {a['name']: a for a in shared_agents(manifest)}
     roster = parent.role_options.get('specialists', list(declarations))
@@ -41,10 +60,8 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
                 profile = candidate.get('runtime_profile', provider)
                 if provider == 'ollama':
                     # Historical structured-edit grants do not authorize SDK tools.
-                    if 'sdk_tool_calling' not in candidate.get('capabilities', []):
+                    if profile not in profiles or local_eligibility(candidate, profiles[profile]):
                         continue
-                    if profile not in profiles:
-                        continue  # endpoint and context must be explicitly configured
                 if profile not in profiles:
                     continue
                 kind = profiles[profile].get('kind')
@@ -53,12 +70,25 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
                 candidate['_profile'] = profile
                 candidates.append(candidate)
             requirements = {'operation': 'edit', 'minimum_tier': declaration.get('model_tier', 'working')}
-            decision = select_candidate(requirements, policy, candidates,
+            role_policy = policy
+            preferred = preferences.get(role)
+            if not explicit_order and preferred in {'claude', 'codex'}:
+                other = 'codex' if preferred == 'claude' else 'claude'
+                role_policy = {**policy, 'provider_order': ['ollama', preferred, other]}
+                role_policy.pop('policy_digest', None)
+            decision = select_candidate(requirements, role_policy, candidates,
                 [{'candidate_id': c['candidate_id'], 'state': 'ready'} for c in candidates])
             chosen = next((c for c in candidates if c['candidate_id'] == decision['selected_candidate_id']), None)
             if chosen is None:
                 raise RuntimeConfigurationError(f'no policy-eligible SDK specialist provider for {role}; configure an explicit role profile or eligible candidate')
             child = select(root, 'implement', role, chosen['_profile'], config=config, user_overlay=user_overlay)
+            if child.provider['kind'] == 'local':
+                hosted = next((c for entry in decision['ordered_candidates'] for c in candidates
+                    if c['candidate_id'] == entry['candidate_id'] and c['provider'] in {'claude', 'codex'}), None)
+                if hosted:
+                    fallback = select(root, 'implement', role, hosted['_profile'], config=config, user_overlay=user_overlay)
+                    child = replace(child, role_options={**child.role_options,
+                        '_hosted_fallback': hosted['_profile'], '_hosted_fallback_binding': fallback.fingerprint()})
         # A worker cannot become another coordinator through its configuration.
         if child.provider['kind'] == 'openai-subscription':
             raise RuntimeConfigurationError('subscription coordinator profiles cannot be specialist worker bindings')

@@ -273,6 +273,23 @@ def build_coordinator(selection, root):
         register_agent_if_absent(name=key, factory_func=factory,
                                  description=f'Flow policy worker: {role}')
         bindings[role] = key
+        if child.provider['kind'] == 'local':
+            fallback_key = None
+            if child.role_options.get('_hosted_fallback'):
+                from openhands_config import select
+                from dataclasses import replace
+                fallback = select(root, 'implement', role, child.role_options['_hosted_fallback'], config=load_config(root))
+                if fallback.fingerprint() != child.role_options['_hosted_fallback_binding']:
+                    raise RuntimeConfigurationError('hosted fallback changed after binding')
+                fallback = replace(fallback, role_options={**fallback.role_options, 'specialists': []})
+                fallback_key = 'flow-policy-' + hashlib.sha256((str(root.resolve()) + fallback.fingerprint()).encode()).hexdigest()[:20]
+                def fallback_factory(parent_llm, selected=fallback, expected=fallback.fingerprint()):
+                    if selected.fingerprint() != expected:
+                        raise RuntimeConfigurationError('fallback role changed after binding')
+                    return build_native_agent(selected, root)
+                register_agent_if_absent(name=fallback_key, factory_func=fallback_factory,
+                    description=f'Flow policy fallback: {role}')
+            bindings[role] = {'primary': key, 'fallback': fallback_key, 'local': True}
     # This supported SDK entrypoint loads/refreshes only OpenHands OAuth at execution.
     # It never initiates login and fails if the human has not signed in.
     llm = local_llm(selection) if selection.provider['kind'] == 'local' else create_subscription_llm_from_config(LLM(model=selection.provider['model'],

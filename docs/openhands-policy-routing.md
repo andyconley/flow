@@ -17,25 +17,47 @@ dispatch. Finish/think are the SDK's normal built-ins.
 Each worker resolves separately. Explicit `[roles.NAME].profile` bindings win.
 Otherwise `provider_selection` is merged with the existing monotonic policy merger,
 using framework, user and project layers. Administrator `provider_candidates`
-replace the framework candidate catalog. The existing selector filters enabled
-candidates for edit capability, role tier and policy eligibility, then ranks
-Ollama before Claude before Codex (hosted ordering may be customized). Native model
-and effort policy comes from canonical agent tiers; an explicit runtime profile
-model wins. Candidate catalog native model strings are not substituted for the
-role-specific native model. Configuration eligibility is not authenticated/live
-availability; failure is reported without silent provider fallback.
+replace the framework candidate catalog. Eligible Ollama remains first for every
+role within its declared tier, including lead-developer, data-engineer and test-engineer.
+It is not limited to support work. Without an explicit user/project provider order,
+the shipped `implementation_routing.hosted_preferences` uses Codex for lead-developer,
+data-engineer, test-engineer and sre; Claude for other roles. These are practical
+allocation defaults, not vendor capability claims. Explicit provider order and
+role profile bindings retain precedence. Per-role hosted preferences can also be
+overridden in user/project flow.toml. All defaults still obey candidate eligibility.
+Native models use canonical role tiers; explicit runtime profile models win.
+No model chooses a provider or silently changes an endpoint.
 
-Historical Ollama structured-edit capability is not an SDK tool-use grant.
-Automatic local selection requires `sdk_tool_calling` in its candidate capabilities
-and a compatible local runtime profile. A profile is derived from existing
-`local_machine` model/context settings when present; it does not pull a model,
-start Ollama or assert model quality. Explicit worker profile bindings are also
-supported. Without suitable local eligibility, the shipped order usually selects
-Claude workers with different per-role models. Mixed providers occur when policy
-eligibility or explicit role bindings select different providers, not by forced
-round-robin balancing. For example `[roles.test-engineer] profile = "codex"`
-keeps other policy-selected specialists on Claude. With the current Mac's historic
-llama3.1:8b declaration, no automatic Ollama SDK worker eligibility is assumed.
+Ollama admission requires declared `sdk_tool_calling` and an explicit SDK context
+of at least 16,384, the pinned SDK's own minimum. Advertised Ollama `tools` support
+is not evidence of a successful Flow worker test. `workflow runtime --json` lists
+local context and missing eligibility reasons. Profiles derive from machine-owned
+`local_machine` settings; updates do not replace those with this laptop's values.
+
+Eligible local workers use a machine-wide advisory lock at
+`~/.flow/state/openhands-local-worker.lock`, held for the SDK task's duration.
+One Flow local worker runs at a time across projects/processes. This does not
+control unrelated Ollama clients. A busy slot routes a fresh assignment to the
+fixed eligible hosted fallback. A failed local task returns its failure and a
+partial-edit warning; the SDK coordinator can inspect and issue a fresh task,
+which uses the fixed hosted fallback in that active SDK task executor. Failed work is never automatically replayed.
+Explicit role profile bindings remain fixed and do not gain an implicit fallback.
+Resume uses the original worker binding; unavailable local capacity rejects resume.
+
+### Current work-Mac baseline (October 16)
+
+The existing Llama 3.1 8B Q4_K_M is configured at 8,192 context on this Mac only.
+The bounded SDK implementation/tool check stopped at LLM construction with
+`LLMContextWindowTooSmallError`: SDK 1.54 requires at least 16,384. No inference
+request occurred and `sdk_tool_calling` was not added. The SDK's discouraged
+`ALLOW_SHORT_CONTEXT_WINDOWS` override was not enabled. Current eligible primary
+implementation fallback is Codex, with Claude review/design workers.
+This 8K baseline is not validated memory-safe: the preceding separate retrieval
+probe reported about 2.98 GiB system swap growth under desktop load. Studio's
+independent Gemma 64K setup remains unchanged. To activate primary Ollama work,
+resolve the SDK context minimum explicitly, then pass a bounded implementation
+and tool-result check before declaring capability. Do not infer failure of tool
+support from this context preflight rejection.
 
 Built-in profiles merge beneath user/project runtime.toml; no existing files are
 rewritten. Existing default/stage/role/profile overrides remain visible. Native

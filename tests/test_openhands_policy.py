@@ -30,14 +30,14 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(parent.provider['kind'], 'openai-subscription')
         self.assertEqual(parent.provider['model'], 'gpt-5.6-terra')
         children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
-        self.assertEqual(children['lead-developer'].provider['model'], 'sonnet')
+        self.assertEqual(children['lead-developer'].provider['model'], 'gpt-5.6-terra')
         self.assertEqual(children['quality-reviewer'].provider['model'], 'opus')
         self.assertEqual(children['tech-writer'].provider['model'], 'haiku')
         self.assertTrue(all(c.role_options['specialists'] == [] for c in children.values()))
 
     def test_override_mixes_providers_and_changes_binding(self):
         old = self.select().fingerprint()
-        self.cfg['roles'] = {'test-engineer': {'profile': 'codex'}}
+        self.cfg['roles'] = {'test-engineer': {'profile': 'codex', 'context': ['extra.md']}}
         parent = self.select()
         children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
         self.assertEqual(children['test-engineer'].provider['kind'], 'codex')
@@ -127,7 +127,7 @@ class PolicyTests(unittest.TestCase):
         cfg = config.load_config(self.root, self.overlay)
         self.assertEqual(cfg['profiles']['ollama']['model'], 'ollama_chat/llama3.1:8b')
         children = specialist_selections(self.root, self.select(), cfg, user_overlay=self.overlay)
-        self.assertTrue(all(c.provider['kind'] == 'claude' for c in children.values()))
+        self.assertTrue(all(c.provider['kind'] in {'claude', 'codex'} for c in children.values()))
         cfg['roles'] = {'test-engineer': {'profile': 'ollama'}}
         children = specialist_selections(self.root, self.select(), cfg, user_overlay=self.overlay)
         self.assertEqual(children['test-engineer'].provider['kind'], 'local')
@@ -144,10 +144,10 @@ class PolicyTests(unittest.TestCase):
     def test_report_includes_resolved_implementation(self):
         report = config.wiring_report(self.root, self.overlay)
         self.assertEqual(report['implementation']['coordinator']['kind'], 'openai-subscription')
-        self.assertEqual(report['implementation']['workers']['lead-developer']['model'], 'sonnet')
+        self.assertEqual(report['implementation']['workers']['lead-developer']['model'], 'gpt-5.6-terra')
 
     def test_eligible_local_candidate_routes_by_tier(self):
-        (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="local-tool-model"\n'
+        (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="local-tool-model"\ncontext_tokens=16384\n'
             '[[provider_candidates]]\ncandidate_id="ollama-approved"\nprovider="ollama"\n'
             'model="local-tool-model"\nenabled=true\ntier="working"\n'
             'operations=["edit"]\ncapabilities=["structured_output","structured_edit","sdk_tool_calling"]\n'
@@ -159,3 +159,40 @@ class PolicyTests(unittest.TestCase):
         children = specialist_selections(self.root, parent, cfg, user_overlay=self.overlay)
         self.assertEqual(children['lead-developer'].provider['kind'], 'local')
         self.assertEqual(children['quality-reviewer'].provider['kind'], 'codex')
+
+    def test_explicit_claude_order_overrides_mixed_defaults(self):
+        (self.overlay / 'flow.toml').write_text('[provider_selection]\nprovider_order=["ollama","claude","codex"]\n')
+        children = specialist_selections(self.root, self.select(), self.cfg, user_overlay=self.overlay)
+        self.assertTrue(all(c.provider['kind'] == 'claude' for c in children.values()))
+
+    def test_short_local_context_is_visible_and_falls_back(self):
+        (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="llama3.1:8b"\ncontext_tokens=8192\n')
+        report = config.wiring_report(self.root, self.overlay)
+        self.assertFalse(report['local_candidates'][0]['local_capability_eligible'])
+        self.assertTrue(any('16384' in reason for reason in report['local_candidates'][0]['ineligibility_reasons']))
+        self.assertEqual(report['implementation']['workers']['lead-developer']['profile'], 'codex')
+        self.assertEqual(report['implementation']['workers']['quality-reviewer']['profile'], 'claude')
+
+    def test_local_slot_and_failed_task_use_bound_hosted_fallback(self):
+        import fcntl
+        from openhands_accounting import register_policy_task_tool
+        from openhands.sdk.tool import Tool, resolve_tool
+        from openhands.tools.task.definition import TaskObservation
+        with patch('pathlib.Path.home', return_value=self.root):
+            tool = resolve_tool(Tool(name=register_policy_task_tool(), params={'bindings': {
+                'lead-developer': {'primary': 'local-fixed', 'fallback': 'codex-fixed', 'local': True}}}), SimpleNamespace())[0]
+            ok = TaskObservation.from_text(text='done', task_id='one', subagent='codex-fixed', status='completed')
+            tool.executor.delegate = Mock(return_value=ok)
+            (self.root / '.flow/state').mkdir(parents=True)
+            with (self.root / '.flow/state/openhands-local-worker.lock').open('a') as held:
+                fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                tool.executor(tool.action_type(prompt='implement', subagent_type='lead-developer'))
+                self.assertEqual(tool.executor.delegate.call_args.args[0].subagent_type, 'codex-fixed')
+            failed = TaskObservation.from_text(text='failed with possible edits', task_id='two', subagent='local-fixed', status='error', is_error=True)
+            tool.executor.delegate = Mock(return_value=failed)
+            result = tool.executor(tool.action_type(prompt='implement', subagent_type='lead-developer'))
+            self.assertIn('no automatic replay', result.text)
+            self.assertEqual(tool.executor.delegate.call_count, 1)
+            tool.executor.delegate = Mock(return_value=ok)
+            tool.executor(tool.action_type(prompt='review partial edits and continue', subagent_type='lead-developer'))
+            self.assertEqual(tool.executor.delegate.call_args.args[0].subagent_type, 'codex-fixed')
