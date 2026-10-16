@@ -32,8 +32,9 @@ project context and skills. Default task-enabled parents expose the other-role
 roster. Explicit lists control Flow factory registration and prompt hints;
 these lists are not an enforceable global SDK agent allowlist. The process-global
 registry and stock file discovery may expose additional agents. `specialists = []`
-removes the task tool. Omitted child rosters expose the normal merged-role default. Native parents use
-stock ACP/native discovery. ACP does
+removes the task tool. Omitted child rosters expose the normal merged-role default. Implementation uses the SDK coordinator and checked logical-role dispatch described in
+[policy routing](openhands-policy-routing.md). Native workers are leaves within Flow.
+Explicit native stages outside implementation use stock ACP/native discovery. ACP does
 not receive SDK custom tools or condensers. Unsupported fields are recorded in
 per-target `translation-report.json`; translation is not identical containment.
 

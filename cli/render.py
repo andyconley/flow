@@ -111,7 +111,7 @@ SHAPER_COMMANDS = frozenset({"flow-boot", "flow-define", "flow-solution", "flow-
 def routing_hints_for(target: str, agents: list[dict], manifest: dict, *, command_name: str | None = None) -> str:
     # Shaping describes logical work. Concrete delivery routing is resolved
     # later by Flow policy and must not depend on the runtime doing the shaping.
-    if command_name in SHAPER_COMMANDS:
+    if command_name == "flow-boot":
         return ""
     if not agents:
         return ""
