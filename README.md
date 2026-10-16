@@ -485,6 +485,15 @@ Two things to know before acting on the numbers. **A high count usually means ho
 
 Flow generates Claude, Codex and OpenHands role definitions from the same authoritative Markdown sources and shared manifest. For the full adapter model and file list, see [runtime-adapters.md](docs/runtime-adapters.md).
 
+Implementation defaults to a regular OpenHands SDK coordinator using the existing
+machine-local Ollama profile. Checked dispatch binds each specialist to Flow's
+provider policy; Claude and Codex ACP workers use existing native logins. Eligible
+Ollama workers can perform primary implementation work. No separate OpenHands
+subscription login is required for the local coordinator. See
+[implementation policy routing](docs/openhands-policy-routing.md) for the 16K
+minimum, explicit unverified enablement, single local worker and hosted fallback
+behavior. Machine settings and existing permissions remain user-owned.
+
 ### What Gets Installed
 
 At user level, flow installs the pieces each runtime needs:
