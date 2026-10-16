@@ -127,6 +127,17 @@ def local_llm(selection: Selection):
     llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens", "reasoning_effort") if name in provider}
     llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
               usage_id=f"flow-{selection.role}", **llm_options)
+    if provider["model"].startswith(("ollama/", "ollama_chat/")) and provider.get("max_input_tokens"):
+        # SDK max_input_tokens is a budget, not Ollama's allocation. LiteLLM
+        # merges extra_body after provider transformation; retain generation
+        # defaults when explicitly supplying the native options object.
+        options = {"num_ctx": provider["max_input_tokens"]}
+        if provider.get("max_output_tokens"):
+            options["num_predict"] = provider["max_output_tokens"]
+        for field in ("temperature", "top_p", "seed"):
+            if getattr(llm, field, None) is not None:
+                options[field] = getattr(llm, field)
+        llm = llm.model_copy(update={"litellm_extra_body": {"options": options}})
     return llm
 
 

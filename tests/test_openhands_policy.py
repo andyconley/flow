@@ -196,3 +196,16 @@ class PolicyTests(unittest.TestCase):
             tool.executor.delegate = Mock(return_value=ok)
             tool.executor(tool.action_type(prompt='review partial edits and continue', subagent_type='lead-developer'))
             self.assertEqual(tool.executor.delegate.call_args.args[0].subagent_type, 'codex-fixed')
+
+    def test_local_sdk_profile_forwards_actual_ollama_context(self):
+        from openhands_runtime import local_llm
+        self.cfg['profiles']['local'] = {'kind': 'local', 'model': 'ollama_chat/llama3.1:8b',
+            'base_url': 'http://127.0.0.1:11434', 'max_input_tokens': 16384,
+            'max_output_tokens': 2048, 'reasoning_effort': 'none'}
+        selected = config.select(self.root, 'implement', 'lead-developer', 'local',
+            config=self.cfg, user_overlay=self.overlay)
+        llm = local_llm(selected)
+        self.assertEqual(llm.max_input_tokens, 16384)
+        self.assertEqual(llm.litellm_extra_body['options']['num_ctx'], 16384)
+        self.assertEqual(llm.litellm_extra_body['options']['num_predict'], 2048)
+        self.assertEqual(llm.reasoning_effort, 'none')

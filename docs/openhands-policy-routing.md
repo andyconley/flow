@@ -46,18 +46,24 @@ Resume uses the original worker binding; unavailable local capacity rejects resu
 
 ### Current work-Mac baseline (October 16)
 
-The existing Llama 3.1 8B Q4_K_M is configured at 8,192 context on this Mac only.
-The bounded SDK implementation/tool check stopped at LLM construction with
-`LLMContextWindowTooSmallError`: SDK 1.54 requires at least 16,384. No inference
-request occurred and `sdk_tool_calling` was not added. The SDK's discouraged
-`ALLOW_SHORT_CONTEXT_WINDOWS` override was not enabled. Current eligible primary
-implementation fallback is Codex, with Claude review/design workers.
-This 8K baseline is not validated memory-safe: the preceding separate retrieval
-probe reported about 2.98 GiB system swap growth under desktop load. Studio's
-independent Gemma 64K setup remains unchanged. To activate primary Ollama work,
-resolve the SDK context minimum explicitly, then pass a bounded implementation
-and tool-result check before declaring capability. Do not infer failure of tool
-support from this context preflight rejection.
+The existing Llama 3.1 8B Q4_K_M uses 16,384 context, 2,048 output and a
+13,312 summary threshold on this Mac only. An earlier 8K attempt failed SDK's
+16K minimum before inference. Local `max_input_tokens` now also supplies Ollama's
+native `options.num_ctx`; an SDK token budget alone did not set server allocation.
+This machine's Ollama runtime override uses `reasoning_effort="none"`, because
+SDK's default high reasoning caused Ollama to reject Llama as not supporting thinking.
+Other machines/models retain their own explicit reasoning configuration.
+
+The corrected bounded implementation/tool check was stopped by its memory guard
+before any tool call/result: system swap increased from 10,894.62 to 11,899.25 MiB
+(1,004.63 MiB) in approximately five seconds, and pressure changed from normal to
+warning. The process was terminated and the model unloaded. This is a system-wide
+observation under desktop load, not isolated attribution to the model. No user
+applications were closed. No SDK tool capability was declared. Primary Ollama
+eligibility remains blocked pending a successful bounded tool/implementation check
+under sufficient headroom; current primary fallback is Codex, with Claude review.
+Do not call this configuration validated memory-safe or tool-incompatible.
+Studio's independent Gemma 64K settings are unchanged.
 
 Built-in profiles merge beneath user/project runtime.toml; no existing files are
 rewritten. Existing default/stage/role/profile overrides remain visible. Native
