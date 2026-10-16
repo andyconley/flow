@@ -8,39 +8,43 @@ manager, file broker, provider loop, token/rate gate or execution ledger.
 
 ## Enter and execute
 
-For a configured self-hosted profile:
+After explicit plan approval, hand the approved artifacts and task to OpenHands:
 
 ```sh
 flow workflow execute <work-id> --stage implement --task-file <task.md>
 ```
 
-The command enters a legal stage from the prior approved state and resumes the
-stage/role's SDK conversation. Use `--role` and `--profile` for a specialist or
-different self-hosted endpoint. Profile and role settings live in `.flow/runtime.toml`
-and the user overlay. The installed OpenHands packages must match the pinned
-runtime requirements. Actual workspace permissions still apply.
+The default implementation coordinator is a normal OpenHands SDK Agent powered
+by the existing machine-local Ollama profile. It has a checked task tool only;
+OpenHands owns planning turns, delegation, execution history and continuation.
+Claude and Codex native harnesses are specialist workers, never the implementation
+coordinator. Native implementation handoff is refused.
 
-For an existing official native Codex/Claude session, select `--profile codex`
-or `--profile claude`. Install/update provisions these interactive profiles only
-when no user runtime configuration exists; existing configuration is preserved.
-Inspect `flow workflow runtime --json` for resolved roles and missing setup.
-SDK readiness is not execution readiness; never bypass a missing profile by
-implementing directly in the host. Native handoff uses existing permissions and
-does not enable automatic ACP permission handling. `workflow execute` with a native
-profile uses terminal approvals by default: run it from a human-controlled terminal;
-headless execution fails closed. These are terminal prompts, not desktop dialogs.
+Provider bindings are resolved independently for each role by deterministic Flow
+policy. The coordinator requests a logical role, not a provider. Explicit role
+profiles win; otherwise the existing administrator candidate catalog, role tier,
+and local-first provider order determine the binding. Worker factories cannot
+accept model/provider overrides or delegate through Flow. The checked task tool
+rejects names outside its roster, including unrelated SDK registry entries.
 
-```sh
-flow workflow native-handoff <work-id> --stage implement --profile <codex-or-claude-profile> --task-file <task.md>
-```
+Built-in profiles and implementation defaults require no handwritten runtime.toml.
+Existing default, stage, role and profile settings remain authoritative; an old
+native coordinator setting fails with instructions to bind it to worker roles.
+The Ollama profile derives from existing local_machine settings. Missing local
+configuration fails closed; it never permits host-native implementation.
+An explicit coordinator profile does not override every worker's provider.
 
-Use that context artifact in the native session with its existing subscription
-and permissions. Native execution uses OpenHands ACPAgent through Flow's terminal permission proxy.
-Every native permission request requires explicit human selection; timeout, EOF or
-missing terminal denies it. Selecting a persistent option can change native rules.
-The legacy `stock-openhands` option automatically answers requests and requires
-a separate access decision; it is never selected by default. Native handoff
-is a temporary interactive fallback. Do not copy credentials or switch billing.
+Inspect `flow workflow runtime --json` for the coordinator and worker bindings.
+The local SDK coordinator needs no OpenHands subscription login. Claude and Codex
+ACP workers use their existing native logins and permissions. Do not initiate
+login, copy credentials, approve consent or use API billing on the user's behalf.
+Missing configuration or a required human terminal fails before stage entry.
+
+SDK task calls require explicit host confirmation through the existing
+`--confirm-pending` / `--reject-pending` workflow. Native worker permission requests
+also require human terminal choices, unless an existing explicit legacy permission
+setting applies. Do not auto-confirm either layer. Native workers retain their
+native tool permissions; no OS sandbox or shell-launch prohibition is implied.
 
 ## Durable outputs
 

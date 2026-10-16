@@ -2,45 +2,30 @@
 
 Inspect the project and propose an approach, alternatives, architecture decisions and risks against the approved requirements.
 
-Flow owns this workflow stage and its outputs. OpenHands owns execution, tools,
-conversation history, retries and specialist delegation. Do not rebuild a Flow
-manager, file broker, provider loop, token/rate gate or execution ledger.
+Flow owns lifecycle state, artifacts and approval gates. The current native host
+owns definition, solution and planning coordination; OpenHands owns implementation.
 
-## Enter and execute
+## Enter and execute in the current host
 
-For a configured self-hosted profile:
+Use the Flow agents installed in the current Claude or Codex host. Do not launch
+an ACP coordinator or choose implementation providers during this stage.
+Start new work with `flow workflow init <work-id>` when needed; preserve historical runs.
+Enter the legal stage with `flow run transition <work-id> start-solution`.
+Inspect approved prior artifacts and project instructions before delegation.
 
-```sh
-flow workflow execute <work-id> --stage solution --task-file <task.md>
-```
+## Composition
 
-The command enters a legal stage from the prior approved state and resumes the
-stage/role's SDK conversation. Use `--role` and `--profile` for a specialist or
-different self-hosted endpoint. Profile and role settings live in `.flow/runtime.toml`
-and the user overlay. The installed OpenHands packages must match the pinned
-runtime requirements. Actual workspace permissions still apply.
+Always delegate the technical work to the native `solution-architect` Flow agent, using
+its entry in the generated Flow Agent Routing table. The host remains the
+coordinator and reconciles the specialist's evidence; do not merely adopt its persona.
+Conditional specialists: architect for cross-component boundaries; data-engineer for persistent state; security-reviewer for authentication or sensitive data.
+Preserve the native agent's model, effort, skills and permissions. If the host
+cannot invoke a required agent, report that limitation rather than claiming a pass.
 
-For an existing official native Codex/Claude session, select `--profile codex`
-or `--profile claude`. Install/update provisions these interactive profiles only
-when no user runtime configuration exists; existing configuration is preserved.
-Inspect `flow workflow runtime --json` for resolved roles and missing setup.
-SDK readiness is not execution readiness; never bypass a missing profile by
-implementing directly in the host. Native handoff uses existing permissions and
-does not enable automatic ACP permission handling. `workflow execute` with a native
-profile uses terminal approvals by default: run it from a human-controlled terminal;
-headless execution fails closed. These are terminal prompts, not desktop dialogs.
-
-```sh
-flow workflow native-handoff <work-id> --stage solution --profile <codex-or-claude-profile> --task-file <task.md>
-```
-
-Use that context artifact in the native session with its existing subscription
-and permissions. Native execution uses OpenHands ACPAgent through Flow's terminal permission proxy.
-Every native permission request requires explicit human selection; timeout, EOF or
-missing terminal denies it. Selecting a persistent option can change native rules.
-The legacy `stock-openhands` option automatically answers requests and requires
-a separate access decision; it is never selected by default. Native handoff
-is a temporary interactive fallback. Do not copy credentials or switch billing.
+The optional explicit SDK CLI remains available for deliberately configured workflows:
+`flow workflow execute <work-id> --stage solution --task-file <task.md> --profile <profile>`.
+It is not the default path for this slash command. A native handoff can prepare
+context for another host session without transferring approval authority.
 
 ## Durable outputs
 
@@ -49,14 +34,14 @@ Write these files under `.flow/runs/<work-id>/`:
 - `solution.md`
 
 Use specialist roles, project skills, context and existing approved artifacts as
-needed. SDK TaskToolSet handles configured specialist delegation. Record actual
+needed. The current host invokes native Flow specialists. Record actual
 results and unresolved questions; a model response alone does not approve work.
 
 ## Delivery Lead coordination
 
 Once the user explicitly approves the solution, the host assistant assumes
 Delivery Lead coordination and initiates `flow-plan` in the active session.
-Coordinate specialists and validation through OpenHands or the existing native
+Coordinate specialists and validation through the existing native
 session. If another session is required, prepare the plan native handoff and
 make the ownership and next action explicit. Approval records lifecycle state;
 it does not dispatch an agent or authorize implementation.

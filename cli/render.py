@@ -105,12 +105,11 @@ def toml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-SHAPER_COMMANDS = frozenset({"flow-boot", "flow-define", "flow-solution", "flow-plan"})
+SHAPER_COMMANDS = frozenset({"flow-boot"})
 
 
 def routing_hints_for(target: str, agents: list[dict], manifest: dict, *, command_name: str | None = None) -> str:
-    # Shaping describes logical work. Concrete delivery routing is resolved
-    # later by Flow policy and must not depend on the runtime doing the shaping.
+    # Boot selects the work; native shaping commands dispatch concrete host agents.
     if command_name in SHAPER_COMMANDS:
         return ""
     if not agents:
@@ -179,7 +178,7 @@ def manifest_ref_for() -> str:
 
 
 EXPERTISE_ADVISORY_COMMANDS = frozenset({
-    "flow-init-project", "flow-scout",
+    "flow-init-project", "flow-scout", "flow-define", "flow-solution", "flow-plan",
 })
 EXPERTISE_ADVISORY_ROLES = (
     "architect", "business-analyst", "lead-developer", "sre",

@@ -371,7 +371,7 @@ assert len(load_project_agents(root)) == 13
 for definition in load_project_agents(root):
     assert definition.description and definition.system_prompt
 (root / ".flow/runtime.toml").write_text('default_profile="local"\\n[profiles.local]\\nkind="local"\\nmodel="openai/offline-test"\\nbase_url="http://localhost:8000/v1"\\n')
-agent = build_agent(select(root, "implement"), root)
+agent = build_agent(select(root, "implement", "lead-developer"), root)
 roster = agent.agent_context.system_message_suffix.split("Configured specialist roster:\\n")[1].splitlines()
 assert len(roster) == 12, roster
 for line in roster:

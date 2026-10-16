@@ -120,16 +120,37 @@ def execute(args) -> dict:
     if stage not in STAGES:
         raise RuntimeConfigurationError("choose an executable stage: define, solution, plan, implement, review")
     selection = select(root, stage, args.role, args.profile)
+    native_permissions = []
+    if stage == 'implement':
+        from openhands_policy import specialist_selections, subscription_readiness
+        from openhands_config import load_config
+        from dataclasses import replace
+        if selection.provider['kind'] not in {'local', 'openai-subscription'}:
+            raise RuntimeConfigurationError('implementation requires an OpenHands SDK coordinator; bind native profiles to worker roles, not the coordinator')
+        if selection.workspace.get('kind', 'local') != 'local':
+            raise RuntimeConfigurationError('policy coordinator requires a local SDK workspace')
+        if selection.role_options.get('model_routing'):
+            raise RuntimeConfigurationError('policy coordinator cannot use model_routing; use fixed worker profile bindings')
+        if 'task' not in selection.role_options.get('tools', ['task']):
+            raise RuntimeConfigurationError('implementation coordinator requires the task tool; existing restriction was preserved')
+        if selection.provider['kind'] == 'openai-subscription' and not subscription_readiness()['credential_file_present']:
+            raise RuntimeConfigurationError('OpenHands subscription sign-in required; no stage was started. Run the documented human SDK sign-in; native CLI login is separate.')
+        children = specialist_selections(root, selection, load_config(root))
+        selection = replace(selection, role_options={**selection.role_options, 'policy_dispatch': True},
+                            routing_profiles={role: child.fingerprint() for role, child in children.items()})
+        native_permissions = [child.provider.get('permission_requests', 'interactive') for child in children.values()
+                              if child.provider['kind'] in {'claude', 'codex'}]
+        native_permissions.extend('interactive' for child in children.values() if child.role_options.get('_hosted_fallback'))
     # Consent to stock native permission handling is consequential: the pinned
     # Claude bridge may offer allow_always first and update native rules.
-    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
+    if selection.provider["kind"] in {'claude', 'codex'} and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
-    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") == "interactive":
+    if 'interactive' in native_permissions or (selection.provider["kind"] in {'claude', 'codex'} and selection.provider.get("permission_requests", "interactive") == "interactive"):
         try:
             terminal = Terminal()
             terminal.close()
         except OSError as exc:
-            raise RuntimeConfigurationError("Interactive ACP requires a human controlling terminal; no stage was started. Use a terminal or native-handoff; no automatic approval fallback.") from exc
+            raise RuntimeConfigurationError("Interactive ACP requires a human controlling terminal; no stage was started. Use a human terminal; no automatic approval fallback.") from exc
     # Profile validation does not manufacture a workspace or native access grant.
     from openhands_runtime import probe
     if not probe()["ready"]:
@@ -277,6 +298,8 @@ def native_handoff(args) -> dict:
     root = _root(args)
     directory, payload = _run(root, args.work_id)
     stage = args.stage or payload["lane"]
+    if stage == 'implement':
+        raise RuntimeConfigurationError('implementation coordination belongs to OpenHands; native-handoff is for shaping and review')
     selection = select(root, stage, args.role, args.profile)
     if selection.provider["kind"] not in {"codex", "claude"}:
         raise RuntimeConfigurationError("native-handoff requires a codex or claude profile")

@@ -1,57 +1,44 @@
-# Copy to .flow/runtime.toml and select self-hosted model names and URLs.
-default_profile = "local-coder"
+# Optional overrides only: install/update supplies built-in Claude, Codex and
+# machine-local Ollama profiles without this file.
+# See docs/openhands-policy-routing.md for local configuration and policy eligibility.
+
+[stages.implement]
+profile = "ollama"
 
 [workspace]
 kind = "local"
-# LocalWorkspace inherits process access. Its cwd is not a sandbox.
-# Existing sandbox server: kind="remote", host="http://...",
-# working_dir="/workspace", api_key_env="FLOW_RUNTIME_SERVER_KEY".
+# Native workers retain native permissions; a cwd is not an OS sandbox.
 
-[profiles.local-coder]
-kind = "local"
-model = "openai/your-coding-model"
-base_url = "http://127.0.0.1:8000/v1"
-# api_key_env = "FLOW_LOCAL_MODEL_KEY"
+# Per-role explicit overrides are independent of the coordinator profile:
+# [roles.test-engineer]
+# profile = "codex"
+# [roles.quality-reviewer]
+# profile = "claude"
 
-[profiles.ollama]
-kind = "local"
-model = "ollama_chat/your-coding-model"
-base_url = "http://127.0.0.1:11434"
-# Match these to the host's effective num_ctx, not its architecture maximum.
-# max_input_tokens = 65536
-# max_output_tokens = 8192
-# condenser_max_tokens = 57344  # stock SDK summarization with output headroom
+# Existing local_machine settings supply an Ollama profile when a model is set.
+# An explicit alternative local endpoint can be configured here:
+# [profiles.local-worker]
+# kind = "local"
+# model = "ollama_chat/your-tool-capable-model"
+# base_url = "http://127.0.0.1:11434"
+# max_input_tokens = 16384
+# max_output_tokens = 2048
+# condenser_max_tokens = 13312
+# [roles.tech-writer]
+# profile = "local-worker"
+# tools = ["file_editor"]
 
-[profiles.codex]
-kind = "codex"
-# Existing official native authentication; no credential copies.
-session_mode = "agent"
-permission_requests = "interactive" # explicit human terminal choices; headless fails closed
-
-[profiles.claude]
-kind = "claude"
-session_mode = "default"
-permission_requests = "interactive" # terminal prompts, not desktop approval dialogs
-# Legacy automatic stock-openhands handling requires separate scoped approval.
-# See docs/native-access-decision.md; no new credentials or OS grants are implied.
-
-[roles.lead-developer]
-profile = "local-coder"
-tools = ["terminal", "file_editor", "task_tracker", "task"]
-specialists = ["test-engineer", "quality-reviewer"]
+# An explicit roster narrows logical-role dispatch (include lead-developer if
+# it must implement changes or assemble durable outputs):
+# [roles.lead-developer]
+# specialists = ["lead-developer", "test-engineer", "quality-reviewer"]
 # context = ["docs/architecture.md"]
 # skills = [".agents/skills/project-tests/SKILL.md"]
 
-[roles.test-engineer]
-profile = "local-coder"
-tools = ["terminal", "file_editor"]
-
-[roles.quality-reviewer]
-profile = "local-coder"
-tools = ["terminal", "file_editor"]
-
-[stages.define]
-role = "business-analyst"
-
-[stages.solution]
-role = "solution-architect"
+# Native profile model/session/permission customizations are preserved.
+# [profiles.claude]
+# session_mode = "default"
+# permission_requests = "interactive"
+# [profiles.codex]
+# session_mode = "agent"
+# permission_requests = "interactive"

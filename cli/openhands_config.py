@@ -57,10 +57,22 @@ def _merge(base: dict, override: dict) -> dict:
 
 
 def load_config(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
-    config = {}
+    config = {'profiles': {
+        'claude': {'kind': 'claude', 'session_mode': 'default'},
+        'codex': {'kind': 'codex', 'session_mode': 'agent'},
+    }}
+    from local_machine import load_local_machine
+    machine = load_local_machine(user_overlay / 'flow.toml')
+    if machine['model']:
+        config['profiles']['ollama'] = {'kind': 'local', 'model': 'ollama_chat/' + machine['model'],
+            'base_url': 'http://127.0.0.1:11434', 'max_input_tokens': machine['context_tokens'],
+            'max_output_tokens': machine['output_tokens'],
+            'condenser_max_tokens': machine['context_tokens'] - machine['output_tokens'] - machine['context_reserve']}
     for path in (user_overlay / "runtime.toml", root / ".flow/runtime.toml"):
         if path.is_file():
             config = _merge(config, read_toml(path))
+    if 'default_profile' not in config:
+        config.setdefault('stages', {}).setdefault('implement', {}).setdefault('profile', 'ollama')
     return config
 
 
@@ -85,7 +97,7 @@ class Selection:
         binding = {"role": self.role, "profile": self.profile, "provider": self.provider,
                    "role_text": self.role_file.read_text(), "options": self.role_options,
                    "workspace": self.workspace}
-        if self.role_options.get("model_routing"):
+        if self.role_options.get("model_routing") or self.provider.get('kind') == 'openai-subscription' or self.role_options.get('policy_dispatch'):
             binding["profile_override"] = self.profile_override
             binding["routing_profiles"] = self.routing_profiles
         return hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
@@ -93,13 +105,16 @@ class Selection:
 
 def select(root: Path, stage: str, role: str | None = None, profile: str | None = None,
            *, config: dict | None = None, user_overlay: Path = USER_OVERLAY_DIR) -> Selection:
+    coordinator_request = stage == 'implement' and role is None
     profile_override = profile is not None
     config = load_config(root, user_overlay) if config is None else config
     stage_options = config.get("stages", {}).get(stage, {})
     role = identifier(role or stage_options.get("role", STAGES[stage][2]), "role")
     options = config.get("roles", {}).get(role, {})
     if profile is None:
-        if "profile" in options:
+        if coordinator_request:
+            profile = stage_options.get("profile", config.get("default_profile", ""))
+        elif "profile" in options:
             profile = options["profile"]
         elif "profile" in stage_options:
             profile = stage_options["profile"]
@@ -132,12 +147,22 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
             raise RuntimeConfigurationError("use a dedicated self-hosted credential environment variable")
         if "api_key" in provider:
             raise RuntimeConfigurationError("do not persist credentials in runtime.toml; use api_key_env")
+    elif kind == 'openai-subscription':
+        if stage != 'implement':
+            raise RuntimeConfigurationError('subscription coordinator is for implementation; shaping stays in the native host')
+        if set(provider) - {'kind', 'model', 'reasoning_effort'}:
+            raise RuntimeConfigurationError('subscription coordinator accepts only model and reasoning_effort; no API credentials or endpoint overrides')
     elif kind not in {"codex", "claude"}:
-        raise RuntimeConfigurationError("profile kind must be local, codex, or claude")
+        raise RuntimeConfigurationError("profile kind must be local, openai-subscription, codex, or claude")
     from sync import merge_user_overlay, shared_agents
     _, manifest = merge_user_overlay(FRAMEWORK_ROLES.parent, user_overlay=user_overlay)
     declaration = next((a for a in shared_agents(manifest) if a["name"] == role), None)
     provider = dict(provider)
+    if kind == 'openai-subscription':
+        from model_policy import runtime_policy_for_agent
+        policy = runtime_policy_for_agent(manifest, 'codex', declaration or {})
+        provider.setdefault('model', policy.get('model', 'gpt-5.6-terra'))
+        provider.setdefault('reasoning_effort', policy.get('model_reasoning_effort', 'medium'))
     if kind in {"codex", "claude"}:
         provider.setdefault("permission_requests", "interactive")
         if provider["permission_requests"] not in {"interactive", "stock-openhands"}:
@@ -192,7 +217,18 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
         raise RuntimeConfigurationError("remote workspace needs an existing OpenHands agent-server host")
     if workspace.get("confirmation") not in {None, "always"}:
         raise RuntimeConfigurationError("workspace confirmation must be always, or omitted to use the SDK default")
-    return Selection(role, profile, dict(provider), role_file, dict(options), dict(workspace), profile_override, routing_profiles)
+    selected = Selection(role, profile, dict(provider), role_file, dict(options), dict(workspace), profile_override, routing_profiles)
+    if kind == 'openai-subscription' or (coordinator_request and kind == 'local'):
+        if workspace.get('kind', 'local') != 'local':
+            raise RuntimeConfigurationError('policy coordinator requires a local SDK workspace')
+        if options.get('model_routing') or ('tools' in options and options['tools'] != ['task']):
+            raise RuntimeConfigurationError('policy coordinator tools are task only; configure worker tools on worker role bindings')
+        from openhands_policy import specialist_selections
+        from dataclasses import replace
+        selected = replace(selected, role_options={**selected.role_options, 'policy_dispatch': True})
+        children = specialist_selections(root, selected, config, user_overlay=user_overlay)
+        selected = replace(selected, routing_profiles={name: child.fingerprint() for name, child in children.items()})
+    return selected
 
 
 def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
@@ -209,22 +245,54 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
                 selected = select(root, "implement", role["name"], profile,
                                   config=config, user_overlay=user_overlay)
                 kind = selected.provider["kind"]
-                policy = runtime_policy_for_agent(manifest, kind, role) if kind != "local" else {}
+                policy = runtime_policy_for_agent(manifest, "codex" if kind == "openai-subscription" else kind, role) if kind != "local" else {}
                 supported = ({"kind", "model", "base_url", "api_key_env", "max_input_tokens", "max_output_tokens", "condenser_max_tokens", "reasoning_effort"}
-                             if kind == "local" else {"kind", "model", "session_mode", "permission_requests"})
+                             if kind == "local" else ({"kind", "model", "reasoning_effort"} if kind == "openai-subscription" else {"kind", "model", "session_mode", "permission_requests"}))
                 routes.append({"profile": profile, "role": selected.role, "kind": kind,
                     "role_file": str(selected.role_file), "model": selected.provider.get("model"),
                     "canonical_effort": policy.get("effort", policy.get("model_reasoning_effort")),
-                    "reasoning_effort": selected.provider.get("reasoning_effort") if kind == "local" else "native harness setting; ACP does not forward Flow effort",
-                    "tools": selected.role_options.get("tools", ["terminal", "file_editor", "task"]) if kind == "local" else "native harness permissions; SDK tool restrictions do not apply",
+                    "reasoning_effort": selected.provider.get("reasoning_effort") if kind in {"local", "openai-subscription"} else "native harness setting; ACP does not forward Flow effort",
+                    "tools": "checked task only" if kind == "openai-subscription" else selected.role_options.get("tools", ["terminal", "file_editor", "task"]) if kind == "local" else "native harness permissions; SDK tool restrictions do not apply",
                     "context": selected.role_options.get("context", []),
                     "skills": selected.role_options.get("skills", []),
                     "untranslated_profile_fields": sorted(set(selected.provider) - supported),
-                    "interactive_handoff_configured": kind != "local",
+                    "interactive_handoff_configured": kind in {"claude", "codex"},
                     "permission_requests": selected.provider.get("permission_requests"),
                     "human_terminal_required": kind != "local" and selected.provider.get("permission_requests") == "interactive",
-                    "execution_configured": kind == "local" or selected.provider.get("permission_requests") in {"interactive", "stock-openhands"}})
+                    "execution_configured": kind in {"local", "openai-subscription"} or selected.provider.get("permission_requests") in {"interactive", "stock-openhands"}})
             except (ValueError, OSError) as exc:
                 routes.append({"profile": profile, "role": role["name"], "error": str(exc)})
+    from openhands_policy import subscription_readiness, specialist_selections, local_eligibility
+    framework = read_toml(FRAMEWORK_ROLES.parent / 'flow.toml')
+    admin_path = user_overlay / 'flow.toml'
+    admin = read_toml(admin_path) if admin_path.is_file() else {}
+    local_candidates = []
+    for candidate in admin.get('provider_candidates', framework.get('provider_candidates', [])):
+        if candidate.get('provider') == 'ollama':
+            profile = config.get('profiles', {}).get(candidate.get('runtime_profile', 'ollama'), {})
+            reasons = local_eligibility(candidate, profile)
+            if candidate.get('enabled') is False:
+                reasons.append('candidate disabled')
+            local_candidates.append({'candidate_id': candidate['candidate_id'],
+                'model': profile.get('model'), 'context_tokens': profile.get('max_input_tokens'),
+                'local_capability_eligible': not reasons,
+                'tool_use_state': candidate.get('sdk_tool_use', 'declared' if 'sdk_tool_calling' in candidate.get('capabilities', []) else 'not-enabled'),
+                'tool_use_verification': 'not verified by this configuration report',
+                'ineligibility_reasons': reasons})
+    implementation = {}
+    try:
+        coordinator = select(root, 'implement', config=config, user_overlay=user_overlay)
+        implementation['coordinator'] = {'profile': coordinator.profile, 'kind': coordinator.provider['kind'],
+            'model': coordinator.provider.get('model'), 'reasoning_effort': coordinator.provider.get('reasoning_effort')}
+        implementation['workers'] = {name: {'profile': worker.profile, 'kind': worker.provider['kind'], 'model': worker.provider.get('model'),
+            'fallback_profile': worker.role_options.get('_hosted_fallback')}
+            for name, worker in specialist_selections(root, coordinator, config, user_overlay=user_overlay).items()}
+        if coordinator.provider['kind'] not in {'local', 'openai-subscription'}:
+            implementation['error'] = 'native coordinator is not supported; bind native profiles to worker roles'
+    except (ValueError, OSError) as exc:
+        implementation['error'] = str(exc)
     return {"default_profile": config.get("default_profile"), "routes": routes,
+            'implementation_profile': config.get('stages', {}).get('implement', {}).get('profile'),
+            'subscription': subscription_readiness() if implementation.get('coordinator', {}).get('kind') == 'openai-subscription' else {'required': False}, 'implementation': implementation,
+            'local_candidates': local_candidates,
             "note": "Configuration only: no authentication, model availability or effective permissions verified. Skills/AGENTS discovery and PROJECT.md are composed at execution. SDK readiness alone does not mean execution is configured."}

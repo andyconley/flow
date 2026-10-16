@@ -9,6 +9,7 @@ import sys
 
 from openhands_config import SDK_VERSION, RuntimeConfigurationError, Selection
 from openhands_accounting import register_accounting_task_tool
+from openhands_policy import specialist_selections
 
 
 ACP_ACCESS_NOTE = ("Flow defaults to explicit terminal permission choices through its ACP proxy; headless execution fails closed. "
@@ -126,10 +127,23 @@ def local_llm(selection: Selection):
     llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens", "reasoning_effort") if name in provider}
     llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
               usage_id=f"flow-{selection.role}", **llm_options)
+    if provider["model"].startswith(("ollama/", "ollama_chat/")) and provider.get("max_input_tokens"):
+        # SDK max_input_tokens is a budget, not Ollama's allocation. LiteLLM
+        # merges extra_body after provider transformation; retain generation
+        # defaults when explicitly supplying the native options object.
+        options = {"num_ctx": provider["max_input_tokens"]}
+        if provider.get("max_output_tokens"):
+            options["num_predict"] = provider["max_output_tokens"]
+        for field in ("temperature", "top_p", "seed"):
+            if getattr(llm, field, None) is not None:
+                options[field] = getattr(llm, field)
+        llm = llm.model_copy(update={"litellm_extra_body": {"options": options}})
     return llm
 
 
 def build_agent(selection: Selection, root: Path, inherited_llm=None):
+    if selection.provider['kind'] == 'openai-subscription' or selection.role_options.get('policy_dispatch'):
+        return build_coordinator(selection, root)
     if selection.provider["kind"] != "local":
         return build_native_agent(selection, root)
     from openhands.sdk import Agent, Tool
@@ -249,6 +263,66 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
                  agent_context=context, condenser=condenser)
 
 
+def build_coordinator(selection, root):
+    """Stock SDK Agent reasons and delegates; deterministic factories bind providers."""
+    from openhands.sdk import Agent, LLM, Tool
+    from openhands.sdk.llm.auth.openai import create_subscription_llm_from_config
+    from openhands.sdk.subagent import register_agent_if_absent
+    from openhands_config import load_config
+    from openhands_accounting import register_policy_task_tool
+    import hashlib
+    children = specialist_selections(root, selection, load_config(root))
+    if selection.routing_profiles != {role: child.fingerprint() for role, child in children.items()}:
+        raise RuntimeConfigurationError('specialist policy changed after coordinator binding; start a reviewed new session')
+    bindings = {}
+    for role, child in children.items():
+        key = 'flow-policy-' + hashlib.sha256((str(root.resolve()) + child.fingerprint()).encode()).hexdigest()[:20]
+        def factory(parent_llm, child=child, expected=child.fingerprint()):
+            if child.fingerprint() != expected:
+                raise RuntimeConfigurationError('specialist definition changed after coordinator binding; start a reviewed new session')
+            return build_agent(child, root)
+        register_agent_if_absent(name=key, factory_func=factory,
+                                 description=f'Flow policy worker: {role}')
+        bindings[role] = key
+        if child.provider['kind'] == 'local':
+            fallback_key = None
+            if child.role_options.get('_hosted_fallback'):
+                from openhands_config import select
+                from dataclasses import replace
+                fallback = select(root, 'implement', role, child.role_options['_hosted_fallback'], config=load_config(root))
+                if fallback.fingerprint() != child.role_options['_hosted_fallback_binding']:
+                    raise RuntimeConfigurationError('hosted fallback changed after binding')
+                fallback = replace(fallback, role_options={**fallback.role_options, 'specialists': []})
+                fallback_key = 'flow-policy-' + hashlib.sha256((str(root.resolve()) + fallback.fingerprint()).encode()).hexdigest()[:20]
+                def fallback_factory(parent_llm, selected=fallback, expected=fallback.fingerprint()):
+                    if selected.fingerprint() != expected:
+                        raise RuntimeConfigurationError('fallback role changed after binding')
+                    return build_native_agent(selected, root)
+                register_agent_if_absent(name=fallback_key, factory_func=fallback_factory,
+                    description=f'Flow policy fallback: {role}')
+            bindings[role] = {'primary': key, 'fallback': fallback_key, 'local': True}
+    # This supported SDK entrypoint loads/refreshes only OpenHands OAuth at execution.
+    # It never initiates login and fails if the human has not signed in.
+    llm = local_llm(selection) if selection.provider['kind'] == 'local' else create_subscription_llm_from_config(LLM(model=selection.provider['model'],
+        auth_type='subscription', subscription_vendor='openai',
+        reasoning_effort=selection.provider['reasoning_effort'], usage_id='flow-coordinator'))
+    context = _context(selection, root)
+    context = context.model_copy(update={'system_message_suffix': context.system_message_suffix +
+        '\n\nYou coordinate implementation inside OpenHands. Delegate all workspace work and durable output writes '
+        'to the approved logical roles through task. Provider assignment is deterministic code, not your choice. '
+        'Do not request provider changes, nested delegation, direct CLI launches, or changes to routing policy. '
+        'Workers are leaves. Use lead-developer for implementation and output assembly when in the roster. '
+        'Do not approve workflow gates. Report specialist evidence and unresolved work.'})
+    condenser = None
+    if selection.provider.get('condenser_max_tokens') is not None:
+        from openhands.sdk.context.condenser import LLMSummarizingCondenser
+        condenser = LLMSummarizingCondenser(
+            llm=llm.model_copy(update={'usage_id': 'flow-coordinator-condenser'}),
+            max_tokens=selection.provider['condenser_max_tokens'])
+    return Agent(llm=llm, tools=[Tool(name=register_policy_task_tool(), params={'bindings': bindings})],
+                 agent_context=context, condenser=condenser)
+
+
 def build_native_agent(selection: Selection, root: Path):
     if selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
@@ -330,7 +404,7 @@ def conversation(selection: Selection, root: Path, persistence: Path, conversati
     try:
         if restored_llm is not None:
             session.switch_llm(restored_llm)
-        if workspace_options.get("confirmation") == "always":
+        if workspace_options.get("confirmation") == "always" or selection.provider['kind'] == 'openai-subscription' or selection.role_options.get('policy_dispatch'):
             session.set_confirmation_policy(AlwaysConfirm())
         yield session
     finally:

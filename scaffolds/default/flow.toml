@@ -18,6 +18,23 @@ provider_order = ["ollama", "claude", "codex"]
 # Provider order and smallest-sufficient tier still take precedence.
 candidate_priority = []
 
+# Practical hosted defaults for SDK implementation; eligible Ollama remains first.
+# Explicit user/project provider_order and role profile bindings retain precedence.
+[implementation_routing.hosted_preferences]
+lead-developer = "codex"
+data-engineer = "codex"
+test-engineer = "codex"
+sre = "codex"
+architect = "claude"
+solution-architect = "claude"
+business-analyst = "claude"
+product-manager = "claude"
+quality-reviewer = "claude"
+security-reviewer = "claude"
+ux-specialist = "claude"
+support-lead = "claude"
+tech-writer = "claude"
+
 [[provider_candidates]]
 candidate_id = "ollama-local"
 provider = "ollama"
