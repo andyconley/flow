@@ -2,6 +2,13 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.46.1](https://github.com/andyconley/flow/compare/v0.46.0...v0.46.1) (2026-10-16)
+
+### Bug Fixes
+
+* bound coordinator skill context and persist checked task actions ([c6f888b](https://github.com/andyconley/flow/commit/c6f888b93b65c48e4632a3a0574df67cc69da370))
+* validate lazy runtime modules during release staging ([19fc9e4](https://github.com/andyconley/flow/commit/19fc9e4a51eb130baa0fce4d995e00cdcfc9eeb3))
+
 ## [0.46.0](https://github.com/andyconley/flow/compare/v0.45.1...v0.46.0) (2026-10-16)
 
 ### Features
