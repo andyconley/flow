@@ -2,6 +2,24 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.46.0](https://github.com/andyconley/flow/compare/v0.45.1...v0.46.0) (2026-10-16)
+
+### Features
+
+* prefer eligible local workers with mixed hosted fallback ([8c4e434](https://github.com/andyconley/flow/commit/8c4e434969afadb57f1813e6e053374cdcf0c171))
+* route implementation through an OpenHands policy coordinator ([e2de27f](https://github.com/andyconley/flow/commit/e2de27f8a5651f5a0d36b928b7762c61ca298773))
+
+### Bug Fixes
+
+* align shaping validation with native role dispatch ([9a2f78e](https://github.com/andyconley/flow/commit/9a2f78e53a64c250f2bbb15ec91d190d0666440b))
+* forward configured Ollama context to native requests ([5ac5735](https://github.com/andyconley/flow/commit/5ac57352b50f343d29a6d8061e7ebd81e0352940))
+* honor explicit unverified Ollama enablement ([654f223](https://github.com/andyconley/flow/commit/654f223f0cb19e3a916856ce909bca15748929c7))
+* restore local SDK implementation coordinator default ([ac8b666](https://github.com/andyconley/flow/commit/ac8b666191d42cb16cb5bdbf4ed56bd9c4b13891))
+
+### Documentation
+
+* clarify local coordinator and implementation dispatch boundaries ([5a8e8b2](https://github.com/andyconley/flow/commit/5a8e8b2eae2ffabebd0989980a1d606312365b26))
+
 ## [0.45.1](https://github.com/andyconley/flow/compare/v0.45.0...v0.45.1) (2026-10-15)
 
 ### Bug Fixes
