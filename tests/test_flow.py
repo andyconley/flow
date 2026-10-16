@@ -3706,6 +3706,24 @@ class FlowCliTests(FlowCliHarness):
             "staging with all required files should validate",
         )
 
+    def test_release_staging_requires_lazy_runtime_module_without_sdk(self) -> None:
+        lifecycle = self._load_cli_module("lifecycle")
+        staging = self.repo / "staging_lazy"
+        (staging / "cli").mkdir(parents=True)
+        (staging / "cli" / "flow.py").write_text(
+            'FLOW_REQUIRED_RUNTIME_MODULES = ("runtime_worker",)\n')
+        (staging / "data").mkdir()
+        (staging / "data" / "harness_capabilities.json").write_text('{}')
+        (staging / "scaffolds" / "default").mkdir(parents=True)
+        (staging / "scaffolds" / "default" / "flow.toml").write_text('')
+        self.assertIn("runtime_worker.py", lifecycle._validate_staging(staging))
+        (staging / "cli" / "runtime_worker.py").write_text(
+            'import separately_provisioned_sdk\nraise RuntimeError("must not execute")\n')
+        self.assertIsNone(lifecycle._validate_staging(staging))
+        (staging / "cli" / "flow.py").write_text(
+            'FLOW_REQUIRED_RUNTIME_MODULES = ("../escape",)\n')
+        self.assertIn("invalid runtime module declaration", lifecycle._validate_staging(staging))
+
     def test_release_staging_rejects_unparseable_entrypoint(self) -> None:
         """A corrupt flow.py must be rejected, not silently swapped into place."""
         lifecycle = self._load_cli_module("lifecycle")
