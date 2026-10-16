@@ -10,6 +10,10 @@ import sys
 from openhands_config import SDK_VERSION, RuntimeConfigurationError, Selection
 from openhands_policy import specialist_selections
 
+# Required at execution time, but imported lazily to keep SDK-free probes usable.
+# Release staging reads this declaration without importing the SDK dependency tree.
+FLOW_REQUIRED_RUNTIME_MODULES = ("openhands_accounting",)
+
 
 ACP_ACCESS_NOTE = ("Flow defaults to explicit terminal permission choices through its ACP proxy; headless execution fails closed. "
                    "Explicit legacy stock-openhands handling automatically answers native permission requests. "

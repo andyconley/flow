@@ -489,6 +489,27 @@ def _validate_staging(staging: Path) -> str | None:
             f"staged cli/ imports {sibling!r}, which is neither a staged module "
             f"nor importable here (expected {sibling_path})"
         )
+    # Lazy runtime modules can depend on separately provisioned SDK packages.
+    # Read their file requirements from the staged source, without importing
+    # them or treating their SDK dependencies as CLI startup requirements.
+    for source in sorted((staging / "cli").glob("*.py")):
+        try:
+            tree = ast.parse(source.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if not (isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "FLOW_REQUIRED_RUNTIME_MODULES"
+                        for target in node.targets)):
+                    continue
+                names = ast.literal_eval(node.value)
+                if not isinstance(names, (tuple, list)) or any(
+                        not isinstance(name, str) or not name.isidentifier() for name in names):
+                    return f"invalid runtime module declaration in {source}"
+                for name in names:
+                    dependency = staging / "cli" / f"{name}.py"
+                    if not dependency.is_file():
+                        return f"staging is missing required runtime module {dependency}"
+        except (OSError, SyntaxError, ValueError, TypeError) as err:
+            return f"cannot validate runtime module declarations in {source}: {err}"
     capabilities = staging / "data" / "harness_capabilities.json"
     if not capabilities.is_file():
         return f"staging is missing data/harness_capabilities.json at {capabilities}"
