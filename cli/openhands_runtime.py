@@ -8,7 +8,6 @@ import os
 import sys
 
 from openhands_config import SDK_VERSION, RuntimeConfigurationError, Selection
-from openhands_accounting import register_accounting_task_tool
 from openhands_policy import specialist_selections
 
 
@@ -57,7 +56,7 @@ def role_context(selection: Selection):
     return metadata, prompt
 
 
-def _context(selection: Selection, root: Path):
+def _context(selection: Selection, root: Path, *, explicit_skills_only=False):
     from paths import HOME, USER_OVERLAY_DIR
     from openhands.sdk import AgentContext
     from openhands.sdk.context import Skill, load_skills_from_dir
@@ -103,9 +102,18 @@ def _context(selection: Selection, root: Path):
     for name in metadata.get("skills", []):
         if name not in skills:
             raise RuntimeConfigurationError(f"role skill not found: {name}")
+    explicit_names = set(metadata.get("skills", []))
     for relative in selection.role_options.get("skills", []):
         skill = Skill.load(root / relative)
         skills[skill.name] = skill
+        explicit_names.add(skill.name)
+    if explicit_skills_only:
+        from openhands.sdk.skills.trigger import PathTrigger
+        # Keep mandatory repository/user guidance and scoped rules. Optional
+        # ambient skill catalogs belong to workers, not the small coordinator.
+        skills = {name: skill for name, skill in skills.items()
+                  if name in explicit_names or isinstance(skill.trigger, PathTrigger)
+                  or (not skill.is_agentskills_format and skill.trigger is None)}
     context = [prompt]
     for relative in selection.role_options.get("context", []):
         context.append((root / relative).read_text())
@@ -220,6 +228,7 @@ def build_agent(selection: Selection, root: Path, inherited_llm=None):
     context = _context(selection, root)
     if delegation:
         context = context.model_copy(update={"system_message_suffix": context.system_message_suffix + "\n\nConfigured specialist roster:\n" + "\n".join(delegation)})
+    from openhands_accounting import register_accounting_task_tool
     tool_specs = [Tool(name=register_accounting_task_tool() if t == "task" else tools[t].name) for t in selected_tools]
     routing = selection.role_options.get("model_routing")
     condenser_profiles = [provider]
@@ -306,7 +315,7 @@ def build_coordinator(selection, root):
     llm = local_llm(selection) if selection.provider['kind'] == 'local' else create_subscription_llm_from_config(LLM(model=selection.provider['model'],
         auth_type='subscription', subscription_vendor='openai',
         reasoning_effort=selection.provider['reasoning_effort'], usage_id='flow-coordinator'))
-    context = _context(selection, root)
+    context = _context(selection, root, explicit_skills_only=True)
     context = context.model_copy(update={'system_message_suffix': context.system_message_suffix +
         '\n\nYou coordinate implementation inside OpenHands. Delegate all workspace work and durable output writes '
         'to the approved logical roles through task. Provider assignment is deterministic code, not your choice. '

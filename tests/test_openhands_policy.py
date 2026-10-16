@@ -119,6 +119,99 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(agent.llm.model, 'ollama_chat/llama3.1:8b')
         self.assertEqual(agent.condenser.max_tokens, parent.provider['condenser_max_tokens'])
 
+    def test_coordinator_keeps_explicit_skills_and_instructions_without_ambient_catalog(self):
+        from dataclasses import replace
+        from openhands_runtime import build_agent, _context
+        from openhands.sdk.context import Skill
+        from openhands.sdk.skills.trigger import PathTrigger, KeywordTrigger
+        from openhands.sdk import Message, TextContent
+        ambient = {f"ambient-{i}": Skill(name=f"ambient-{i}", content="Worker expertise",
+            description=" ".join(f"topic{j}" for j in range(100)), is_agentskills_format=True)
+            for i in range(79)}
+        ambient['explicit-name'] = Skill(name='explicit-name', content='Named expertise',
+            description='Required named skill', is_agentskills_format=True)
+        ambient['user-guidance'] = Skill(name='user-guidance', content='Required user guidance')
+        ambient['optional-trigger'] = Skill(name='optional-trigger', content='Optional expertise',
+            trigger=KeywordTrigger(keywords=['optional']))
+        rules = {'project-guidance': Skill(name='project-guidance', content='Required AGENTS guidance'),
+            'scoped-rule': Skill(name='scoped-rule', content='Scoped instructions',
+                                trigger=PathTrigger(paths=['src/**']))}
+        explicit = self.root / 'explicit-path/SKILL.md'
+        explicit.parent.mkdir()
+        explicit.write_text('---\nname: explicit-path\ndescription: Required path skill\n---\nInstructions')
+        (self.root / '.flow').mkdir()
+        (self.root / '.flow/PROJECT.md').write_text('Required project context')
+        parent = self.select()
+        parent = replace(parent, role_options={**parent.role_options, 'skills': ['explicit-path/SKILL.md']})
+        children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
+        parent = replace(parent, routing_profiles={name: child.fingerprint() for name, child in children.items()})
+        with patch('paths.HOME', self.root / 'empty-home'), patch('paths.USER_OVERLAY_DIR', self.overlay), \
+             patch('openhands.sdk.skills.load_available_skills', side_effect=lambda root, **kw: dict(ambient if kw['include_user'] else rules)), \
+             patch('openhands_runtime.role_context', return_value=({'skills': ['explicit-name']}, 'Required role instructions')), \
+             patch('openhands_config.load_config', return_value=self.cfg), \
+             patch('openhands_runtime.specialist_selections', return_value=children):
+            agent = build_agent(parent, self.root)
+            worker_context = _context(parent, self.root)
+        names = {skill.name for skill in agent.agent_context.skills}
+        self.assertEqual(names, {'explicit-name', 'explicit-path', 'user-guidance', 'project-guidance', 'scoped-rule'})
+        self.assertTrue(set(ambient) <= {skill.name for skill in worker_context.skills})
+        prompt = agent.agent_context.get_system_message_suffix()
+        for text in ['Required role instructions', 'Required project context', 'Required user guidance', 'Required AGENTS guidance']:
+            self.assertIn(text, prompt)
+        self.assertNotIn('ambient-', prompt)
+        self.assertFalse(agent.agent_context.load_user_skills)
+        self.assertFalse(agent.agent_context.load_project_skills)
+        small = agent.llm.get_token_count([Message(role='system', content=[TextContent(text=prompt)])])
+        broad = agent.llm.get_token_count([Message(role='system', content=[TextContent(text=worker_context.get_system_message_suffix())])])
+        self.assertLess(small, agent.condenser.max_tokens)
+        self.assertGreater(broad, agent.condenser.max_tokens)
+
+    def test_checked_task_schema_reloads_in_fresh_process(self):
+        import subprocess
+        from openhands_accounting import register_policy_task_tool, RoleTaskAction
+        from openhands.sdk.tool import Tool, resolve_tool
+        from openhands.sdk.event.llm_convertible import SystemPromptEvent
+        from openhands.sdk import TextContent
+        name = register_policy_task_tool()
+        tool = resolve_tool(Tool(name=name, params={'bindings': {'lead-developer': 'fixed'}}), SimpleNamespace())[0]
+        event = SystemPromptEvent(system_prompt=TextContent(text='Preserved coordinator instructions'), tools=[tool])
+        saved = self.root / 'system-event.json'
+        saved.write_text(event.model_dump_json())
+        self.assertEqual(RoleTaskAction.__qualname__, 'RoleTaskAction')
+        code = """
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from openhands_accounting import register_policy_task_tool, RoleTaskAction
+register_policy_task_tool()
+register_policy_task_tool()
+from openhands.sdk.event.llm_convertible import SystemPromptEvent
+from pydantic import ValidationError
+original = Path(sys.argv[2]).read_bytes()
+event = SystemPromptEvent.model_validate_json(original)
+assert event.tools[0].action_type is RoleTaskAction
+action = event.tools[0].action_type(prompt='Continue approved task', subagent_type='lead-developer')
+assert action.subagent_type == 'lead-developer'
+try:
+    event.tools[0].action_type(prompt='Override', subagent_type='lead-developer', profile='codex')
+except ValidationError:
+    pass
+else:
+    raise AssertionError('provider override accepted after reload')
+assert SystemPromptEvent.model_validate_json(event.model_dump_json()).tools[0].action_type is RoleTaskAction
+assert Path(sys.argv[2]).read_bytes() == original
+"""
+        result = subprocess.run([sys.executable, '-c', code, str(Path(config.__file__).parent), str(saved)],
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_runtime_probe_module_stays_importable_without_sdk(self):
+        import subprocess
+        result = subprocess.run([sys.executable, '-S', '-c',
+            'import sys; sys.path.insert(0, sys.argv[1]); import openhands_runtime',
+            str(Path(config.__file__).parent)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_missing_login_and_native_coordinator_fail_before_stage_entry(self):
         import openhands_flow as flow
         import runstate

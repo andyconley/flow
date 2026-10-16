@@ -14,6 +14,15 @@ reasoning settings. Its sole execution tool is checked specialist task dispatch.
 Finish/think are the SDK's normal built-ins. The configured SDK summarizing
 condenser applies to the local coordinator as well as local workers.
 
+The coordinator includes only explicitly named role skills and runtime `skills`
+paths from the discovered catalog. Always-active user/project instructions,
+AGENTS guidance, scoped path rules, role instructions, configured context files
+and PROJECT.md remain available. Workers retain their existing full skill
+discovery. This avoids repeating an unrelated ambient skill catalog in the
+coordinator's fixed system prompt, which the SDK condenser cannot summarize.
+Explicit skills and required instructions still need to fit the configured
+context; this change does not increase the machine's token or memory budget.
+
 Each worker resolves separately. Explicit `[roles.NAME].profile` bindings win.
 Otherwise `provider_selection` is merged with the existing monotonic policy merger,
 using framework, user and project layers. Administrator `provider_candidates`
@@ -108,3 +117,19 @@ subagents or shell commands permitted by their existing harness. Flow cannot cla
 to prevent a shell-authorized worker launching another CLI. SDK tool restrictions
 are not translated into native permissions. Existing explicit legacy
 stock-openhands permission settings remain user-owned, never new defaults.
+
+## Persisted coordinator sessions
+
+Checked task actions retain the SDK identity `RoleTaskAction`, defined at module
+scope so fresh processes can deserialize saved tool definitions and actions.
+The extra-field prohibition remains enforced after loading; loading does not
+approve pending actions or broaden the roster.
+
+An existing conversation retains its saved system prompt. Installing the context
+fix does not rewrite or shrink that prompt. After the operator has stopped a
+stalled attempt and reviewed its state, the existing `--new-session` option is
+the recovery path for adopting the corrected prompt while retaining prior
+conversation evidence. Do not edit snapshots, create a duplicate workflow run,
+or automatically confirm pending actions. Snapshot compatibility alone does not
+establish that a native child task can be resumed across processes; existing
+checked-resume restrictions still apply.
