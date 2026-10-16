@@ -209,3 +209,23 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(llm.litellm_extra_body['options']['num_ctx'], 16384)
         self.assertEqual(llm.litellm_extra_body['options']['num_predict'], 2048)
         self.assertEqual(llm.reasoning_effort, 'none')
+
+    def test_user_enabled_unverified_local_can_implement_without_fabricated_capability(self):
+        (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="llama3.1:8b"\ncontext_tokens=16384\n'
+            '[[provider_candidates]]\ncandidate_id="local-user"\nprovider="ollama"\n'
+            'model="llama3.1:8b"\nenabled=true\ntier="working"\noperations=["edit"]\n'
+            'capabilities=["structured_edit"]\nsdk_tool_use="user-enabled-unverified"\n'
+            '[[provider_candidates]]\ncandidate_id="codex-hosted"\nprovider="codex"\n'
+            'enabled=true\ntier="judgment"\noperations=["edit"]\n')
+        cfg = config.load_config(self.root, self.overlay)
+        parent = config.select(self.root, 'implement', config=cfg, user_overlay=self.overlay)
+        workers = specialist_selections(self.root, parent, cfg, user_overlay=self.overlay)
+        self.assertEqual(workers['lead-developer'].provider['kind'], 'local')
+        self.assertEqual(workers['lead-developer'].role_options['_hosted_fallback'], 'codex')
+        report = config.wiring_report(self.root, self.overlay)['local_candidates'][0]
+        self.assertTrue(report['local_capability_eligible'])
+        self.assertEqual(report['tool_use_state'], 'user-enabled-unverified')
+        self.assertIn('not verified', report['tool_use_verification'])
+        from openhands_policy import local_eligibility
+        self.assertTrue(local_eligibility({'sdk_tool_use': 'user-enabled-unverified'}, {'max_input_tokens':8192}))
+        self.assertTrue(local_eligibility({'sdk_tool_use': 'typo'}, {'max_input_tokens':16384}))

@@ -28,8 +28,11 @@ overridden in user/project flow.toml. All defaults still obey candidate eligibil
 Native models use canonical role tiers; explicit runtime profile models win.
 No model chooses a provider or silently changes an endpoint.
 
-Ollama admission requires declared `sdk_tool_calling` and an explicit SDK context
-of at least 16,384, the pinned SDK's own minimum. Advertised Ollama `tools` support
+Ollama admission accepts declared `sdk_tool_calling` or the explicit candidate
+setting `sdk_tool_use = "user-enabled-unverified"`, and requires an SDK context
+of at least 16,384, the pinned SDK's own minimum. User enablement authorizes attempts;
+it does not assert a passed test or change permissions. Reporting keeps that state
+and unverified capability separate from routing eligibility. Advertised Ollama `tools` support
 is not evidence of a successful Flow worker test. `workflow runtime --json` lists
 local context and missing eligibility reasons. Profiles derive from machine-owned
 `local_machine` settings; updates do not replace those with this laptop's values.
@@ -44,7 +47,7 @@ which uses the fixed hosted fallback in that active SDK task executor. Failed wo
 Explicit role profile bindings remain fixed and do not gain an implicit fallback.
 Resume uses the original worker binding; unavailable local capacity rejects resume.
 
-### Current work-Mac baseline (October 16)
+### Current new MacBook baseline (October 16)
 
 The existing Llama 3.1 8B Q4_K_M uses 16,384 context, 2,048 output and a
 13,312 summary threshold on this Mac only. An earlier 8K attempt failed SDK's
@@ -59,9 +62,11 @@ before any tool call/result: system swap increased from 10,894.62 to 11,899.25 M
 (1,004.63 MiB) in approximately five seconds, and pressure changed from normal to
 warning. The process was terminated and the model unloaded. This is a system-wide
 observation under desktop load, not isolated attribution to the model. No user
-applications were closed. No SDK tool capability was declared. Primary Ollama
-eligibility remains blocked pending a successful bounded tool/implementation check
-under sufficient headroom; current primary fallback is Codex, with Claude review.
+applications were closed. No SDK tool capability was declared. Andy subsequently explicitly enabled Ollama
+on this new MacBook using `sdk_tool_use = "user-enabled-unverified"`. It is eligible
+as the primary implementation worker, with Codex as its fixed eligible fallback
+and Claude for judgment-tier review. The stopped check remains unverified; memory
+observations are warnings, not an authorization gate. No further model test was run.
 Do not call this configuration validated memory-safe or tool-incompatible.
 Studio's independent Gemma 64K settings are unchanged.
 

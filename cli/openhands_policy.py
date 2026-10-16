@@ -14,8 +14,9 @@ SDK_MIN_CONTEXT = 16384
 
 def local_eligibility(candidate, profile):
     reasons = []
-    if 'sdk_tool_calling' not in candidate.get('capabilities', []):
-        reasons.append('SDK tool-use validation is not declared')
+    if ('sdk_tool_calling' not in candidate.get('capabilities', [])
+            and candidate.get('sdk_tool_use') != 'user-enabled-unverified'):
+        reasons.append('SDK tool use is neither declared nor explicitly user-enabled')
     context = profile.get('max_input_tokens')
     if context is None or context < SDK_MIN_CONTEXT:
         reasons.append(f'configured SDK context must be at least {SDK_MIN_CONTEXT} tokens')

@@ -275,13 +275,17 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
                 reasons.append('candidate disabled')
             local_candidates.append({'candidate_id': candidate['candidate_id'],
                 'model': profile.get('model'), 'context_tokens': profile.get('max_input_tokens'),
-                'local_capability_eligible': not reasons, 'ineligibility_reasons': reasons})
+                'local_capability_eligible': not reasons,
+                'tool_use_state': candidate.get('sdk_tool_use', 'declared' if 'sdk_tool_calling' in candidate.get('capabilities', []) else 'not-enabled'),
+                'tool_use_verification': 'not verified by this configuration report',
+                'ineligibility_reasons': reasons})
     implementation = {}
     try:
         coordinator = select(root, 'implement', config=config, user_overlay=user_overlay)
         implementation['coordinator'] = {'profile': coordinator.profile, 'kind': coordinator.provider['kind'],
             'model': coordinator.provider.get('model'), 'reasoning_effort': coordinator.provider.get('reasoning_effort')}
-        implementation['workers'] = {name: {'profile': worker.profile, 'kind': worker.provider['kind'], 'model': worker.provider.get('model')}
+        implementation['workers'] = {name: {'profile': worker.profile, 'kind': worker.provider['kind'], 'model': worker.provider.get('model'),
+            'fallback_profile': worker.role_options.get('_hosted_fallback')}
             for name, worker in specialist_selections(root, coordinator, config, user_overlay=user_overlay).items()}
         if coordinator.provider['kind'] not in {'local', 'openai-subscription'}:
             implementation['error'] = 'native coordinator is not supported; bind native profiles to worker roles'
