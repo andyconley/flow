@@ -135,14 +135,13 @@ class AgentPolicyResolutionTests(unittest.TestCase):
             routing_hints_for("codex", agents, manifest),
         )
 
-    def test_shaper_commands_do_not_receive_concrete_delivery_routing(self) -> None:
+    def test_boot_stays_neutral_and_native_shaping_receives_role_routing(self) -> None:
         for runtime in ("claude", "codex"):
-            for command in ("flow-boot", "flow-define", "flow-solution", "flow-plan"):
-                self.assertEqual(
-                    routing_hints_for(runtime, [{"name": "fixture"}], _manifest(),
-                                      command_name=command),
-                    "",
-                )
+            self.assertEqual(routing_hints_for(runtime, [{"name": "fixture"}],
+                _manifest(), command_name="flow-boot"), "")
+            for command in ("flow-define", "flow-solution", "flow-plan"):
+                self.assertIn("Flow Agent Routing", routing_hints_for(
+                    runtime, [{"name": "fixture"}], _manifest(), command_name=command))
 
 
 class SessionProfileTests(unittest.TestCase):

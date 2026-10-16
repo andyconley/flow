@@ -20,8 +20,8 @@ class SpecialistConstructionTests(unittest.TestCase):
                 root = Path(d) / name
                 (root / ".flow").mkdir(parents=True)
                 (root / ".flow/runtime.toml").write_text(f'default_profile="local"\n[profiles.local]\nkind="local"\nmodel="openai/{name}"\nbase_url="http://localhost:8000/v1"\n[roles.lead-developer]\ntools=["task","file_editor"]\nspecialists=["test-engineer"]\n[roles.test-engineer]\nspecialists=["quality-reviewer"]\ntools=["task","file_editor"]\n')
-                first = build_agent(select(root, "implement"), root)
-                repeated = build_agent(select(root, "implement"), root)
+                first = build_agent(select(root, "implement", "lead-developer"), root)
+                repeated = build_agent(select(root, "implement", "lead-developer"), root)
                 key = first.agent_context.system_message_suffix.split("subagent_type=")[-1].split()[0]
                 keys.append(key)
                 child = get_agent_factory(key).factory_func(first.llm)
