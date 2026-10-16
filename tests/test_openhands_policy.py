@@ -20,6 +20,7 @@ class PolicyTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.overlay = self.root / 'user'
         self.overlay.mkdir()
+        (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="llama3.1:8b"\ncontext_tokens=16384\n')
         self.cfg = config.load_config(self.root, self.overlay)
 
     def select(self):
@@ -27,8 +28,8 @@ class PolicyTests(unittest.TestCase):
 
     def test_default_coordinator_and_per_role_models(self):
         parent = self.select()
-        self.assertEqual(parent.provider['kind'], 'openai-subscription')
-        self.assertEqual(parent.provider['model'], 'gpt-5.6-terra')
+        self.assertEqual(parent.provider['kind'], 'local')
+        self.assertEqual(parent.provider['model'], 'ollama_chat/llama3.1:8b')
         children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
         self.assertEqual(children['lead-developer'].provider['model'], 'gpt-5.6-terra')
         self.assertEqual(children['quality-reviewer'].provider['model'], 'opus')
@@ -52,6 +53,23 @@ class PolicyTests(unittest.TestCase):
         self.assertNotIn('implement', loaded.get('stages', {}))
         selected = config.select(self.root, 'implement', config=loaded, user_overlay=self.overlay)
         self.assertEqual(selected.provider['kind'], 'codex')
+
+    def test_existing_local_stage_preserves_machine_model_and_context(self):
+        (self.overlay / 'runtime.toml').write_text('[stages.implement]\nprofile="studio"\n'
+            '[profiles.studio]\nkind="local"\nmodel="ollama_chat/gemma4-26b-dev:latest"\n'
+            'base_url="http://127.0.0.1:11434"\nmax_input_tokens=65536\n')
+        selected = config.select(self.root, 'implement', user_overlay=self.overlay)
+        self.assertEqual(selected.profile, 'studio')
+        self.assertEqual(selected.provider['max_input_tokens'], 65536)
+        self.assertTrue(selected.role_options['policy_dispatch'])
+        self.assertTrue(selected.routing_profiles)
+
+    def test_missing_local_configuration_fails_without_subscription_probe(self):
+        (self.overlay / 'flow.toml').unlink()
+        with patch('openhands_policy.subscription_readiness') as auth:
+            report = config.wiring_report(self.root, self.overlay)
+        auth.assert_not_called()
+        self.assertIn("profile 'ollama' is not configured", report['implementation']['error'])
 
     def test_policy_can_reorder_hosted_providers_without_model_choice(self):
         (self.overlay / 'flow.toml').write_text('[provider_selection]\nprovider_order=["ollama","codex","claude"]\n')
@@ -97,8 +115,9 @@ class PolicyTests(unittest.TestCase):
         self.assertIsInstance(agent, Agent)
         self.assertEqual(len(agent.tools), 1)
         self.assertIn('bindings', agent.tools[0].params)
-        self.assertEqual(auth.call_args.args[0].auth_type, 'subscription')
-        self.assertEqual(auth.call_args.args[0].reasoning_effort, 'medium')
+        auth.assert_not_called()
+        self.assertEqual(agent.llm.model, 'ollama_chat/llama3.1:8b')
+        self.assertEqual(agent.condenser.max_tokens, parent.provider['condenser_max_tokens'])
 
     def test_missing_login_and_native_coordinator_fail_before_stage_entry(self):
         import openhands_flow as flow
@@ -111,6 +130,8 @@ class PolicyTests(unittest.TestCase):
         before = (self.root / '.flow/runs/example/run.json').read_bytes()
         args.stage = 'implement'
         args.role = args.profile = None
+        self.cfg['profiles']['explicit-subscription'] = {'kind': 'openai-subscription'}
+        self.cfg['stages']['implement']['profile'] = 'explicit-subscription'
         with patch('openhands_config.load_config', return_value=self.cfg), patch('openhands_policy.subscription_readiness', return_value={'credential_file_present': False}), patch('openhands_runtime.conversation') as conversation:
             with self.assertRaisesRegex(config.RuntimeConfigurationError, 'sign-in required'):
                 flow.execute(args)
@@ -136,14 +157,15 @@ class PolicyTests(unittest.TestCase):
     def test_worker_override_cannot_replace_or_nest_coordinator(self):
         self.cfg['roles'] = {'lead-developer': {'profile': 'codex', 'policy_dispatch': True}}
         parent = self.select()
-        self.assertEqual(parent.provider['kind'], 'openai-subscription')
+        self.assertEqual(parent.provider['kind'], 'local')
         children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
         self.assertEqual(children['lead-developer'].provider['kind'], 'codex')
         self.assertNotIn('policy_dispatch', children['lead-developer'].role_options)
 
     def test_report_includes_resolved_implementation(self):
         report = config.wiring_report(self.root, self.overlay)
-        self.assertEqual(report['implementation']['coordinator']['kind'], 'openai-subscription')
+        self.assertEqual(report['implementation']['coordinator']['kind'], 'local')
+        self.assertEqual(report['subscription'], {'required': False})
         self.assertEqual(report['implementation']['workers']['lead-developer']['model'], 'gpt-5.6-terra')
 
     def test_eligible_local_candidate_routes_by_tier(self):

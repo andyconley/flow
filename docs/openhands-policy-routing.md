@@ -9,10 +9,10 @@ conversation persistence and results. There is no MCP bridge or native coordinat
 
 Define, solution and plan slash commands invoke the current host's native Flow
 agents. The host coordinates and obtains approvals. Implementation defaults to
-`openhands-coordinator`, a stock SDK Agent using the canonical lead-developer Codex
-model and reasoning tier (currently gpt-5.6-terra / medium) through direct OpenAI
-subscription authentication. Its sole execution tool is checked specialist task
-dispatch. Finish/think are the SDK's normal built-ins.
+`ollama`, a regular SDK Agent using the existing machine-local model, context and
+reasoning settings. Its sole execution tool is checked specialist task dispatch.
+Finish/think are the SDK's normal built-ins. The configured SDK summarizing
+condenser applies to the local coordinator as well as local workers.
 
 Each worker resolves separately. Explicit `[roles.NAME].profile` bindings win.
 Otherwise `provider_selection` is merged with the existing monotonic policy merger,
@@ -73,32 +73,22 @@ Studio's independent Gemma 64K settings are unchanged.
 Built-in profiles merge beneath user/project runtime.toml; no existing files are
 rewritten. Existing default/stage/role/profile overrides remain visible. Native
 profiles cannot coordinate implementation: use them on worker roles instead.
-Local SDK coordinator profiles are allowed but explicitly selected by the user.
+The existing local_machine settings supply the default Ollama coordinator.
+Missing local configuration fails closed; no host-native implementation fallback exists.
 Do not use `[roles.lead-developer].profile` to configure the coordinator; use
 `[stages.implement].profile`, leaving that role's binding for its worker.
 
-## Human sign-in, never automatic
+## Existing authentication and POC path
 
-The pinned SDK supports direct OpenAI subscription LLMs, not Claude subscription
-LLMs. This uses subscription access, not API credits. Run its supported interactive
-sign-in yourself with Flow's installed Python interpreter (shown in
-`~/.flow/config.toml`):
-
-```python
-from openhands.sdk import LLM
-llm = LLM.subscription_login(vendor="openai", model="gpt-5.6-terra")
-```
-
-This call performs the SDK's consent and browser OAuth flow; it does not send a
-model prompt. Do not approve it automatically or copy native CLI credentials.
-The SDK manages `~/.openhands/auth` (or `OH_PERSISTENCE_DIR/auth`). Flow readiness
-checks only file existence; it never reads or refreshes credentials. Actual SDK
-execution loads/refreshes them through the SDK, and fails on absent/invalid login.
-No API-key or endpoint override is accepted on the subscription coordinator.
-The SDK subscription backend does not support output-token caps; Flow does not
-claim those caps are enforced. Supported reasoning effort is passed to the SDK.
-Native ACP workers receive model selection but not Flow reasoning effort; their
-harness settings govern effort and tool permissions.
+The acceptance POC used a local SDK coordinator and native ACP workers. The
+subscription default introduced in commit `e2de27f` diverged from that path by
+requiring a separate OpenHands OAuth login. The default now uses the established
+local SDK path again. No OpenHands subscription sign-in is required for it.
+Claude and Codex workers use their existing native harness logins; Flow neither
+copies credentials nor introduces a credential store or login flow. Native ACP
+workers receive model selection but not Flow reasoning effort; their harness
+settings govern effort and tool permissions. Explicit existing profile overrides
+remain authoritative, including any separately configured subscription profile.
 
 ## Dispatch and permission boundaries
 

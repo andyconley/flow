@@ -1,9 +1,9 @@
 # Optional overrides only: install/update supplies built-in Claude, Codex and
-# OpenHands subscription coordinator profiles without this file.
-# See docs/openhands-policy-routing.md for human sign-in and policy eligibility.
+# machine-local Ollama profiles without this file.
+# See docs/openhands-policy-routing.md for local configuration and policy eligibility.
 
 [stages.implement]
-profile = "openhands-coordinator"
+profile = "ollama"
 
 [workspace]
 kind = "local"
@@ -14,13 +14,6 @@ kind = "local"
 # profile = "codex"
 # [roles.quality-reviewer]
 # profile = "claude"
-
-# Default coordinator follows canonical lead-developer Codex model/effort.
-# [profiles.openhands-coordinator]
-# kind = "openai-subscription"
-# model = "gpt-5.6-terra"
-# reasoning_effort = "medium"
-# No API key/base URL fields or automatic login.
 
 # Existing local_machine settings supply an Ollama profile when a model is set.
 # An explicit alternative local endpoint can be configured here:

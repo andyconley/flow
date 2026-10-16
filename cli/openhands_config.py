@@ -60,7 +60,6 @@ def load_config(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
     config = {'profiles': {
         'claude': {'kind': 'claude', 'session_mode': 'default'},
         'codex': {'kind': 'codex', 'session_mode': 'agent'},
-        'openhands-coordinator': {'kind': 'openai-subscription'},
     }}
     from local_machine import load_local_machine
     machine = load_local_machine(user_overlay / 'flow.toml')
@@ -73,7 +72,7 @@ def load_config(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
         if path.is_file():
             config = _merge(config, read_toml(path))
     if 'default_profile' not in config:
-        config.setdefault('stages', {}).setdefault('implement', {}).setdefault('profile', 'openhands-coordinator')
+        config.setdefault('stages', {}).setdefault('implement', {}).setdefault('profile', 'ollama')
     return config
 
 
@@ -219,13 +218,14 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     if workspace.get("confirmation") not in {None, "always"}:
         raise RuntimeConfigurationError("workspace confirmation must be always, or omitted to use the SDK default")
     selected = Selection(role, profile, dict(provider), role_file, dict(options), dict(workspace), profile_override, routing_profiles)
-    if kind == 'openai-subscription':
+    if kind == 'openai-subscription' or (coordinator_request and kind == 'local'):
         if workspace.get('kind', 'local') != 'local':
             raise RuntimeConfigurationError('policy coordinator requires a local SDK workspace')
         if options.get('model_routing') or ('tools' in options and options['tools'] != ['task']):
             raise RuntimeConfigurationError('policy coordinator tools are task only; configure worker tools on worker role bindings')
         from openhands_policy import specialist_selections
         from dataclasses import replace
+        selected = replace(selected, role_options={**selected.role_options, 'policy_dispatch': True})
         children = specialist_selections(root, selected, config, user_overlay=user_overlay)
         selected = replace(selected, routing_profiles={name: child.fingerprint() for name, child in children.items()})
     return selected
@@ -293,6 +293,6 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
         implementation['error'] = str(exc)
     return {"default_profile": config.get("default_profile"), "routes": routes,
             'implementation_profile': config.get('stages', {}).get('implement', {}).get('profile'),
-            'subscription': subscription_readiness(), 'implementation': implementation,
+            'subscription': subscription_readiness() if implementation.get('coordinator', {}).get('kind') == 'openai-subscription' else {'required': False}, 'implementation': implementation,
             'local_candidates': local_candidates,
             "note": "Configuration only: no authentication, model availability or effective permissions verified. Skills/AGENTS discovery and PROJECT.md are composed at execution. SDK readiness alone does not mean execution is configured."}

@@ -15,7 +15,7 @@ flow workflow execute <work-id> --stage implement --task-file <task.md>
 ```
 
 The default implementation coordinator is a normal OpenHands SDK Agent powered
-by the SDK's direct OpenAI subscription LLM. It has a checked task tool only;
+by the existing machine-local Ollama profile. It has a checked task tool only;
 OpenHands owns planning turns, delegation, execution history and continuation.
 Claude and Codex native harnesses are specialist workers, never the implementation
 coordinator. Native implementation handoff is refused.
@@ -30,14 +30,15 @@ rejects names outside its roster, including unrelated SDK registry entries.
 Built-in profiles and implementation defaults require no handwritten runtime.toml.
 Existing default, stage, role and profile settings remain authoritative; an old
 native coordinator setting fails with instructions to bind it to worker roles.
-A deliberately selected compatible local SDK coordinator remains supported.
+The Ollama profile derives from existing local_machine settings. Missing local
+configuration fails closed; it never permits host-native implementation.
 An explicit coordinator profile does not override every worker's provider.
 
-Inspect `flow workflow runtime --json` for configuration and subscription readiness.
-OpenHands requires a separate human subscription sign-in; native CLI login does
-not satisfy it. Follow `docs/openhands-policy-routing.md`. Do not initiate login,
-copy credentials, approve consent or use API billing on the user's behalf.
-Missing sign-in or a required human terminal fails before stage entry.
+Inspect `flow workflow runtime --json` for the coordinator and worker bindings.
+The local SDK coordinator needs no OpenHands subscription login. Claude and Codex
+ACP workers use their existing native logins and permissions. Do not initiate
+login, copy credentials, approve consent or use API billing on the user's behalf.
+Missing configuration or a required human terminal fails before stage entry.
 
 SDK task calls require explicit host confirmation through the existing
 `--confirm-pending` / `--reject-pending` workflow. Native worker permission requests

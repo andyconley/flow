@@ -313,7 +313,14 @@ def build_coordinator(selection, root):
         'Do not request provider changes, nested delegation, direct CLI launches, or changes to routing policy. '
         'Workers are leaves. Use lead-developer for implementation and output assembly when in the roster. '
         'Do not approve workflow gates. Report specialist evidence and unresolved work.'})
-    return Agent(llm=llm, tools=[Tool(name=register_policy_task_tool(), params={'bindings': bindings})], agent_context=context)
+    condenser = None
+    if selection.provider.get('condenser_max_tokens') is not None:
+        from openhands.sdk.context.condenser import LLMSummarizingCondenser
+        condenser = LLMSummarizingCondenser(
+            llm=llm.model_copy(update={'usage_id': 'flow-coordinator-condenser'}),
+            max_tokens=selection.provider['condenser_max_tokens'])
+    return Agent(llm=llm, tools=[Tool(name=register_policy_task_tool(), params={'bindings': bindings})],
+                 agent_context=context, condenser=condenser)
 
 
 def build_native_agent(selection: Selection, root: Path):
