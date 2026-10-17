@@ -556,6 +556,14 @@ Use this when a contributor's machine is ready to switch off development mode an
 Both install-mode conversions sync all three runtime targets after selecting
 the new source. Generation conflicts can leave a target unsynced while source
 conversion has succeeded; inspect the reported conflicts before continuing.
+Before syncing, they also run `flow defaults-review` against the user scope,
+the current project when the command runs from inside one with its own
+`.flow` (detected the same way `flow doctor` finds a project root, by walking
+up from the working directory), and any scope named with repeated
+`--project PATH`. `--project` only ever adds further, explicitly chosen
+scopes — it never replaces the automatic current-project inclusion, and
+there is still no filesystem-wide scan beyond the one project you are
+standing in.
 
 ### `flow install --develop <clone-path>`
 
@@ -590,6 +598,7 @@ Flags:
 - `--resync` — compatibility flag; applying an update already syncs Claude, Codex and OpenHands using the new CLI
 - `--remote URL` — override the remote configured in `~/.flow/config.toml` (useful for testing)
 - `--json` — with `--check`, emit classified update diagnostics for support automation
+- `--project PATH` — also review this project's `.flow` overlay during the update's defaults review (repeatable), in addition to the current project when the update runs from inside one with its own `.flow`
 
 The source swap is atomic: clone, staging or swap failures preserve the prior
 source. Post-swap sync conflicts are reported separately and preserve edited
@@ -597,6 +606,48 @@ runtime files. To roll back, coordinate with active sessions, restore a reviewed
 older checkout using `install-flow.sh --release`, and inspect sync conflicts.
 `flow update` chooses the highest remote tag; it is not an older-tag selector.
 Back up discovery/backing outputs before migration. See [distribution](agent-distribution.md).
+
+### `flow defaults-review`
+
+Remove overlay settings that conflict with the incoming framework defaults so
+the scope inherits them, instead of leaving a stale pin in place. This is
+authoritative by default: every setting that still differs from (or masks,
+for settings like `provider_order` whose mere presence changes routing
+regardless of value) the incoming default is removed, with no interactive
+Keep/Adopt question and no distinction between a TTY and a script. `flow
+install` and `flow update` run this automatically before adapter sync, passing
+along the current project (if the command runs from inside one with its own
+`.flow`) plus any scope named with their own `--project` flag. Run directly,
+`flow defaults-review` itself does no cwd detection by default — only the
+scopes you name with `--project` are reviewed — unless `--auto-project` is
+given, which applies that same current-project rule (and the `~/.flow`
+exclusion). `install-flow.sh` passes `--auto-project` so the shell bootstrap
+installer gets the same inclusion `flow install`/`flow update` get, without
+reimplementing the walk-up/exclusion logic in bash.
+
+Flags:
+
+- `--incoming INCOMING` — path to the incoming `flow.toml` to compare against; defaults to the installed `scaffolds/default/flow.toml`
+- `--user-overlay USER_OVERLAY` — path to the user scope to review; defaults to `~/.flow/user`
+- `--project PROJECT` — also review this project's `.flow` overlay (repeatable); no project is scanned automatically when `flow defaults-review` is run directly
+- `--auto-project` — also review the project the working directory sits inside (same rule and `~/.flow` exclusion as `flow install`/`flow update`'s automatic inclusion); used by `install-flow.sh`
+- `--check` — report pending differences only; never read stdin or write
+- `--recover RECOVER` — restore a prior run's backup from its recovery receipt
+
+Every removal is backed up under a private `defaults-review/<transaction>/`
+folder in the user overlay before any file is rewritten, and the resulting
+effective configuration is validated before the backup is even written.
+Recovering that backup with `--recover` is the explicit opt-out for a given
+run's result; there is no separate flag to keep one setting while adopting
+the rest. Native model/routing pins (a profile's `model`, a `default_profile`
+or stage profile pin) and full `[[provider_candidates]]` catalogs ARE removed
+under this authoritative reset, the same as any other overlay setting that
+differs from or masks the incoming default. Only the local machine's own
+connection fields — endpoint, installed model and context size, declared
+under `[local_machine]` and referenced by `provider_candidates` — remain
+preserved, because they are never part of the incoming defaults being
+compared against; credentials and project instructions are outside this
+review's scope entirely. See [installer-defaults-review.md](installer-defaults-review.md).
 
 ### `flow sync claude --user`
 
@@ -1311,6 +1362,11 @@ This script:
 - creates `~/.flow/source` — either a symlink to the checkout (`--develop`, default) or a real copied directory (`--release`)
 - writes the launcher to `~/.local/bin/flow`
 - writes `~/.flow/config.toml` with `[flow]` and `[install]` sections (mode, version for release, source_target for develop, installed_at)
+- runs `flow defaults-review --auto-project` before adapter sync, which reviews
+  the user scope plus the project this script was invoked from (if it has its
+  own `.flow`) — the same automatic current-project inclusion `flow
+  install`/`flow update` apply, computed in Python from the inherited working
+  directory rather than reimplemented in bash
 
 Modes:
 

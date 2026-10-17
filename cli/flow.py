@@ -143,6 +143,8 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True, title="commands")
 
     register_openhands(sub)
+    from defaults_review import configure_parser, run as defaults_review
+    configure_parser(sub.add_parser('defaults-review', help='remove conflicting overrides to inherit incoming defaults; --check previews only'))
 
     register_expertise(sub)
 
@@ -995,6 +997,14 @@ def main() -> int:
         metavar="CLONE_PATH",
         help="convert ~/.flow/source to a symlink pointing at the given clone path",
     )
+    install_parser.add_argument(
+        "--project",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="also review this project's .flow overlay during the post-install sync (repeatable), in addition to the current project when the command runs from inside one with its own .flow",
+    )
 
     update_parser = sub.add_parser(
         "update",
@@ -1029,8 +1039,22 @@ def main() -> int:
         help="override the remote URL configured in ~/.flow/config.toml",
     )
     update_parser.add_argument("--json", action="store_true", help="emit a structured diagnostic payload")
+    update_parser.add_argument(
+        "--project",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="also review this project's .flow overlay during the update (repeatable), in addition to the current project when the command runs from inside one with its own .flow",
+    )
 
     args = parser.parse_args()
+    if args.command == 'defaults-review':
+        try:
+            return defaults_review(args)
+        except (OSError, ValueError) as error:
+            print(f'Defaults review failed: {error}', file=sys.stderr)
+            return 1
     if args.command == "update" and args.json and not args.check:
         parser.error("flow update --json requires --check")
     # An older updater cannot call new installer hooks. Complete that installed
@@ -1547,13 +1571,14 @@ def main() -> int:
     if args.command == "sync":
         return sync_target(args.target, check=args.check, user_mode=args.user, as_json=args.json)
     if args.command == "install":
-        result = install_command(release=args.release, develop_path=args.develop)
+        result = install_command(release=args.release, develop_path=args.develop, projects=tuple(args.project))
         if result == 0:
             from archive_preflight import report
             report()
         return result
     if args.command == "update":
-        result = update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json)
+        result = update_command(check=args.check, resync=args.resync, remote_override=args.remote, as_json=args.json,
+                                 projects=tuple(args.project))
         if result == 0 and not args.check:
             from archive_preflight import report
             report()

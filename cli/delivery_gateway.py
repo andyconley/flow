@@ -2977,6 +2977,13 @@ def flow_owned_v9_selection_inputs(project_root: Path, *, now: datetime | None =
     catalog = [dict(item) for item in raw_catalog if isinstance(item, dict)]
     if len(catalog) != len(raw_catalog):
         raise ContractError("Flow provider_candidates configuration is invalid")
+    # sdk_tool_use is SDK-dispatch-only eligibility policy (see
+    # openhands_policy.py); this v9 catalog feeds selection_authority's strict,
+    # intentionally narrow candidate schema, which predates that field. Strip
+    # it here rather than widen that legacy schema for an unrelated policy
+    # surface the v9 pipeline never reads.
+    for candidate in catalog:
+        candidate.pop("sdk_tool_use", None)
     adapter_ceilings = {
         "ollama": ({"manage", "read", "edit", "verify", "collect"},
                    {"structured_output", "structured_edit", "evidence_collection"}),

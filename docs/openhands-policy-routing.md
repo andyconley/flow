@@ -23,7 +23,7 @@ coordinator's fixed system prompt, which the SDK condenser cannot summarize.
 Explicit skills and required instructions still need to fit the configured
 context; this change does not increase the machine's token or memory budget.
 
-Each worker resolves separately. Explicit `[roles.NAME].profile` bindings win.
+Each worker resolves separately. Explicit `[roles.NAME].profile` bindings restrict that role.
 Otherwise `provider_selection` is merged with the existing monotonic policy merger,
 using framework, user and project layers. Administrator `provider_candidates`
 replace the framework candidate catalog. Eligible Ollama remains first for every
@@ -35,11 +35,18 @@ allocation defaults, not vendor capability claims. Explicit provider order and
 role profile bindings retain precedence. Per-role hosted preferences can also be
 overridden in user/project flow.toml. All defaults still obey candidate eligibility.
 Native models use canonical role tiers; explicit runtime profile models win.
-No model chooses a provider or silently changes an endpoint.
+The coordinator chooses a qualified target such as `lead-developer--ollama-local`,
+`lead-developer--codex-hosted`, or `lead-developer--claude-hosted`. All eligible
+choices are exposed concurrently. Role-only names preserve the preference order
+above. No task can supply an arbitrary endpoint/model. Project candidate arrays,
+like user arrays, replace the lower catalog; partial entry deletion does not merge
+individual defaults back into a remaining array.
 
 Ollama admission accepts declared `sdk_tool_calling` or the explicit candidate
-setting `sdk_tool_use = "user-enabled-unverified"`, and requires an SDK context
-of at least 16,384, the pinned SDK's own minimum. User enablement authorizes attempts;
+setting `sdk_tool_use = "user-enabled-unverified"`, or the shipped explicit grant
+`sdk_tool_use = "default-enabled-unverified"`, and requires an SDK context
+of at least 16,384, the pinned SDK's own minimum. The generic candidate ships enabled;
+explicit disables remain authoritative. Enablement authorizes attempts;
 it does not assert a passed test or change permissions. Reporting keeps that state
 and unverified capability separate from routing eligibility. Advertised Ollama `tools` support
 is not evidence of a successful Flow worker test. `workflow runtime --json` lists
@@ -49,10 +56,10 @@ local context and missing eligibility reasons. Profiles derive from machine-owne
 Eligible local workers use a machine-wide advisory lock at
 `~/.flow/state/openhands-local-worker.lock`, held for the SDK task's duration.
 One Flow local worker runs at a time across projects/processes. This does not
-control unrelated Ollama clients. A busy slot routes a fresh assignment to the
-fixed eligible hosted fallback. A failed local task returns its failure and a
-partial-edit warning; the SDK coordinator can inspect and issue a fresh task,
-which uses the fixed hosted fallback in that active SDK task executor. Failed work is never automatically replayed.
+control unrelated Ollama clients. A busy slot reports an exclusion for that task.
+A failed task returns its failure and a partial-edit warning; the SDK coordinator
+can inspect and issue a fresh task to another listed provider. Failed work is never
+automatically replayed, and the executor never silently changes providers.
 Explicit role profile bindings remain fixed and do not gain an implicit fallback.
 Resume uses the original worker binding; unavailable local capacity rejects resume.
 
@@ -101,29 +108,43 @@ remain authoritative, including any separately configured subscription profile.
 
 ## Dispatch and permission boundaries
 
-The coordinator can request only roster role names. Its task action schema rejects
-extra provider/profile/model fields. The executor maps roles to fixed factory IDs
-and rejects other global registry names and unknown/cross-role resume IDs.
+The coordinator can request only roster role or role/provider names. Its task
+action schema rejects extra provider/profile/model fields. The executor maps
+qualified targets to fixed factory IDs and rejects other global registry names
+and unknown/cross-role/cross-provider resume IDs. Results identify the selected
+target, provider, runtime profile and model. `workflow runtime --json` reports
+excluded candidates, reasons and resolved role-only fallbacks without model calls.
 Bindings contribute to the workflow session fingerprint; configuration changes
 require a new session. Worker role-file drift after binding fails at construction.
 All Flow workers are leaves: no task tool, model-switch tool or Flow child roster.
-SDK task dispatch requires explicit host confirmation; native ACP permissions
-still use the terminal proxy. No automatic consent, credentials or persistent
-permission settings are introduced. Missing login/terminal preflight leaves the
+SDK dispatch inherits its supported automatic default (`NeverConfirm`); explicit
+workspace `confirmation="always"` retains host confirmation. Native ACP defaults
+to `stock-openhands`; explicit `permission_requests="interactive"` retains the
+terminal proxy. Stock native approvals can persist native permission rules, as
+documented in `native-access-decision.md`. No credentials are copied. Missing
+required login/interactive terminal preflight leaves the
 workflow stage unchanged. Plan and verification gates remain in the lifecycle.
 
 These are dispatch controls, not OS containment. Native workers may have native
 subagents or shell commands permitted by their existing harness. Flow cannot claim
 to prevent a shell-authorized worker launching another CLI. SDK tool restrictions
 are not translated into native permissions. Existing explicit legacy
-stock-openhands permission settings remain user-owned, never new defaults.
+permission settings are reviewed on every install/update; the installer
+removes them by default so the scope inherits the incoming default, with
+backup and recovery as the opt-out rather than an interactive Keep choice.
+A resumed conversation re-asserts the current confirmation default too: its
+persisted SDK state can still carry an old explicit `AlwaysConfirm` policy,
+so only omitting a setter is not enough on resume (see `openhands_runtime.conversation`).
 
 ## Persisted coordinator sessions
 
 Checked task actions retain the SDK identity `RoleTaskAction`, defined at module
 scope so fresh processes can deserialize saved tool definitions and actions.
 The extra-field prohibition remains enforced after loading; loading does not
-approve pending actions or broaden the roster.
+approve pending actions or broaden the roster. `subagent_type` has no generic
+default: the stock SDK's `"general-purpose"` default is never a configured
+Flow roster target, so the schema the coordinator model sees requires an
+explicit target rather than deferring that rejection to execution time.
 
 An existing conversation retains its saved system prompt. Installing the context
 fix does not rewrite or shrink that prompt. After the operator has stopped a

@@ -1,8 +1,20 @@
 # Native ACP access decision
 
-## Current default: terminal approval proxy
+## Current default: stock OpenHands with interactive opt-out
 
-Native profiles now default to `permission_requests="interactive"`. Flow launches
+The October 17 approved defaults amendment makes omitted native permission policy
+inherit `permission_requests="stock-openhands"`. This uses the supported ACPAgent
+path audited below, including possible persistent native permission rules. It
+does not grant filesystem/network access beyond the actual outer environment.
+SDK dispatch inherits its native `NeverConfirm` default; explicit
+`workspace.confirmation="always"` remains interactive, and a resumed conversation
+re-asserts this current default rather than trusting a persisted policy from an
+older binding. Existing explicit permission policies are removed by default on
+install/update so the scope inherits this automatic default; `flow defaults-review
+--check` previews the pending removal, and recovering a run's backup is the
+explicit opt-out, not an interactive per-setting choice.
+
+With `permission_requests="interactive"`, Flow launches
 the unchanged pinned adapter through `cli/acp_permissions.py`, using the public
 ACP command boundary. The proxy intercepts `session/request_permission` before
 it reaches the stock automatic callback. It displays the complete escaped request
@@ -10,8 +22,8 @@ and actual option kinds on the controlling terminal and returns only an explicit
 human choice. Empty/invalid input, EOF, errors, timeout or session cancellation
 return `cancelled`; no terminal fails before workflow stage entry or native launch.
 Prompts are terminal-only, not Codex/Claude desktop approval dialogs. A profile
-with omitted permission handling also uses this route; existing configuration is
-not rewritten. Explicit `stock-openhands` retains the legacy behavior audited below.
+with explicit interactive permission handling uses this route; existing
+configuration is not rewritten. Omitted handling uses the stock behavior audited below.
 
 The default response deadline is 120 seconds including time waiting for the
 terminal lock. Prompts are serialized across concurrent proxies on the same tty.

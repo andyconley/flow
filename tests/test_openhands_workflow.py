@@ -329,7 +329,7 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         flow.initialize(self.args)
         task = self.root / "task.md"
         task.write_text("Do not launch without scoped access approval")
-        (self.root / ".flow/runtime.toml").write_text('default_profile="native"\n[profiles.native]\nkind="codex"\n')
+        (self.root / ".flow/runtime.toml").write_text('default_profile="native"\n[profiles.native]\nkind="codex"\npermission_requests="interactive"\n')
         self.args.task_file = task
         self.args.role = self.args.profile = None
         self.args.stage = "define"
@@ -363,7 +363,7 @@ class OpenHandsWorkflowTests(unittest.TestCase):
         user.mkdir()
         (user / "runtime.toml").write_text('default_profile="cpu"\n[profiles.cpu]\nkind="local"\nmodel="openai/coder"\nbase_url="http://localhost:8000/v1"\n')
         (self.root / ".flow").mkdir()
-        (self.root / ".flow/runtime.toml").write_text('[profiles.gpu]\nkind="local"\nmodel="ollama_chat/coder"\nbase_url="http://self-hosted:11434"\n[roles.quality-reviewer]\nprofile="gpu"\n')
+        (self.root / ".flow/runtime.toml").write_text('[profiles.gpu]\nkind="local"\nmodel="ollama_chat/coder"\nbase_url="http://self-hosted:11434"\nmax_input_tokens=16384\n[roles.quality-reviewer]\nprofile="gpu"\n')
         self.assertEqual(config.select(self.root, "implement", user_overlay=user).profile, "cpu")
         self.assertEqual(config.select(self.root, "review", user_overlay=user).profile, "gpu")
 
