@@ -138,14 +138,13 @@ def execute(args) -> dict:
         children = specialist_selections(root, selection, load_config(root))
         selection = replace(selection, role_options={**selection.role_options, 'policy_dispatch': True},
                             routing_profiles={role: child.fingerprint() for role, child in children.items()})
-        native_permissions = [child.provider.get('permission_requests', 'interactive') for child in children.values()
+        native_permissions = [child.provider.get('permission_requests', 'stock-openhands') for child in children.values()
                               if child.provider['kind'] in {'claude', 'codex'}]
-        native_permissions.extend('interactive' for child in children.values() if child.role_options.get('_hosted_fallback'))
     # Consent to stock native permission handling is consequential: the pinned
     # Claude bridge may offer allow_always first and update native rules.
-    if selection.provider["kind"] in {'claude', 'codex'} and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
+    if selection.provider["kind"] in {'claude', 'codex'} and selection.provider.get("permission_requests", "stock-openhands") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
-    if 'interactive' in native_permissions or (selection.provider["kind"] in {'claude', 'codex'} and selection.provider.get("permission_requests", "interactive") == "interactive"):
+    if 'interactive' in native_permissions or (selection.provider["kind"] in {'claude', 'codex'} and selection.provider.get("permission_requests", "stock-openhands") == "interactive"):
         try:
             terminal = Terminal()
             terminal.close()

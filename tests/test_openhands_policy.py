@@ -2,6 +2,7 @@
 import os
 os.environ.setdefault('LITELLM_LOCAL_MODEL_COST_MAP', 'True')
 os.environ.setdefault('OPENHANDS_SUPPRESS_BANNER', '1')
+import json
 import sys
 import tempfile
 import unittest
@@ -10,7 +11,34 @@ from unittest.mock import patch, Mock
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'cli'))
 import openhands_config as config
+from flowtoml import read_toml
 from openhands_policy import specialist_selections
+
+
+def _render_provider_candidates(candidates):
+    """Serialize only a provider_candidates array back to TOML.
+
+    Keeps fixtures scoped to the provider-candidate catalog under test instead
+    of copying the whole framework manifest (which would also carry
+    framework-owned sections like [agent_capabilities] and
+    [session_model_profiles] into the overlay/project layers).
+    """
+    def render_value(value):
+        if isinstance(value, bool):
+            return 'true' if value else 'false'
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            return json.dumps(value)
+        if isinstance(value, list):
+            return '[' + ', '.join(render_value(item) for item in value) + ']'
+        raise TypeError(f'unsupported provider_candidates value: {value!r}')
+    blocks = []
+    for candidate in candidates:
+        lines = ['[[provider_candidates]]']
+        lines.extend(f'{key} = {render_value(value)}' for key, value in candidate.items())
+        blocks.append('\n'.join(lines))
+    return '\n\n'.join(blocks) + '\n'
 
 
 class PolicyTests(unittest.TestCase):
@@ -31,9 +59,10 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(parent.provider['kind'], 'local')
         self.assertEqual(parent.provider['model'], 'ollama_chat/llama3.1:8b')
         children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
-        self.assertEqual(children['lead-developer'].provider['model'], 'gpt-5.6-terra')
+        self.assertEqual(children['lead-developer'].provider['model'], 'ollama_chat/llama3.1:8b')
+        self.assertEqual(children['lead-developer--codex-hosted'].provider['model'], 'gpt-5.6-terra')
         self.assertEqual(children['quality-reviewer'].provider['model'], 'opus')
-        self.assertEqual(children['tech-writer'].provider['model'], 'haiku')
+        self.assertEqual(children['tech-writer--claude-hosted'].provider['model'], 'haiku')
         self.assertTrue(all(c.role_options['specialists'] == [] for c in children.values()))
 
     def test_override_mixes_providers_and_changes_binding(self):
@@ -72,8 +101,10 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("profile 'ollama' is not configured", report['implementation']['error'])
 
     def test_policy_can_reorder_hosted_providers_without_model_choice(self):
+        parent = self.select()
+        self.cfg['profiles'].pop('ollama')
         (self.overlay / 'flow.toml').write_text('[provider_selection]\nprovider_order=["ollama","codex","claude"]\n')
-        children = specialist_selections(self.root, self.select(), self.cfg, user_overlay=self.overlay)
+        children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
         self.assertEqual(children['lead-developer'].provider['kind'], 'codex')
         self.assertEqual(children['lead-developer'].provider['model'], 'gpt-5.6-terra')
 
@@ -243,6 +274,7 @@ assert Path(sys.argv[2]).read_bytes() == original
         children = specialist_selections(self.root, self.select(), cfg, user_overlay=self.overlay)
         self.assertTrue(all(c.provider['kind'] in {'claude', 'codex'} for c in children.values()))
         cfg['roles'] = {'test-engineer': {'profile': 'ollama'}}
+        cfg['profiles']['ollama']['max_input_tokens'] = 16384
         children = specialist_selections(self.root, self.select(), cfg, user_overlay=self.overlay)
         self.assertEqual(children['test-engineer'].provider['kind'], 'local')
         self.assertNotIn('task', children['test-engineer'].role_options['tools'])
@@ -255,11 +287,103 @@ assert Path(sys.argv[2]).read_bytes() == original
         self.assertEqual(children['lead-developer'].provider['kind'], 'codex')
         self.assertNotIn('policy_dispatch', children['lead-developer'].role_options)
 
+    def test_same_role_exposes_all_three_provider_factories(self):
+        from openhands_runtime import build_agent
+        from openhands.sdk.subagent import get_agent_factory
+        parent = self.select()
+        children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
+        targets = {f'lead-developer--{name}' for name in ('ollama-local', 'codex-hosted', 'claude-hosted')}
+        self.assertTrue(targets <= children.keys())
+        with patch('openhands_config.load_config', return_value=self.cfg), patch('openhands_runtime.specialist_selections', return_value=children):
+            agent = build_agent(parent, self.root)
+        bindings = agent.tools[0].params['bindings']
+        with patch('openhands_runtime.build_agent', side_effect=lambda child, root: child):
+            actual = []
+            for target in sorted(targets):
+                binding = bindings[target]
+                key = binding['primary'] if isinstance(binding, dict) else binding
+                actual.append(get_agent_factory(key).factory_func(agent.llm).provider['kind'])
+        self.assertEqual(set(actual), {'local', 'claude', 'codex'})
+
+    def test_disable_invalid_endpoint_and_tier_exclusions_are_visible(self):
+        self.cfg['profiles']['ollama']['base_url'] = 'invalid'
+        parent = config.Selection('lead-developer', 'ollama', {}, Path(__file__), {}, {})
+        diagnostics = []
+        workers = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay, diagnostics=diagnostics)
+        self.assertNotIn('lead-developer--ollama-local', workers)
+        self.assertEqual(workers['lead-developer'].profile, 'codex')
+        self.assertIn('base_url', str(diagnostics))
+        self.cfg['profiles']['ollama']['base_url'] = 'http://localhost:11434'
+        (self.root / '.flow').mkdir()
+        (self.root / '.flow/flow.toml').write_text('[provider_selection]\ndisabled_candidates=["ollama-local"]\n')
+        diagnostics = []
+        workers = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay, diagnostics=diagnostics)
+        self.assertNotIn('lead-developer--ollama-local', workers)
+        self.assertIn('candidate_disabled', str(diagnostics))
+
+    def test_invalid_machine_is_reported_with_hosted_worker_choices(self):
+        (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="local"\ncontext_tokens="bad"\n')
+        report = config.wiring_report(self.root, self.overlay)
+        self.assertIn('positive integer', report['local_configuration_error'])
+        self.assertEqual(report['implementation']['workers']['lead-developer']['profile'], 'codex')
+        self.assertIn('positive integer', str(report['implementation']['routing_decisions']))
+
+    def test_project_catalog_cannot_silently_erase_user_disable(self):
+        framework_candidates = read_toml(config.FRAMEWORK_ROLES.parent / 'flow.toml')['provider_candidates']
+        disabled_candidates = [dict(candidate, enabled=False) if candidate.get('candidate_id') == 'ollama-local'
+                                else candidate for candidate in framework_candidates]
+        (self.overlay / 'flow.toml').write_text(_render_provider_candidates(disabled_candidates))
+        (self.root / '.flow').mkdir()
+        (self.root / '.flow/flow.toml').write_text(_render_provider_candidates(framework_candidates))
+        parent = config.Selection('lead-developer', 'ollama', {}, Path(__file__), {}, {})
+        workers = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
+        self.assertNotIn('lead-developer--ollama-local', workers)
+        self.assertEqual(workers['lead-developer'].profile, 'codex')
+
+    def test_native_default_and_explicit_interactive_override(self):
+        selected = config.select(self.root, 'implement', 'test-engineer', 'codex', config=self.cfg, user_overlay=self.overlay)
+        self.assertEqual(selected.provider['permission_requests'], 'stock-openhands')
+        self.cfg['profiles']['codex']['permission_requests'] = 'interactive'
+        selected = config.select(self.root, 'implement', 'test-engineer', 'codex', config=self.cfg, user_overlay=self.overlay)
+        self.assertEqual(selected.provider['permission_requests'], 'interactive')
+
+    def test_sdk_confirmation_only_changes_for_explicit_interactive_workspace(self):
+        from dataclasses import replace
+        from uuid import uuid4
+        import openhands_runtime
+        parent = self.select()
+        with patch.object(openhands_runtime, 'build_agent'), patch('openhands.sdk.Conversation') as constructor:
+            with openhands_runtime.conversation(parent, self.root, self.root / 'history', uuid4(), lambda _: None):
+                pass
+            constructor.return_value.set_confirmation_policy.assert_not_called()
+            with openhands_runtime.conversation(replace(parent, workspace={'confirmation': 'always'}), self.root, self.root / 'history', uuid4(), lambda _: None):
+                pass
+            self.assertEqual(constructor.return_value.set_confirmation_policy.call_args.args[0].__class__.__name__, 'AlwaysConfirm')
+
+    def test_resumed_session_forces_never_confirm_over_stale_persisted_policy(self):
+        from uuid import uuid4
+        import openhands_runtime
+        from openhands.sdk.conversation.impl.local_conversation import LocalConversation
+        parent = self.select()
+        history = self.root / 'history'
+        conversation_id = uuid4()
+        persisted = Path(LocalConversation.get_persistence_dir(history, conversation_id))
+        persisted.mkdir(parents=True)
+        # Simulate a conversation whose persisted SDK state was serialized
+        # under an old explicit AlwaysConfirm binding. Omitting the setter
+        # alone would leave this stale value in effect on resume.
+        (persisted / 'base_state.json').write_text('{"confirmation_policy": {"kind": "AlwaysConfirm"}}')
+        with patch.object(openhands_runtime, 'build_agent'), patch('openhands.sdk.Conversation') as constructor:
+            with openhands_runtime.conversation(parent, self.root, history, conversation_id, lambda _: None):
+                pass
+            self.assertEqual(constructor.return_value.set_confirmation_policy.call_args.args[0].__class__.__name__, 'NeverConfirm')
+
     def test_report_includes_resolved_implementation(self):
         report = config.wiring_report(self.root, self.overlay)
         self.assertEqual(report['implementation']['coordinator']['kind'], 'local')
         self.assertEqual(report['subscription'], {'required': False})
-        self.assertEqual(report['implementation']['workers']['lead-developer']['model'], 'gpt-5.6-terra')
+        self.assertEqual(report['implementation']['workers']['lead-developer']['model'], 'ollama_chat/llama3.1:8b')
+        self.assertEqual(report['implementation']['workers']['lead-developer--codex-hosted']['model'], 'gpt-5.6-terra')
 
     def test_eligible_local_candidate_routes_by_tier(self):
         (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="local-tool-model"\ncontext_tokens=16384\n'
@@ -276,9 +400,12 @@ assert Path(sys.argv[2]).read_bytes() == original
         self.assertEqual(children['quality-reviewer'].provider['kind'], 'codex')
 
     def test_explicit_claude_order_overrides_mixed_defaults(self):
+        parent = self.select()
+        self.cfg['profiles'].pop('ollama')
         (self.overlay / 'flow.toml').write_text('[provider_selection]\nprovider_order=["ollama","claude","codex"]\n')
-        children = specialist_selections(self.root, self.select(), self.cfg, user_overlay=self.overlay)
-        self.assertTrue(all(c.provider['kind'] == 'claude' for c in children.values()))
+        children = specialist_selections(self.root, parent, self.cfg, user_overlay=self.overlay)
+        self.assertTrue(all(child.provider['kind'] == 'claude' for name, child in children.items() if '--' not in name))
+        self.assertIn('lead-developer--codex-hosted', children)
 
     def test_short_local_context_is_visible_and_falls_back(self):
         (self.overlay / 'flow.toml').write_text('[local_machine]\nmodel="llama3.1:8b"\ncontext_tokens=8192\n')
@@ -288,29 +415,35 @@ assert Path(sys.argv[2]).read_bytes() == original
         self.assertEqual(report['implementation']['workers']['lead-developer']['profile'], 'codex')
         self.assertEqual(report['implementation']['workers']['quality-reviewer']['profile'], 'claude')
 
-    def test_local_slot_and_failed_task_use_bound_hosted_fallback(self):
+    def test_coordinator_selects_alternate_after_busy_or_failed_task(self):
         import fcntl
         from openhands_accounting import register_policy_task_tool
         from openhands.sdk.tool import Tool, resolve_tool
         from openhands.tools.task.definition import TaskObservation
         with patch('pathlib.Path.home', return_value=self.root):
             tool = resolve_tool(Tool(name=register_policy_task_tool(), params={'bindings': {
-                'lead-developer': {'primary': 'local-fixed', 'fallback': 'codex-fixed', 'local': True}}}), SimpleNamespace())[0]
+                'lead-developer': {'primary': 'local-fixed', 'local': True},
+                'lead-developer--codex': 'codex-fixed', 'lead-developer--claude': 'claude-fixed'}}), SimpleNamespace())[0]
             ok = TaskObservation.from_text(text='done', task_id='one', subagent='codex-fixed', status='completed')
             tool.executor.delegate = Mock(return_value=ok)
             (self.root / '.flow/state').mkdir(parents=True)
             with (self.root / '.flow/state/openhands-local-worker.lock').open('a') as held:
                 fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                tool.executor(tool.action_type(prompt='implement', subagent_type='lead-developer'))
-                self.assertEqual(tool.executor.delegate.call_args.args[0].subagent_type, 'codex-fixed')
+                result = tool.executor(tool.action_type(prompt='implement', subagent_type='lead-developer'))
+                self.assertTrue(result.is_error)
+                tool.executor.delegate.assert_not_called()
             failed = TaskObservation.from_text(text='failed with possible edits', task_id='two', subagent='local-fixed', status='error', is_error=True)
             tool.executor.delegate = Mock(return_value=failed)
             result = tool.executor(tool.action_type(prompt='implement', subagent_type='lead-developer'))
             self.assertIn('no automatic replay', result.text)
             self.assertEqual(tool.executor.delegate.call_count, 1)
             tool.executor.delegate = Mock(return_value=ok)
-            tool.executor(tool.action_type(prompt='review partial edits and continue', subagent_type='lead-developer'))
+            tool.executor(tool.action_type(prompt='review partial edits and continue', subagent_type='lead-developer--codex'))
             self.assertEqual(tool.executor.delegate.call_args.args[0].subagent_type, 'codex-fixed')
+            result = tool.executor(tool.action_type(prompt='resume as a different provider', subagent_type='lead-developer--claude', resume='one'))
+            self.assertTrue(result.is_error)
+            tool.executor(tool.action_type(prompt='independent review', subagent_type='lead-developer--claude'))
+            self.assertEqual(tool.executor.delegate.call_args.args[0].subagent_type, 'claude-fixed')
 
     def test_local_sdk_profile_forwards_actual_ollama_context(self):
         from openhands_runtime import local_llm
@@ -336,7 +469,7 @@ assert Path(sys.argv[2]).read_bytes() == original
         parent = config.select(self.root, 'implement', config=cfg, user_overlay=self.overlay)
         workers = specialist_selections(self.root, parent, cfg, user_overlay=self.overlay)
         self.assertEqual(workers['lead-developer'].provider['kind'], 'local')
-        self.assertEqual(workers['lead-developer'].role_options['_hosted_fallback'], 'codex')
+        self.assertEqual(workers['lead-developer--codex-hosted'].profile, 'codex')
         report = config.wiring_report(self.root, self.overlay)['local_candidates'][0]
         self.assertTrue(report['local_capability_eligible'])
         self.assertEqual(report['tool_use_state'], 'user-enabled-unverified')

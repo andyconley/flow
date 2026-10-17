@@ -114,8 +114,8 @@ class SpecialistTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeConfigurationError, 'use a specialist'):
             self.build()
 
-    def test_unacknowledged_native_child_uses_interactive_proxy(self):
-        self.config['profiles']['native'].pop('permission_requests')
+    def test_explicit_interactive_native_child_uses_interactive_proxy(self):
+        self.config['profiles']['native']['permission_requests'] = 'interactive'
         parent = self.build()
         child = self.factories(parent)['native'](parent.llm)
         self.assertIn('acp_permissions.py', child.acp_command[1])

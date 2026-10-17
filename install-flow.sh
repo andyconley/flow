@@ -123,6 +123,9 @@ Usage: install-flow.sh [--develop|--release]
              tag is present) is stamped into ~/.flow/config.toml. Use
              `flow update` after install to roll forward to newer tags.
 
+Defaults review also folds in the project you run this script from (if it has
+its own .flow overlay), the same way `flow install`/`flow update` do.
+
 After installation:
   flow setup machine
   flow setup user
@@ -319,6 +322,16 @@ trap - EXIT
 rm -rf "${INSTALL_TRANSACTION}"
 
 "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/archive_preflight.py" || true
+
+# --auto-project folds in the project this script was invoked from, exactly
+# like `flow install`/`flow update` do automatically (fsutil.current_project_root,
+# which also excludes flow's own ~/.flow) — computed in Python from the
+# inherited working directory rather than re-walking and re-quoting that same
+# exclusion logic here in bash.
+if ! "${FLOW_PYTHON_BIN}" "${SOURCE_DIR}/cli/defaults_review.py" --auto-project; then
+  echo "Source installed; defaults review failed; adapter synchronization stopped." >&2
+  exit 1
+fi
 
 # Render/install native role discovery surfaces with the installed version.
 # Conflicts preserve user files and leave the source install available to repair.

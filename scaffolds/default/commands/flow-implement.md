@@ -20,12 +20,15 @@ OpenHands owns planning turns, delegation, execution history and continuation.
 Claude and Codex native harnesses are specialist workers, never the implementation
 coordinator. Native implementation handoff is refused.
 
-Provider bindings are resolved independently for each role by deterministic Flow
-policy. The coordinator requests a logical role, not a provider. Explicit role
-profiles win; otherwise the existing administrator candidate catalog, role tier,
-and local-first provider order determine the binding. Worker factories cannot
-accept model/provider overrides or delegate through Flow. The checked task tool
-rejects names outside its roster, including unrelated SDK registry entries.
+OpenHands chooses among the listed role/provider targets, such as
+`lead-developer--ollama-local`, `lead-developer--codex-hosted` and
+`lead-developer--claude-hosted`. Flow validates configured eligibility and exposes
+the roster; it does not choose the provider for a qualified task. Role-only calls
+retain local-first and role-specific hosted preferences. Explicit role profiles
+restrict that role. Worker factories cannot accept arbitrary models/endpoints or
+delegate through Flow. The checked task tool rejects names outside its roster,
+including unrelated SDK registry entries. After failure, inspect partial edits
+before requesting a fresh task on another listed provider; no automatic replay.
 
 Built-in profiles and implementation defaults require no handwritten runtime.toml.
 Existing default, stage, role and profile settings remain authoritative; an old
@@ -40,11 +43,17 @@ ACP workers use their existing native logins and permissions. Do not initiate
 login, copy credentials, approve consent or use API billing on the user's behalf.
 Missing configuration or a required human terminal fails before stage entry.
 
-SDK task calls require explicit host confirmation through the existing
-`--confirm-pending` / `--reject-pending` workflow. Native worker permission requests
-also require human terminal choices, unless an existing explicit legacy permission
-setting applies. Do not auto-confirm either layer. Native workers retain their
-native tool permissions; no OS sandbox or shell-launch prohibition is implied.
+SDK task calls inherit the supported SDK automatic confirmation default. Explicit
+`workspace.confirmation="always"` retains `--confirm-pending` / `--reject-pending`;
+a resumed conversation re-asserts this current default rather than trusting a
+persisted policy from an older binding. Native workers default to
+`permission_requests="stock-openhands"`; explicit `interactive` uses human
+terminal choices. Install/update removes existing overrides by default so the
+scope inherits these automatic defaults; `flow defaults-review --check` previews
+the pending removal and backup/recovery is the opt-out for a given run. Native
+automatic approval can persist native permission rules. Workers inherit the
+actual outer containment; a working directory is not an OS sandbox or a
+shell-launch prohibition.
 
 ## Durable outputs
 

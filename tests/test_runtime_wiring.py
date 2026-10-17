@@ -50,8 +50,8 @@ class RuntimeWiringTests(unittest.TestCase):
             self.assertEqual(len(report["routes"]), 26)
             report["routes"] = [r for r in report["routes"] if r.get("kind") in {"claude", "codex"}]
             self.assertTrue(all(r["interactive_handoff_configured"] for r in report["routes"]))
-            self.assertTrue(all(r["execution_configured"] and r["human_terminal_required"] for r in report["routes"]))
-            self.assertTrue(all(r["permission_requests"] == "interactive" for r in report["routes"]))
+            self.assertTrue(all(r["execution_configured"] and not r["human_terminal_required"] for r in report["routes"]))
+            self.assertTrue(all(r["permission_requests"] == "stock-openhands" for r in report["routes"]))
             self.assertEqual((root / "runtime.toml").read_bytes(), before)
 
     def test_local_reasoning_is_forwarded_to_sdk(self):
@@ -79,4 +79,5 @@ class RuntimeWiringTests(unittest.TestCase):
         with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
             self.assertEqual(lifecycle._sync_installed_adapters(), 0)
         calls = [call.args[0][2:] for call in run.call_args_list]
-        self.assertEqual(calls, [["sync", target, "--user"] for target in ("claude", "codex", "openhands")] + [["setup", "runtime"]])
+        self.assertEqual(calls, [[]] + [["sync", target, "--user"] for target in ("claude", "codex", "openhands")] + [["setup", "runtime"]])
+        self.assertEqual(Path(run.call_args_list[0].args[0][1]).name, 'defaults_review.py')

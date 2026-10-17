@@ -296,24 +296,9 @@ def build_coordinator(selection, root):
             return build_agent(child, root)
         register_agent_if_absent(name=key, factory_func=factory,
                                  description=f'Flow policy worker: {role}')
-        bindings[role] = key
-        if child.provider['kind'] == 'local':
-            fallback_key = None
-            if child.role_options.get('_hosted_fallback'):
-                from openhands_config import select
-                from dataclasses import replace
-                fallback = select(root, 'implement', role, child.role_options['_hosted_fallback'], config=load_config(root))
-                if fallback.fingerprint() != child.role_options['_hosted_fallback_binding']:
-                    raise RuntimeConfigurationError('hosted fallback changed after binding')
-                fallback = replace(fallback, role_options={**fallback.role_options, 'specialists': []})
-                fallback_key = 'flow-policy-' + hashlib.sha256((str(root.resolve()) + fallback.fingerprint()).encode()).hexdigest()[:20]
-                def fallback_factory(parent_llm, selected=fallback, expected=fallback.fingerprint()):
-                    if selected.fingerprint() != expected:
-                        raise RuntimeConfigurationError('fallback role changed after binding')
-                    return build_native_agent(selected, root)
-                register_agent_if_absent(name=fallback_key, factory_func=fallback_factory,
-                    description=f'Flow policy fallback: {role}')
-            bindings[role] = {'primary': key, 'fallback': fallback_key, 'local': True}
+        bindings[role] = {'primary': key, 'local': child.provider['kind'] == 'local',
+                          'role': child.role, 'profile': child.profile,
+                          'provider': child.provider['kind'], 'model': child.provider.get('model')}
     # This supported SDK entrypoint loads/refreshes only OpenHands OAuth at execution.
     # It never initiates login and fails if the human has not signed in.
     llm = local_llm(selection) if selection.provider['kind'] == 'local' else create_subscription_llm_from_config(LLM(model=selection.provider['model'],
@@ -322,8 +307,9 @@ def build_coordinator(selection, root):
     context = _context(selection, root, explicit_skills_only=True)
     context = context.model_copy(update={'system_message_suffix': context.system_message_suffix +
         '\n\nYou coordinate implementation inside OpenHands. Delegate all workspace work and durable output writes '
-        'to the approved logical roles through task. Provider assignment is deterministic code, not your choice. '
-        'Do not request provider changes, nested delegation, direct CLI launches, or changes to routing policy. '
+        'to the approved role/provider targets through task. Choose among the listed provider choices. '
+        'Role-only names use configured preferences. After failure inspect partial edits before choosing an alternate target. '
+        'Do not request unlisted providers, nested delegation, direct CLI launches, or changes to routing policy. '
         'Workers are leaves. Use lead-developer for implementation and output assembly when in the roster. '
         'Do not approve workflow gates. Report specialist evidence and unresolved work.'})
     condenser = None
@@ -337,7 +323,7 @@ def build_coordinator(selection, root):
 
 
 def build_native_agent(selection: Selection, root: Path):
-    if selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
+    if selection.provider.get("permission_requests", "stock-openhands") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
     from openhands.sdk.agent import ACPAgent
     from openhands.sdk.settings.acp_install_catalog import ACP_INSTALL_CATALOG
@@ -355,7 +341,7 @@ def build_native_agent(selection: Selection, root: Path):
     # Keep the official adapter, native modes, authentication and SDK sessions.
     # The public command boundary intercepts permission requests only.
     command = list(spec.npx_command())
-    if selection.provider.get("permission_requests", "interactive") == "interactive":
+    if selection.provider.get("permission_requests", "stock-openhands") == "interactive":
         command = [sys.executable, str(Path(__file__).with_name("acp_permissions.py")),
                    "--npm-cache", str(root / ".flow/runs/.acp-cache/npm"), "--", *command]
     return ACPAgent(acp_command=command, acp_server=provider_key,
@@ -369,22 +355,27 @@ def conversation(selection: Selection, root: Path, persistence: Path, conversati
     diagnostic = probe()
     if not diagnostic["ready"]:
         raise RuntimeConfigurationError("run this command with the isolated pinned OpenHands environment: " + str(diagnostic["packages"]))
-    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "interactive") not in {"interactive", "stock-openhands"}:
+    if selection.provider["kind"] != "local" and selection.provider.get("permission_requests", "stock-openhands") not in {"interactive", "stock-openhands"}:
         raise RuntimeConfigurationError("Native access decision required: stock ACP auto-approval may add native permission rules. See docs/native-access-decision.md; after approval select permission_requests=stock-openhands in the native profile.")
     from openhands.sdk import Conversation
     from openhands.sdk.workspace import LocalWorkspace
-    from openhands.sdk.security import AlwaysConfirm
+    from openhands.sdk.security import AlwaysConfirm, NeverConfirm
     agent = build_agent(selection, root)
     workspace_options = selection.workspace
     restored_llm = None
-    if (workspace_options.get("kind", "local") == "local" and selection.provider["kind"] == "local"
-            and selection.role_options.get("model_routing") and not selection.profile_override):
-        import json
+    resumed = False
+    if workspace_options.get("kind", "local") == "local":
         from openhands.sdk.conversation.impl.local_conversation import LocalConversation
         from openhands.sdk.conversation.state import BASE_STATE
-        from openhands_config import load_config, select
         # Read the SDK's own snapshot, not a second Flow model/session ledger.
+        # Checked before Conversation() exists, which would otherwise create a
+        # fresh one and make "snapshot present" useless as a resume signal.
         snapshot = Path(LocalConversation.get_persistence_dir(persistence, conversation_id)) / BASE_STATE
+        resumed = snapshot.is_file()
+    if (resumed and selection.provider["kind"] == "local"
+            and selection.role_options.get("model_routing") and not selection.profile_override):
+        import json
+        from openhands_config import load_config, select
         try:
             saved = json.loads(snapshot.read_text())
         except FileNotFoundError:
@@ -417,8 +408,17 @@ def conversation(selection: Selection, root: Path, persistence: Path, conversati
     try:
         if restored_llm is not None:
             session.switch_llm(restored_llm)
-        if workspace_options.get("confirmation") == "always" or selection.provider['kind'] == 'openai-subscription' or selection.role_options.get('policy_dispatch'):
+        if workspace_options.get("confirmation") == "always":
             session.set_confirmation_policy(AlwaysConfirm())
+        elif resumed:
+            # A resumed conversation's persisted ConversationState can still
+            # carry an old explicit AlwaysConfirm policy — from before this
+            # workspace's binding changed, or from a prior Flow version. A
+            # brand-new conversation already starts from the SDK's own
+            # NeverConfirm default, so leaving that path untouched is enough;
+            # only a resume needs an explicit reset to the current default,
+            # since the persisted value would otherwise silently keep winning.
+            session.set_confirmation_policy(NeverConfirm())
         yield session
     finally:
         session.close()

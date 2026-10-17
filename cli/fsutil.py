@@ -52,6 +52,28 @@ def repo_root() -> Path:
     return cwd
 
 
+def current_project_root() -> Path | None:
+    """The project the current working directory sits inside, or `None`.
+
+    `repo_root()` alone cannot tell a project overlay from flow's own home: a
+    `$HOME` managed as a dotfiles git repo matches `repo_root()`'s `.git` check
+    at the very first directory it looks at, landing exactly on `_flow_home()`'s
+    parent before the `.flow` comparison ever runs. Requiring an actual `.flow`
+    directory here, not merely a `.git` repo, closes that gap rather than
+    trusting `repo_root()` to have excluded it in every return path.
+
+    Shared by `lifecycle._with_current_project_scope` (automatic project
+    inclusion for `flow install`/`flow update`) and `defaults_review.py
+    --auto-project` (the same inclusion for the shell bootstrap installer,
+    which has no Python-side caller to fold the scope in for it).
+    """
+    root = repo_root()
+    overlay = root / ".flow"
+    if overlay == _flow_home() or not overlay.is_dir():
+        return None
+    return root
+
+
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 

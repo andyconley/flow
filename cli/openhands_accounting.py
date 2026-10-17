@@ -2,12 +2,21 @@
 from uuid import uuid4
 
 from openhands.tools.task.definition import TaskAction
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 
 class RoleTaskAction(TaskAction):
-    """Stable SDK action identity for persisted checked-dispatch events."""
+    """Stable SDK action identity for persisted checked-dispatch events.
+
+    `subagent_type` has no generic default: the stock SDK default of
+    "general-purpose" is not a configured Flow roster target, so letting a
+    caller omit it just defers a rejection to execution time. Requiring it
+    here fails fast, at the schema the coordinator model actually sees.
+    """
     model_config = ConfigDict(extra="forbid")
+    subagent_type: str = Field(
+        description="Role or role--provider target from the approved Flow roster. Required; no generic default.",
+    )
 
 
 _REGISTERED = False
@@ -58,7 +67,6 @@ def register_policy_task_tool():
             self.bindings = dict(bindings)
             self.tasks = {}
             self.task_routes = {}
-            self.failed_local_roles = set()
 
         def __call__(self, action, conversation=None):
             if action.subagent_type not in self.bindings or (
@@ -69,8 +77,6 @@ def register_policy_task_tool():
             binding = self.bindings[action.subagent_type]
             routes = binding if isinstance(binding, dict) else {'primary': binding}
             route = self.task_routes.get(action.resume, routes['primary'])
-            if not action.resume and action.subagent_type in self.failed_local_roles and routes.get('fallback'):
-                route = routes['fallback']
             lock = None
             if routes.get('local') and route == routes['primary']:
                 import fcntl
@@ -83,26 +89,25 @@ def register_policy_task_tool():
                 except BlockingIOError:
                     lock.close()
                     lock = None
-                    if not action.resume and routes.get('fallback'):
-                        route = routes['fallback']
-                    else:
-                        return TaskObservation.from_text(text='Local worker slot is busy; no model was started.',
-                            task_id='rejected', subagent=action.subagent_type, status='error', is_error=True)
+                    return TaskObservation.from_text(text='Local worker slot is busy; no model was started. Choose another listed provider target or retry later.',
+                        task_id='rejected', subagent=action.subagent_type, status='error', is_error=True)
             mapped = action.model_copy(update={'subagent_type': route})
             try:
                 result = self.delegate(mapped, conversation)
             finally:
                 if lock is not None:
                     lock.close()
+            from openhands.sdk import TextContent
+            result = result.model_copy(update={'content': [*result.content, TextContent(text=
+                f"Selected target: {action.subagent_type}; profile: {routes.get('profile', route)}; "
+                f"provider: {routes.get('provider', 'bound SDK factory')}; model: {routes.get('model', 'factory default')}")]})
             if not result.is_error:
                 self.tasks[result.task_id] = action.subagent_type
                 self.task_routes[result.task_id] = route
-            elif routes.get('local') and route == routes['primary'] and routes.get('fallback'):
-                self.failed_local_roles.add(action.subagent_type)
-                from openhands.sdk import TextContent
+            else:
                 result = result.model_copy(update={'content': [*result.content, TextContent(text=
-                    'Local execution failed. Inspect any partial edits before retrying. A fresh task for this role '
-                    'will use its policy-selected hosted fallback; no automatic replay was performed.')]})
+                    'Execution failed. Inspect any partial edits before retrying or choosing another listed provider target; '
+                    'no automatic replay was performed.')]})
             return result
 
         def close(self):
@@ -125,8 +130,9 @@ def register_policy_task_tool():
                 checked.append(tool.model_copy(update={
                     'executor': CheckedExecutor(tool.executor, bindings or {}),
                     'action_type': RoleTaskAction,
-                    'description': ('Delegate work to an approved Flow role. Provider/model are fixed by policy; '
-                                    'no provider/profile overrides are accepted. Roles: ' + ', '.join(sorted(bindings or {})))
+                    'description': ('Delegate work to an approved role/provider target. Choose a listed target; '
+                                    'role-only names use configured preferences. After failure inspect partial edits '
+                                    'before choosing another provider. Targets: ' + ', '.join(sorted(bindings or {})))
                 }))
             return checked
 

@@ -2639,6 +2639,27 @@ class V9CharteredRouteTests(CharteredFixture):
         self.assertEqual(probe["availability"][1]["evidence_code"], "authentication_ready")
         self.assertEqual(probe["decisions"][0]["decision"]["selected_candidate_id"], "claude-hosted")
 
+    def test_real_framework_catalog_sdk_fields_do_not_break_legacy_selection_authority_schema(self):
+        # The framework's own [[provider_candidates]] carry sdk_tool_use for
+        # SDK-dispatch eligibility (openhands_policy.py). This v9 pipeline's
+        # selection_authority schema predates that field and is intentionally
+        # narrow (selection_authority.validate_catalog); it must stay
+        # compatible by stripping the field, not by silently widening that
+        # schema to accept unrelated policy.
+        from delivery_gateway import flow_owned_v9_selection_inputs
+        import selection_authority
+        repo_scaffold = Path(__file__).resolve().parents[1] / "scaffolds/default"
+        empty_overlay = self.root / "no-user-overlay"
+        with patch("delivery_gateway.USER_OVERLAY_DIR", empty_overlay), \
+                patch("delivery_gateway.SCAFFOLD_DIR", repo_scaffold), \
+                patch("delivery_gateway.discover_ollama_models", return_value=set()):
+            catalog, policy, availability = flow_owned_v9_selection_inputs(self.root)
+        self.assertTrue(any(item.get("provider") == "ollama" for item in catalog))
+        self.assertTrue(all("sdk_tool_use" not in item for item in catalog))
+        selection_authority.validate_catalog(catalog)
+        selection_authority.validate_effective_policy(policy)
+        selection_authority.validate_availability_snapshot(availability, sealed_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
+
     def test_hosted_adapter_readiness_requires_local_authentication_status(self):
         completed = subprocess.CompletedProcess
         credential = self.root / "auth.json"
