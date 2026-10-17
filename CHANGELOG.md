@@ -2,6 +2,18 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.47.0](https://github.com/andyconley/flow/compare/v0.46.1...v0.47.0) (2026-10-17)
+
+### ⚠ BREAKING CHANGES
+
+* **runtime:** install and update adopt incoming behavior defaults without
+prompting; implementation delegation uses provider-qualified targets and
+automatic permission handling is the default.
+
+### Features
+
+* **runtime:** adopt install defaults and delegate across providers ([10dbe6b](https://github.com/andyconley/flow/commit/10dbe6b89d8989b3ff0336bdd364fc284193766b))
+
 ## [0.46.1](https://github.com/andyconley/flow/compare/v0.46.0...v0.46.1) (2026-10-16)
 
 ### Bug Fixes
