@@ -93,7 +93,7 @@ def build(artifacts, harness, checker):
         source_refs = {'brief_ref': s['brief_ref'], 'approval_ref': s['approval_ref'],
                        'context_ref': s['context_ref'], 'shaping_refs': s.get('shaping_refs', {})}
         project_context = render(context) + '\nControlled input references:\n' + json.dumps(source_refs, indent=2)
-        return {'task': task, 'project_context': project_context,
+        return {'task': task, 'project_context': project_context, 'check_command': brief['check_command'],
                 'inputs': task_input_digest(task, s['workspace'], project_context),
                 'approved': task_input_digest(task, s['workspace'], project_context),
                 'job_id': s['job_id'], 'deadline': time.time() + s.get('budget_seconds', 600),

@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import shutil
 import tempfile
+import fcntl
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -61,22 +62,54 @@ def verify_archive(source=ROOT):
     return archive, value
 
 
+def previous_binary(target, value):
+    """Only exact shipped predecessor digests qualify for a preserved upgrade."""
+    if target.is_symlink():
+        raise ValueError('Conflicting Goose symlink; preserve it and investigate')
+    for previous in value.get('previous_binaries', []):
+        try:
+            verify_binary(target, previous)
+            return previous
+        except ValueError:
+            continue
+    raise ValueError('Bundled Goose executable checksum mismatch; preserve it and investigate')
+
+
 def extract(source=ROOT):
     archive, value = verify_archive(source)
     target = binary_path(source)
-    if target.exists() or target.is_symlink():
-        return verify_binary(target, value)
     target.parent.mkdir(parents=True, exist_ok=True)
-    fd, name = tempfile.mkstemp(prefix='.goose-', dir=target.parent)
-    temporary = Path(name)
-    try:
-        with os.fdopen(fd, 'wb') as output, gzip.open(archive, 'rb') as input_stream:
-            shutil.copyfileobj(input_stream, output)
-        temporary.chmod(0o755)
-        verify_binary(temporary, value)
-        os.link(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    descriptor = os.open(target.parent/'.artifact.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        previous = None
+        if target.exists() or target.is_symlink():
+            try:
+                return verify_binary(target, value)
+            except ValueError:
+                previous = previous_binary(target, value)
+        fd, name = tempfile.mkstemp(prefix='.goose-', dir=target.parent)
+        temporary = Path(name)
+        try:
+            with os.fdopen(fd, 'wb') as output, gzip.open(archive, 'rb') as input_stream:
+                shutil.copyfileobj(input_stream, output)
+            temporary.chmod(0o755)
+            verify_binary(temporary, value)
+            if previous:
+                backup = target.with_name('goose-'+previous['binary_sha256'])
+                if backup.exists() or backup.is_symlink():
+                    if backup.is_symlink():
+                        raise ValueError('Conflicting Goose backup symlink; preserve it and investigate')
+                    verify_binary(backup, previous)
+                else:
+                    os.link(target, backup)
+                # Replacement happens only after both archive and predecessor
+                # verification. The original remains at its digest-named backup.
+                os.replace(temporary, target)
+            else:
+                os.link(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
     return target.resolve()
 
 
@@ -87,7 +120,14 @@ def provision(source=ROOT, dry_run=False):
         return Path(explicit).resolve(), False
     target = binary_path(source)
     if target.exists() or target.is_symlink():
-        return selected_binary(source), False
+        try:
+            return selected_binary(source), False
+        except ValueError:
+            value = metadata(source)
+            check_platform(value)
+            previous_binary(target, value)
+            verify_archive(source)
+            return (target.absolute(), True) if dry_run else (extract(source), False)
     if platform.system() == 'Darwin' and platform.machine() == 'arm64':
         if dry_run:
             verify_archive(source)

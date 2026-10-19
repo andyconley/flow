@@ -34,6 +34,7 @@ class State(TypedDict,total=False):
  phase:str
  candidate:str
  check:dict
+ check_command:list
  review:dict
  result:dict
  candidate_reused:bool

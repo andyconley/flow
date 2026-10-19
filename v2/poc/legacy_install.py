@@ -19,6 +19,7 @@ def sha(data):
 def inventory(home):
     home = Path(home).resolve()
     remove, edits, ambiguous = set(), {}, []
+    overlay_commands = set()
     merge_entries = []
     for runtime in ('claude', 'codex'):
         manifest = home/('.'+runtime)/'flow.managed.toml'
@@ -48,6 +49,12 @@ def inventory(home):
                 ambiguous.append({'path': str(path), 'reason': 'Outside legacy surface allowlist; retained'}); continue
             if not path.exists() and not path.is_symlink():
                 continue
+            if str(entry.get('source', '')).startswith('~/.flow/user/'):
+                # Ownership by the old generator does not make a user's
+                # command obsolete. Preserve its registration and any alias
+                # target, even when it has a valid managed hash.
+                overlay_commands.add(path)
+                continue
             if path.is_symlink() and entry.get('link') == str(path.readlink()):
                 remove.add(path)
             elif not path.is_symlink() and path.is_file() and entry.get('sha256') == sha(path.read_bytes()):
@@ -68,7 +75,7 @@ def inventory(home):
     for relative in ('.agents/skills', '.claude/skills', '.codex/skills', '.claude/commands', '.codex/prompts'):
         for path in (home/relative).glob('flow-*'):
             candidate = path/'SKILL.md' if path.is_dir() else path
-            if not candidate.is_file() or candidate in remove:
+            if not candidate.is_file() or candidate in remove or candidate in overlay_commands:
                 continue
             if 'Managed by Flow v2.0' not in candidate.read_text(errors='replace'):
                 ambiguous.append({'path': str(candidate), 'reason': 'Unmanifested or modified command registration; retained'})
@@ -131,15 +138,18 @@ def inventory(home):
             if changed:
                 edits[path] = (json.dumps(doc, indent=2)+'\n').encode()
     protected = set()
-    for item in ambiguous:
-        alias = Path(item['path'])
-        if alias.is_symlink():
-            target = alias.resolve(strict=False)
-            for candidate in remove:
-                if candidate.resolve(strict=False) == target or candidate.is_relative_to(target):
-                    protected.add(candidate)
+    for alias in {*(Path(item['path']) for item in ambiguous), *overlay_commands}:
+        for prefix in (alias, *alias.parents):
+            if not prefix.is_relative_to(home):
+                break
+            if prefix.is_symlink():
+                target = prefix.resolve(strict=False)
+                for candidate in remove:
+                    if candidate.resolve(strict=False) == target or candidate.is_relative_to(target):
+                        protected.add(candidate)
     remove.difference_update(protected)
     return {'remove': sorted(remove, key=str), 'edits': edits, 'ambiguous': ambiguous,
+            'preserved_overlay_commands': sorted(overlay_commands, key=str),
             'protected_targets': sorted(protected, key=str),
             'retained': [str(home/'.flow/source'), str(home/'.flow/user'), str(home/'.flow/runtimes'),
                          'All project overlays/work artifacts and account/credential stores'],
@@ -148,5 +158,6 @@ def inventory(home):
 
 def public_inventory(value):
     return {'remove': [str(p) for p in value['remove']], 'shared_config_edits': [str(p) for p in value['edits']],
+            'preserved_overlay_commands': [str(p) for p in value.get('preserved_overlay_commands', [])],
             'protected_ambiguous_targets': [str(p) for p in value.get('protected_targets', [])],
             'ambiguous': value['ambiguous'], 'retained': value['retained'], 'note': value['note']}

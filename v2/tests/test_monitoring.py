@@ -109,7 +109,7 @@ class MonitoringTests(unittest.TestCase):
         class Scope:
             def __init__(self,pid): self.known={}
             def observe(self): return {}
-        def prepare(workspace,run_dir,bundle,provider=None,model=None):
+        def prepare(workspace,run_dir,bundle,provider=None,model=None,check_command=None):
             return run_dir/'scope.sb',environment(workspace,provider,model)
         state = {'task':'approved','workspace':str(self.project),'project_context':'facts','job_id':'job','deadline':time.time()+10}
         state['inputs']=task_input_digest(state['task'],state['workspace'],state['project_context'])

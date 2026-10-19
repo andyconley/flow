@@ -104,15 +104,19 @@ def install(action, home, source=ROOT, replace_legacy=False, dry_run=False):
             legacy['ambiguous'].append(item)
     prior_targets = previous.get('protected_legacy_targets', saved_inventory.get('protected_ambiguous_targets', []))
     legacy['protected_targets'] = sorted(set(legacy['protected_targets']) | {Path(p) for p in prior_targets if Path(p).exists()}, key=str)
+    prior_overlay = previous.get('preserved_overlay_commands', saved_inventory.get('preserved_overlay_commands', []))
+    legacy['preserved_overlay_commands'] = sorted(set(legacy['preserved_overlay_commands']) | {
+        Path(p) for p in prior_overlay if Path(p).exists() or Path(p).is_symlink()}, key=str)
     if action == 'inventory':
         return public_inventory(legacy)
     if action == 'activate' and not replace_legacy:
         raise ValueError('Activation requires --replace-legacy; normal install preserves legacy Flow')
-    binary = goose_binary(source)
     extraction_planned = False
     if action in ('install', 'update'):
         from .goose_artifact import provision
         binary, extraction_planned = provision(source, dry_run=dry_run)
+    else:
+        binary = goose_binary(source)
     requirements = [source/'.venv/bin/python', source/'role-bundle/catalog.json']
     if not extraction_planned:
         requirements.append(binary)
@@ -212,6 +216,7 @@ def install(action, home, source=ROOT, replace_legacy=False, dry_run=False):
              'selection': result['selection'], 'backup': backup,
              'shared_after': {str(p): hashlib.sha256(data).hexdigest() for p, data in legacy['edits'].items()} if starting_activation else previous.get('shared_after', {}),
              'retained_legacy': legacy['ambiguous'],
+             'preserved_overlay_commands': [str(p) for p in legacy['preserved_overlay_commands']],
              'protected_legacy_targets': [str(p) for p in legacy['protected_targets']] if starting_activation else previous.get('protected_legacy_targets', saved_inventory.get('protected_ambiguous_targets', [])),
              'files': {str(path): hashlib.sha256(data).hexdigest() for path, data in files.items()}}
     raw = (json.dumps(state, indent=2, sort_keys=True)+'\n').encode()

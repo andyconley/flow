@@ -6,17 +6,17 @@
   "sdk": "26.4",
   "version": "1.55.0",
   "archive": "goose-macos-arm64.gz",
-  "archive_size": 51507861,
-  "archive_sha256": "234682d49b25425c265275dfeefccce3e67b6970ad28162de9510c43ef9209ad",
-  "binary_size": 252884216,
-  "binary_sha256": "7530c1ff8cdf0d8e68a74ed9b72d20aa38bbdeae6a5e041fb4794a91dbfd8beb",
+  "archive_size": 51167028,
+  "archive_sha256": "41136b409ef3c6b8e01f54d87d36060d15f7b85b121dd66027209e1e85dee9f7",
+  "binary_size": 252874344,
+  "binary_sha256": "3ce9c3aa715e9e67bb85bc7384d9199db639a3e99f2b62ffce2c080f463b6142",
   "source_lock": {
     "repository": "https://github.com/aaif-goose/goose.git",
     "version": "1.55.0",
     "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
-    "integration_commit_reference": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
+    "integration_commit_reference": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
     "patch": "goose-native.patch",
-    "patch_sha256": "a4bbbc65cbd81603b9b143d313fb0025fc585c9ec7829c9f30b92958ac9d09ef",
+    "patch_sha256": "a1cf00413949b78c022d7de8145d4cf120609cba3ce2825c13d15bea6cff0054",
     "build_package": "goose-cli",
     "features": [
       "scheduler",
@@ -24,23 +24,9 @@
       "rustls-tls"
     ]
   },
-  "original_source_lock": {
-    "repository": "https://github.com/aaif-goose/goose.git",
-    "version": "1.55.0",
-    "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
-    "integration_commit_reference": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
-    "patch": "goose-native.patch",
-    "patch_sha256": "6d31c884eaecdb310f95fe231eac123203d9dff5063fb313e28ddd2548f3dc4e",
-    "build_package": "goose-cli",
-    "features": [
-      "scheduler",
-      "tree-sitter",
-      "rustls-tls"
-    ]
-  },
-  "source_integration_commit": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
+  "source_integration_commit": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
   "build_profile": "debug",
-  "transformation": "gzip -n; no stripping, relinking, signing or rebuilding",
+  "transformation": "Locked offline debug build; deterministic gzip (mtime=0, no filename); no stripping, relinking or post-build signing",
   "dynamic_libraries": [
     "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.50.119)",
     "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 4424.1.255)",
@@ -52,5 +38,26 @@
     "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
     "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)"
   ],
-  "provenance_basis": "Existing Studio executable matches active v0.49.1 installed executable SHA-256. Clean integration checkout HEAD equals integration commit; installed staged source full-index diff equals shipped patch. Prior acceptance report qualifies this executable; no new provider calls. This is retained local build provenance, not a signed or reproducible build attestation."
+  "provenance_basis": "Built in an isolated Studio source checkout at source_integration_commit; full-index diff from base_commit exactly equals shipped patch. Copied Rust toolchain/build cache used offline, with original source/build/install state preserved. Includes Flow role-source enforcement and synthetic ACP command completion regressions. Local provenance, not a signed or reproducible build attestation.",
+  "previous_binaries": [
+    {
+      "binary_size": 252884216,
+      "binary_sha256": "7530c1ff8cdf0d8e68a74ed9b72d20aa38bbdeae6a5e041fb4794a91dbfd8beb"
+    }
+  ],
+  "previous_artifact_metadata": "goose-macos-arm64-v0.50.json",
+  "build_command": [
+    "cargo",
+    "build",
+    "-p",
+    "goose-cli",
+    "--bin",
+    "goose",
+    "--no-default-features",
+    "--features",
+    "scheduler,tree-sitter,rustls-tls",
+    "--locked",
+    "--offline"
+  ],
+  "rust_version": "1.99.0"
 }

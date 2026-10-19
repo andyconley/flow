@@ -6,9 +6,14 @@ Portable workflow framework for AI-assisted development.
 
 The opt-in v2 implementation is in [v2/](v2/README.md). It provides native-host shaping, versioned handoffs, LangGraph approvals/recovery, Goose specialist execution, and a reversible installer with ownership-aware legacy cleanup. Existing Flow installs and active run artifacts are not silently migrated.
 
-See [v2 installation and selection](v2/FLOW_V2_INSTALL.md). On a new source checkout, `./install-flow-v2.sh prepare --build-goose` prepares locked dependencies and the pinned official Goose source plus shipped integration patch; `./install-flow-v2.sh install` installs the opt-in launcher. Default replacement is a separate explicit `flow-v2 activate --replace-legacy` selection with backups and rollback. The legacy installer and documentation below remain available during the preview.
+See [v2 installation and selection](v2/FLOW_V2_INSTALL.md). On Apple Silicon macOS, `./install-flow-v2.sh prepare` prepares locked dependencies and verifies the bundled patched Goose executable without Rust; `./install-flow-v2.sh install` installs the opt-in launcher. Other platforms can explicitly select `prepare --build-goose`. Default replacement is a separate explicit `flow-v2 activate --replace-legacy` selection with backups and rollback. The legacy installer and documentation below remain available during the preview.
 
-## OpenHands-backed Flow (this branch)
+## Deprecated OpenHands runtime
+
+The OpenHands execution path is deprecated. Use [Flow v2](v2/README.md) for new
+work. Existing OpenHands installations, run records and execution behavior are
+preserved for inspection and an explicit migration; updating does not silently
+switch runtimes. The material below documents the legacy path.
 
 Flow owns define, solution, plan, implement, review and archive, specialist roles,
 skills, context and project outputs. OpenHands 1.54.0 owns execution, conversations,
@@ -27,7 +32,7 @@ isolated Python environment; do not replace the live install. Old MAF execution
 commands are retired and historical records remain inspectable.
 
 
-## Quickstart for the current runtime
+## Legacy OpenHands quickstart (deprecated)
 
 Preview in an isolated checkout before coordinating any live installation:
 

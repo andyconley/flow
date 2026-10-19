@@ -30,11 +30,13 @@ class BriefChecker:
         if remaining <= 0:
             return {'passed': False, 'outcome': 'blocked', 'reason': 'Workflow time budget exhausted'}
         try:
+            from .project_python import check_command
+            command = check_command(state['workspace'], command)
             result = subprocess.run(command, cwd=state['workspace'], capture_output=True,
                                     text=True, timeout=min(60, remaining))
         except subprocess.TimeoutExpired:
             return {'passed': False, 'outcome': 'blocked', 'reason': 'Check time budget exhausted; inspect any subprocess effects before retry'}
-        except OSError as error:
+        except (OSError, ValueError) as error:
             if isinstance(error, PermissionError):
                 raise
             return {'passed': False, 'outcome': 'scope_required',
