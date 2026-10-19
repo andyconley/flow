@@ -132,3 +132,38 @@ def write_bundle(destination, composed, provider, model=None, responsibility="im
     RecipeDumper.add_representer(str, text)
     recipe_path.write_text(yaml.dump(recipe, Dumper=RecipeDumper, sort_keys=False, allow_unicode=True))
     return agent_path, recipe_path
+
+
+def bind_bundle(source, destination, task, project_context):
+    """Bind approved inputs as defaults in an attempt-local copy, never templates."""
+    import shutil
+    import uuid
+    from .runtime_env import WORKER_MAX_TURNS
+    source, destination = Path(source).resolve(), Path(destination).resolve()
+    if destination.is_relative_to(source):
+        raise ValueError('Attempt-local role bundle must be outside the source bundle')
+    shutil.copytree(source, destination)
+    defaults = {'task': task, 'project_context': project_context}
+    class BundleDumper(yaml.SafeDumper):
+        pass
+    BundleDumper.add_representer(str, lambda dumper, value: dumper.represent_scalar(
+        'tag:yaml.org,2002:str', value, style='|' if '\n' in value else None))
+    for path in (destination/'recipes').glob('*.yaml'):
+        recipe = yaml.safe_load(path.read_text())
+        recipe.setdefault('settings', {})['max_turns'] = WORKER_MAX_TURNS
+        literals = {}
+        for parameter in recipe.get('parameters', []):
+            if parameter['key'] in defaults:
+                marker = 'FLOW_INPUT_'+uuid.uuid4().hex
+                literals[marker] = defaults[parameter['key']]
+                parameter['default'] = marker
+        raw = yaml.dump(recipe, Dumper=BundleDumper, sort_keys=False, allow_unicode=True)
+        for marker, value in literals.items():
+            # Quoted YAML scalars decode the original value, while their raw
+            # template text cannot execute task-supplied Jinja expressions.
+            literal = json.dumps(value, ensure_ascii=False).replace('{', r'\u007b').replace('}', r'\u007d')
+            if raw.count(marker) != 1:
+                raise ValueError('Ambiguous recipe input marker')
+            raw = raw.replace(marker, literal)
+        path.write_text(raw)
+    return destination

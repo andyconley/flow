@@ -1,7 +1,7 @@
 """One job boundary, never dispatch individual workers. External intents reconcile first."""
 import json,os,signal,subprocess,time,hashlib,sys
 from pathlib import Path
-from .runtime_env import ROOT,environment,scoped,goose_binary
+from .runtime_env import ROOT,environment,scoped,goose_binary,WORKER_MAX_TURNS
 from .evidence import final_object,delegations,native_sessions
 from .contracts import task_input_digest
 from .lifecycle import ProcessScope
@@ -31,10 +31,14 @@ class GooseJob:
   env=environment(project=s['workspace'],provider=provider,model=self.model);env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model
   if self.role_bundle:
    from .native_runtime import prepare
-   profile, native_env = prepare(Path(s['workspace']), p.parent, self.role_bundle,provider=provider,model=self.model)
+   from .role_renderer import bind_bundle
+   role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles',
+                             s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
+                             s.get('project_context',''))
+   profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,provider=provider,model=self.model)
    cmd=cmd[3:];cmd[0]=str(goose_binary())
    position=cmd.index('developer');del cmd[position-1:position+1]
-   env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(self.role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
+   env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
    cmd[cmd.index('--max-turns')+1]='8'
   from .device_context import settings
   record['context_configuration']=settings(s['workspace'],self.model)
@@ -108,11 +112,11 @@ Approved task: {s['task']}
 Workspace: {s['workspace']}
 Project context: {s.get('project_context','')}
 Operation: {kind}. {'Delegate actual implementation, normally using lead-developer, and consume its result.' if kind=='implement' else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.'}
-Pass task and project_context as recipe parameters. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
+Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. Use the delegate parameters object only when refining a role assignment; preserve the approved scope. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
 Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
 Candidate revision: {s.get('candidate','not yet checked')}
-Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Final acceptance belongs to the task graph. Parent 8 turns, children at most 4 Goose turns, no merge or deployment."""
+Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Final acceptance belongs to the task graph. Parent 8 turns, children at most {WORKER_MAX_TURNS} Goose turns within the original approved deadline, no merge or deployment."""
   try:result=self._run(s,kind,prompt)
   except PermissionError as error:result={'status':'permission_required','reason':str(error)}
   if result['status']!='completed':

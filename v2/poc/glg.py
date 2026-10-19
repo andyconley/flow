@@ -1,10 +1,11 @@
 """Flow v2.0 native-host entry, powered by Goose/LangGraph."""
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import fcntl
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 import subprocess
 import time
 import sys
@@ -84,6 +85,28 @@ def locked(path):
             yield
         finally:
             fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+@contextmanager
+def checkpoint_snapshot(path):
+    """Copy a consistent committed SQLite view; graph setup writes only to memory."""
+    with closing(sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro', timeout=.25)) as source:
+        with closing(sqlite3.connect(':memory:', check_same_thread=False)) as memory:
+            source.backup(memory)
+            yield SqliteSaver(memory)
+
+
+def operator_active(path):
+    lock = path/'operator.lock'
+    if not lock.exists():
+        return False
+    with lock.open('r') as stream:
+        try:
+            fcntl.flock(stream, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(stream, fcntl.LOCK_UN)
+    return False
 
 
 def read_json(path):
@@ -213,6 +236,21 @@ def main(argv=None):
                 parser.error('Provide a request/brief and a positive budget')
         elif not (state_dir / 'workflow.sqlite').exists():
             parser.error(missing_checkpoint)
+        if args.command == 'status':
+            with checkpoint_snapshot(state_dir/'workflow.sqlite') as saver:
+                config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
+                checkpoint = saver.get(config)
+                if not checkpoint or not checkpoint['channel_values']:
+                    parser.error(missing_checkpoint)
+                options = checkpoint['channel_values']['runtime_options']
+                graph = build(artifacts, NativeHarness(options), BriefChecker(artifacts)).compile(checkpointer=saver)
+                result = summarize(graph.get_state(config, subgraphs=True), artifacts)
+                result['checkpoint_view'] = 'latest_committed_snapshot'
+                result['operator_active'] = operator_active(state_dir)
+                if result['operator_active']:
+                    result['next_action'] = 'Inspect running delivery; wait for the active operator before mutations'
+                print(json.dumps(result, indent=2, default=str))
+            return
         with locked(state_dir), SqliteSaver.from_conn_string(str(state_dir / 'workflow.sqlite')) as saver:
             config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
             checkpoint = saver.get(config)
@@ -227,9 +265,6 @@ def main(argv=None):
                 options = old['runtime_options']
             graph = build(artifacts, NativeHarness(options), BriefChecker(artifacts)).compile(checkpointer=saver)
             saved = graph.get_state(config, subgraphs=True)
-            if args.command == 'status':
-                print(json.dumps(summarize(saved, artifacts), indent=2, default=str))
-                return
             if args.command == 'create':
                 context = resolve(project)
                 if args.legacy_run:
@@ -318,7 +353,7 @@ def main(argv=None):
                         response['stage'] = args.stage
                 graph.invoke(Command(resume=response), config)
             print(json.dumps(summarize(graph.get_state(config, subgraphs=True), artifacts), indent=2, default=str))
-    except (ArtifactError, OSError, ValueError, KeyError) as error:
+    except (ArtifactError, OSError, ValueError, KeyError, sqlite3.Error) as error:
         parser.error(str(error))
 
 

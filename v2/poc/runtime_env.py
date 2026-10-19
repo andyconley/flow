@@ -5,6 +5,9 @@ import shutil
 import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
+# Real task workers need room for inspect/edit/test/review; the approved job
+# deadline still bounds every worker and coordinator process.
+WORKER_MAX_TURNS = 12
 
 
 def node_binary():
