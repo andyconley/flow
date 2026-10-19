@@ -2,7 +2,7 @@
 import contextlib
 import asyncio
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import io
 import json
 from pathlib import Path
@@ -178,7 +178,12 @@ class ReviewReliabilityTests(unittest.TestCase):
 
     def test_sdk_interrupt_at_shared_deadline_does_not_accept_late_output(self):
         self.ready(); self.interrupted = False
-        with patch.object(review_output, 'timedelta', return_value=timedelta(milliseconds=50)):
+        run_session = workflow._run_session
+        def expire_running_review(session, review_result):
+            # Exercise interruption of a running SDK, not variable fixture setup latency.
+            review_result['deadline'] = (datetime.now(timezone.utc) + timedelta(milliseconds=50)).isoformat()
+            return run_session(session, review_result)
+        with patch.object(workflow, '_run_session', side_effect=expire_running_review):
             code, result = self.execute_review(hang=True)
         self.assertEqual(code, 1, result)
         self.assertTrue(self.interrupted)
