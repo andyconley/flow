@@ -54,7 +54,7 @@ For shell work-item actions below, use `flow-v2 --project PROJECT --work ID SUBC
 | `flow-status` | `status` for one item, or `context` for project orientation. LangGraph is authority. |
 | `flow-resume` | `resume`, optionally with an actual decision file. Preserve operation identity, typed permission/scope pauses and uncertain-effect inspection. |
 | `flow-close` | Inspect automatic closure and optionally `index`. Do not silently accept, publish or deploy. |
-| `flow-archive` | Compatibility name for `flow-close`; old memory/gap-disposition archive engine is not imported. |
+| `flow-archive` | Closure inspection plus explicit legacy archive read views; no automatic memory/gap disposition. |
 | `flow-accept` | Separate user-requested `accept --actor … --revision …` for a reviewed-and-ready closure. |
 | `flow-scout` | Small clear task via `create --brief-file …`, followed by actual exact-revision approval and normal checks/review. |
 | `flow-init-project` | Host reads `context`, reuses project instructions, and may write an agreed `.glg/PROJECT.md` using native file tools. No old framework scaffolding CLI is invoked. |
@@ -100,4 +100,8 @@ Use `--home /disposable/target` on installer actions for an isolated fixture. It
 
 ## Current limitations
 
-The installer uses the existing local Mac runtime; it is not a clean-machine dependency bootstrap, remote release updater, multiuser service, production deployment or old-run migration tool. Source composition still references Flow's retained content resolver. Existing approved live scenario and focused error propagation evidence remain valid; this packaging change does not launch another vendor/role qualification campaign.
+The installer binds to a prepared source-local runtime. Explicit preparation installs locked Python/npm dependencies and optionally builds pinned Goose when host toolchains are available; selection/update does not fetch remote code. It is not a multiuser service, deployment or old-run migration tool. Source composition still references Flow's retained content resolver. Existing approved live scenario and focused error propagation evidence remain valid; this packaging change does not launch another vendor/role qualification campaign.
+
+## Informational reports and existing work
+
+See [operations and observability](FLOW_V2_OPERATIONS.md) for `metrics`, native `cost`/harvest reports, device context settings, explicit legacy `runs`/status/handoff, archive inspection, backlog/gap access, and registry-file reads. Unknown provider telemetry remains unknown. These views add no token/rate/usage gates and do not resume legacy checkpoints as v2.

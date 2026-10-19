@@ -18,14 +18,16 @@ def goose_binary(source=ROOT):
     return Path(os.environ.get('FLOW_V2_GOOSE_BINARY', str(source/'runtime/goose/target/debug/goose'))).resolve()
 
 
-def environment():
+def environment(project=None, provider=None, model=None):
     env = {key: value for key, value in os.environ.items() if key in ['PATH','USER','LOGNAME','SHELL','LANG','LC_ALL','TERM','SSL_CERT_FILE']}
     env.update(HOME=str(ROOT/'runtime/home'), GOOSE_PATH_ROOT=str(ROOT/'runtime/goose-home'),
-               GOOSE_DISABLE_KEYRING='1', GOOSE_MODE='auto', GOOSE_INPUT_LIMIT='8192',
+               GOOSE_DISABLE_KEYRING='1', GOOSE_MODE='auto',
                GOOSE_TELEMETRY_ENABLED='false', LANGSMITH_TRACING='false', LANGGRAPH_STRICT_MSGPACK='true',
                CODEX_HOME=str(ROOT/'runtime/codex-home'), CODEX_PATH=str(ROOT/'runtime/adapters/node_modules/.bin/codex'),
                PATH=str(Path(node_binary()).parent)+':'+str(ROOT/'runtime/bin')+':'+str(ROOT/'runtime/adapters/node_modules/.bin')+':'+env.get('PATH',''),
                TMPDIR=str(ROOT/'runtime/tmp'))
+    from .device_context import ollama_environment
+    env.update(ollama_environment(project, model, provider))
     return env
 
 

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import subprocess
 import time
+import sys
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from .artifacts import ArtifactError, Artifacts, identifier, validate_brief
@@ -66,6 +67,7 @@ class NativeHarness:
 
 
 def storage(project, work):
+    project = Path(project).resolve()
     project_key = hashlib.sha256(str(project).encode()).hexdigest()[:16]
     return ROOT / 'artifacts' / 'glg-state' / project_key / identifier(work)
 
@@ -113,15 +115,34 @@ def summarize(snapshot, artifacts):
                 result.extend(pauses(task.state))
         return result
     pending = pauses(snapshot)
+    launch_context = []
+    for operation, reference in values.get('result_refs', {}).items():
+        try:
+            result = artifacts.read(reference)['payload'].get('result', {})
+            runtime = result.get('runtime', {})
+            if isinstance(runtime, dict) and isinstance(runtime.get('context_configuration'), dict):
+                launch_context.append({'operation': operation, 'result_ref': reference,
+                                       'configuration': runtime['context_configuration'],
+                                       'session_ids': runtime.get('goose_session_ids', [])})
+        except (ArtifactError, OSError, ValueError, TypeError, AttributeError):
+            pass  # Reference diagnostics above remain visible; observations grant no authority.
+    from .monitoring import report, context_report
     return {'work_id': values.get('work_id'), 'phase': values.get('lifecycle_phase'),
             'delivery_phase': values.get('phase'), 'outcome': values.get('outcome'),
             'references': references, 'pending': pending, 'next_nodes': list(snapshot.next),
             'recovery_problems': problems,
+            'usage': report(artifacts.project, job_id=values.get('job_id')),
+            'context_monitoring': context_report(artifacts.project, job_id=values.get('job_id')),
+            'launch_context': launch_context,
             'next_action': 'Inspect referenced revision problems' if problems else 'Respond to pending decision' if pending else 'Inspect blocker/closure' if not snapshot.next else 'Resume the checkpoint'}
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    from .utilities import dispatch
+    utility = dispatch(sys.argv[1:] if argv is None else argv)
+    if utility is not None:
+        return utility
+    parser = argparse.ArgumentParser(description=__doc__, epilog='Reports/discovery: metrics, cost, harvest, normalize, runs, run, archive, backlog, gaps, projects, model. These also support the --project prefix.')
     parser.add_argument('--version', action='version', version='Flow 2.0.0-preview (Goose/LangGraph)')
     parser.add_argument('--project', required=True, type=Path)
     parser.add_argument('--work')
@@ -130,6 +151,7 @@ def main(argv=None):
     create = sub.add_parser('create')
     create.add_argument('--request', default='')
     create.add_argument('--brief-file', type=Path)
+    create.add_argument('--legacy-run', help='Reference an existing legacy run in a NEW work item; never import its approval/checkpoint')
     create.add_argument('--provider', default='chatgpt_codex')
     create.add_argument('--model', default='gpt-5.6-sol')
     create.add_argument('--budget-seconds', type=int, default=600)
@@ -146,29 +168,26 @@ def main(argv=None):
     accept = sub.add_parser('accept'); accept.add_argument('--actor', required=True)
     accept.add_argument('--revision', required=True, help='Exact closure revision shown by status')
     resume = sub.add_parser('resume'); resume.add_argument('--decision-file', type=Path)
-    sub.add_parser('status')
+    status = sub.add_parser('status'); status.add_argument('--legacy', action='store_true', help='Read the legacy run explicitly; no v2 resume compatibility implied')
     sub.add_parser('index')
     args = parser.parse_args(argv)
     project = args.project.resolve()
     if not project.is_dir():
         parser.error('Project workspace must already exist')
+    if args.command == 'status' and args.legacy:
+        from .history import legacy_run
+        if not args.work:
+            parser.error('--work is required')
+        try:
+            print(json.dumps(legacy_run(project, args.work), indent=2))
+        except (ArtifactError, OSError, ValueError) as error:
+            parser.error(str(error))
+        return
     if args.command == 'context':
-        items = []
-        for directory in sorted(storage(project, 'orientation').parent.glob('*')):
-            database = directory / 'workflow.sqlite'
-            if not database.is_file():
-                continue
-            # Read-only SQLite connection avoids creating a missing workflow.
-            import sqlite3
-            with sqlite3.connect(database.as_uri()+'?mode=ro', uri=True) as connection:
-                saver = SqliteSaver(connection)
-                checkpoint = saver.get({'configurable': {'thread_id': directory.name}})
-                if checkpoint:
-                    values = checkpoint['channel_values']
-                    items.append({'work_id': directory.name, 'phase': values.get('lifecycle_phase'),
-                                  'outcome': values.get('outcome'), 'brief_ref': values.get('brief_ref'),
-                                  'closure_ref': values.get('closure_ref')})
-        print(json.dumps({'product': 'Flow v2.0', 'context': resolve(project), 'work': items}, indent=2))
+        from .history import legacy_runs, current_runs
+        from .device_context import settings
+        print(json.dumps({'product': 'Flow v2.0', 'context': resolve(project), 'work': current_runs(project),
+                          'legacy_work': legacy_runs(project), 'device_context': settings(project)}, indent=2))
         return
     if not args.work:
         parser.error('--work is required for work-item commands')
@@ -187,7 +206,7 @@ def main(argv=None):
             print(json.dumps({'index': str(project / '.glg' / 'INDEX.md'), 'closed_records': len(records)}))
             return
         if args.command != 'create' and not (state_dir / 'workflow.sqlite').exists():
-            parser.error('No checkpoint exists for this project/work item')
+            parser.error('No v2 checkpoint exists. Legacy .flow runs require their original runtime or create --legacy-run ID with fresh approval.')
         with locked(state_dir), SqliteSaver.from_conn_string(str(state_dir / 'workflow.sqlite')) as saver:
             config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
             checkpoint = saver.get(config)
@@ -195,6 +214,8 @@ def main(argv=None):
             if args.command == 'create':
                 if old:
                     parser.error('Work item already exists; inspect status or resume it')
+                if args.legacy_run == args.work:
+                    parser.error('A legacy handoff requires a distinct new v2 work ID; checkpoints and approvals are not imported')
                 if args.budget_seconds <= 0 or not (args.request or args.brief_file):
                     parser.error('Provide a request/brief and a positive budget')
                 options = {'provider': args.provider, 'model': args.model, 'budget_seconds': args.budget_seconds}
@@ -206,13 +227,25 @@ def main(argv=None):
                 print(json.dumps(summarize(saved, artifacts), indent=2, default=str))
                 return
             if args.command == 'create':
-                context_ref = artifacts.publish('contexts', 'project', resolve(project))
+                context = resolve(project)
+                if args.legacy_run:
+                    from .history import legacy_run
+                    legacy = legacy_run(project, args.legacy_run)
+                    context['legacy_handoff'] = {'path': legacy['path'], 'revision': legacy['revision'],
+                                                'origin': 'legacy', 'approval_imported': False,
+                                                'legacy_state': legacy['record'].get('state'), 'legacy_runtime': legacy['record'].get('runtime'),
+                                                'legacy_process_quiescence': 'not-observed',
+                                                'instruction': 'Inspect original evidence, establish legacy execution is quiescent through its original runtime, and define a new brief. Do not run overlapping coordinators; prior approvals/checkpoints do not authorize v2 execution'}
+                context_ref = artifacts.publish('contexts', 'project', context)
                 initial = {'work_id': args.work, 'workspace': str(project), 'request': args.request,
                            'job_id': hashlib.sha256(str(project).encode()).hexdigest()[:16] + '-' + args.work,
                            'context_ref': context_ref, 'runtime_options': options,
                            'budget_seconds': args.budget_seconds, 'lifecycle_phase': 'shaping'}
                 if args.brief_file:
-                    initial['brief_ref'] = artifacts.publish('briefs', 'brief', validate_brief(read_json(args.brief_file)))
+                    brief = validate_brief(read_json(args.brief_file))
+                    if context.get('legacy_handoff'):
+                        brief['historical_references'] = [*brief.get('historical_references', []), context['legacy_handoff']]
+                    initial['brief_ref'] = artifacts.publish('briefs', 'brief', brief)
                 graph.invoke(initial, config)
             elif args.command == 'resume':
                 decision = read_json(args.decision_file) if args.decision_file else None
@@ -251,7 +284,11 @@ def main(argv=None):
                 if saved.values.get('lifecycle_phase') not in {'shaping', 'awaiting-approval'} or not saved.next:
                     parser.error('Shaping commands apply only before implementation approval; start a successor work item for changed scope')
                 if args.command == 'brief':
-                    ref = artifacts.publish('briefs', 'brief', validate_brief(read_json(args.file)), supersedes=old.get('brief_ref'))
+                    brief = validate_brief(read_json(args.file))
+                    legacy = artifacts.read(old['context_ref'])['payload'].get('legacy_handoff')
+                    if legacy and legacy not in brief.get('historical_references', []):
+                        brief['historical_references'] = [*brief.get('historical_references', []), legacy]
+                    ref = artifacts.publish('briefs', 'brief', brief, supersedes=old.get('brief_ref'))
                     response = {'action': 'brief', 'brief_ref': ref}
                 elif args.command == 'assign':
                     payload = {'stage': args.stage, 'question': args.question, 'context_ref': old['context_ref'],
@@ -282,4 +319,4 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

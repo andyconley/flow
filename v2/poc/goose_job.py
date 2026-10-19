@@ -1,5 +1,5 @@
 """One job boundary, never dispatch individual workers. External intents reconcile first."""
-import json,os,signal,subprocess,time,hashlib
+import json,os,signal,subprocess,time,hashlib,sys
 from pathlib import Path
 from .runtime_env import ROOT,environment,scoped,goose_binary
 from .evidence import final_object,delegations,native_sessions
@@ -28,24 +28,32 @@ class GooseJob:
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
   output=p.with_suffix('.jsonl');err=p.with_suffix('.stderr')
   cmd=scoped([str(ROOT/'runtime/bin/goose'),'run','--no-profile','--with-builtin','developer','--with-builtin','summon','--provider',provider,'--model',self.model,'--max-turns','25','--max-tool-repetitions','3','--output-format','stream-json','--name',f'{s["job_id"]}-{kind}-{index}','--instructions',str(instructions)])
-  env=environment();env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model
+  env=environment(project=s['workspace'],provider=provider,model=self.model);env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model
   if self.role_bundle:
    from .native_runtime import prepare
-   profile, native_env = prepare(Path(s['workspace']), p.parent, self.role_bundle)
+   profile, native_env = prepare(Path(s['workspace']), p.parent, self.role_bundle,provider=provider,model=self.model)
    cmd=cmd[3:];cmd[0]=str(goose_binary())
    position=cmd.index('developer');del cmd[position-1:position+1]
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(self.role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
    cmd[cmd.index('--max-turns')+1]='8'
+  from .device_context import settings
+  record['context_configuration']=settings(s['workspace'],self.model)
+  record['context_configuration']['context_tokens']=int(env['GOOSE_INPUT_LIMIT']) if env.get('GOOSE_INPUT_LIMIT') else None
+  record['context_configuration']['application_basis']='captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx'
+  store(p,record)
   with output.open('w') as out,err.open('w') as errors:
    child=subprocess.Popen(cmd,cwd=s['workspace'],env=env,stdout=out,stderr=errors,start_new_session=True)
    scope=ProcessScope(child.pid)
    record.update(pid=child.pid,execution_scope=child.pid,processes=scope.known,supervisor_pid=os.getpid());store(p,record)
    deadline=time.monotonic()+budget
+   next_observation=time.monotonic()
    while child.poll() is None:
     scope.observe();record['processes']=scope.known;store(p,record)
     if time.monotonic()>deadline:
      stopped=scope.stop();child.wait(timeout=5)
-     record.update(status='blocked',reason='timeout; do not resubmit without reconciliation',stop=stopped);store(p,record);return record
+     record.update(status='blocked',reason='timeout; do not resubmit without reconciliation',stop=stopped);self._observe(record,s,kind,index);store(p,record);return record
+    if time.monotonic()>=next_observation:
+     self._observe(record,s,kind,index);store(p,record);next_observation=time.monotonic()+5
     time.sleep(.25)
    code=child.returncode
   deadline=time.monotonic()+2
@@ -55,9 +63,22 @@ class GooseJob:
   if boundary:
    stopped=scope.stop() if alive else None
    record.update(status=boundary['kind'],native_error=boundary,reason=boundary['error'].get('message','Explicit native permission/scope boundary'),exit=code,quiescent=not scope.observe(),stop=stopped,finished=time.time())
-   store(p,record);return record
+   self._observe(record,s,kind,index);store(p,record);return record
   record.update(status='completed' if code==0 and not alive else 'blocked',exit=code,quiescent=not alive,processes=scope.known,alive=list(alive),output=str(output),stderr=str(err),finished=time.time())
-  store(p,record);return record
+  self._observe(record,s,kind,index);store(p,record);return record
+ def _observe(self,record,s,kind,index):
+  from .monitoring import attach,context_for_usage
+  attach(record,s['workspace'],f'{s["job_id"]}-{kind}-{index}')
+  try:
+   context=context_for_usage(s['workspace'],record['usage'],self.model,record.get('context_configuration'));record['context_monitoring']=context
+   warned=set(record.get('context_warning_sessions',[]))
+   for observation in context['observations']:
+    if observation['warning'] and observation['session_id'] not in warned:
+     print(f"Flow context observation: {observation['session_id']} last reported request {observation['last_reported_request_percent']:.1f}% of configured local window. {observation['warning']}",file=sys.stderr)
+     warned.add(observation['session_id'])
+   record['context_warning_sessions']=sorted(warned)
+  except Exception as error:
+   record['context_monitoring']={'available':False,'reason':str(error),'informational_only':True}
  def reconcile_record(self,p):
   r=json.loads(p.read_text())
   if r.get('status')=='completed':return r
