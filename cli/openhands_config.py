@@ -34,19 +34,19 @@ class RuntimeConfigurationError(ValueError):
 
 
 def provision_native_profiles(user_overlay: Path) -> str:
-    """Add usable interactive routes without choosing a provider or granting access."""
+    """Add native routes with inherited defaults; preserve existing policies."""
     path = user_overlay / "runtime.toml"
     user_overlay.mkdir(parents=True, exist_ok=True)
     try:
         with path.open("x") as stream:
             stream.write('# Native subscriptions; select explicitly with --profile claude or codex.\n'
-                         '# No default provider or automated permission acknowledgement is set.\n'
+                         '# Permissions inherit stock OpenHands; set permission_requests="interactive" to opt out.\n'
                          '# Model defaults follow the canonical Flow role policy.\n'
                          '[profiles.claude]\nkind = "claude"\nsession_mode = "default"\n\n'
                          '[profiles.codex]\nkind = "codex"\nsession_mode = "agent"\n')
     except FileExistsError:
         return f"runtime profiles preserved: {path}"
-    return f"interactive native profiles installed: {path}; select --profile claude or codex; execution requires explicit terminal approvals; headless execution is refused"
+    return f"native profiles installed: {path}; permissions inherit stock OpenHands; permission_requests=interactive opts out"
 
 
 def _merge(base: dict, override: dict) -> dict:
@@ -62,7 +62,11 @@ def load_config(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
         'codex': {'kind': 'codex', 'session_mode': 'agent'},
     }}
     from local_machine import load_local_machine
-    machine = load_local_machine(user_overlay / 'flow.toml')
+    try:
+        machine = load_local_machine(user_overlay / 'flow.toml')
+    except ValueError as exc:
+        config['_local_configuration_error'] = str(exc)
+        machine = {'model': ''}
     if machine['model']:
         config['profiles']['ollama'] = {'kind': 'local', 'model': 'ollama_chat/' + machine['model'],
             'base_url': 'http://127.0.0.1:11434', 'max_input_tokens': machine['context_tokens'],
@@ -130,6 +134,8 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     if kind == "local":
         if "reasoning_effort" in provider and (not isinstance(provider["reasoning_effort"], str) or not provider["reasoning_effort"].strip()):
             raise RuntimeConfigurationError("reasoning_effort must be a nonempty provider-supported string")
+        if not isinstance(provider.get('base_url', ''), str):
+            raise RuntimeConfigurationError('local base_url must be a URL string')
         url = urlsplit(provider.get("base_url", ""))
         if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password:
             raise RuntimeConfigurationError("local profiles require an explicit compatible base_url without embedded credentials")
@@ -164,7 +170,7 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
         provider.setdefault('model', policy.get('model', 'gpt-5.6-terra'))
         provider.setdefault('reasoning_effort', policy.get('model_reasoning_effort', 'medium'))
     if kind in {"codex", "claude"}:
-        provider.setdefault("permission_requests", "interactive")
+        provider.setdefault("permission_requests", "stock-openhands")
         if provider["permission_requests"] not in {"interactive", "stock-openhands"}:
             raise RuntimeConfigurationError("permission_requests must be interactive or explicitly acknowledged stock-openhands")
     if kind in {"codex", "claude"} and declaration:
@@ -267,13 +273,27 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
     admin_path = user_overlay / 'flow.toml'
     admin = read_toml(admin_path) if admin_path.is_file() else {}
     local_candidates = []
-    for candidate in admin.get('provider_candidates', framework.get('provider_candidates', [])):
+    project_path = root / '.flow/flow.toml'
+    project = read_toml(project_path) if project_path.is_file() else {}
+    catalog = project.get('provider_candidates', admin.get('provider_candidates', framework.get('provider_candidates', [])))
+    if not isinstance(catalog, list) or any(not isinstance(candidate, dict) for candidate in catalog):
+        raise RuntimeConfigurationError('provider_candidates must be an array of tables')
+    for candidate in catalog:
         if candidate.get('provider') == 'ollama':
             profile = config.get('profiles', {}).get(candidate.get('runtime_profile', 'ollama'), {})
             reasons = local_eligibility(candidate, profile)
-            if candidate.get('enabled') is False:
+            if not isinstance(profile, dict):
+                profile = {}
+            if config.get('_local_configuration_error'):
+                reasons.append(config['_local_configuration_error'])
+            if candidate.get('enabled') is False or any(item.get('candidate_id') == candidate.get('candidate_id') and item.get('enabled') is False
+                for layer in (admin, project) for item in layer.get('provider_candidates', []) if isinstance(item, dict)):
                 reasons.append('candidate disabled')
-            local_candidates.append({'candidate_id': candidate['candidate_id'],
+            try:
+                select(root, 'implement', 'lead-developer', candidate.get('runtime_profile', 'ollama'), config=config, user_overlay=user_overlay)
+            except (ValueError, OSError) as exc:
+                reasons.append(str(exc))
+            local_candidates.append({'candidate_id': candidate.get('candidate_id'),
                 'model': profile.get('model'), 'context_tokens': profile.get('max_input_tokens'),
                 'local_capability_eligible': not reasons,
                 'tool_use_state': candidate.get('sdk_tool_use', 'declared' if 'sdk_tool_calling' in candidate.get('capabilities', []) else 'not-enabled'),
@@ -284,14 +304,28 @@ def wiring_report(root: Path, user_overlay: Path = USER_OVERLAY_DIR) -> dict:
         coordinator = select(root, 'implement', config=config, user_overlay=user_overlay)
         implementation['coordinator'] = {'profile': coordinator.profile, 'kind': coordinator.provider['kind'],
             'model': coordinator.provider.get('model'), 'reasoning_effort': coordinator.provider.get('reasoning_effort')}
-        implementation['workers'] = {name: {'profile': worker.profile, 'kind': worker.provider['kind'], 'model': worker.provider.get('model'),
+        diagnostics = []
+        workers = specialist_selections(root, coordinator, config, user_overlay=user_overlay, diagnostics=diagnostics)
+        implementation['routing_decisions'] = diagnostics
+        implementation['workers'] = {name: {'role': worker.role, 'profile': worker.profile, 'kind': worker.provider['kind'], 'model': worker.provider.get('model'),
             'fallback_profile': worker.role_options.get('_hosted_fallback')}
-            for name, worker in specialist_selections(root, coordinator, config, user_overlay=user_overlay).items()}
+            for name, worker in workers.items()}
         if coordinator.provider['kind'] not in {'local', 'openai-subscription'}:
             implementation['error'] = 'native coordinator is not supported; bind native profiles to worker roles'
     except (ValueError, OSError) as exc:
         implementation['error'] = str(exc)
+        from types import SimpleNamespace
+        diagnostics = []
+        try:
+            workers = specialist_selections(root, SimpleNamespace(role_options={}), config,
+                                            user_overlay=user_overlay, diagnostics=diagnostics)
+            implementation['workers'] = {name: {'role': worker.role, 'profile': worker.profile,
+                'kind': worker.provider['kind'], 'model': worker.provider.get('model')} for name, worker in workers.items()}
+        except (ValueError, OSError) as worker_error:
+            implementation['worker_error'] = str(worker_error)
+        implementation['routing_decisions'] = diagnostics
     return {"default_profile": config.get("default_profile"), "routes": routes,
+            'local_configuration_error': config.get('_local_configuration_error'),
             'implementation_profile': config.get('stages', {}).get('implement', {}).get('profile'),
             'subscription': subscription_readiness() if implementation.get('coordinator', {}).get('kind') == 'openai-subscription' else {'required': False}, 'implementation': implementation,
             'local_candidates': local_candidates,

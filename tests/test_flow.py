@@ -997,7 +997,13 @@ class FlowCliTests(FlowCliHarness):
         env["FLOW_MAF_WHEELHOUSE"] = str(managed_wheelhouse())
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), *args],
-            cwd=str(REPO_ROOT),
+            # `self.repo` has its own `.git` (see setUp) but no `.flow`, so
+            # defaults_review.py's `--auto-project` finds nothing to fold in —
+            # matching every assertion below, which predates that flag. Running
+            # from REPO_ROOT instead would review *this real checkout's* own
+            # `.flow` overlay, since that is a genuine tracked project overlay
+            # (flow dogfoods itself), not a quirk of the test fixture.
+            cwd=str(self.repo),
             text=True,
             capture_output=True,
             env=env,
@@ -2962,6 +2968,28 @@ class FlowCliTests(FlowCliHarness):
         self.assertIn('python = "', config)
         self.assertIn('python_version = "', config)
 
+    def test_install_flow_sh_auto_project_reviews_the_invoking_project(self) -> None:
+        """Shell-side parity regression: `flow install`/`flow update` fold the
+        current project into defaults review automatically
+        (`lifecycle._with_current_project_scope`); `install-flow.sh` used to
+        call `defaults_review.py` with no `--project` at all, so a project
+        standing where the script was invoked never got reviewed. It now
+        passes `--auto-project`, which applies the identical rule from the
+        subprocess's own cwd (`fsutil.current_project_root`).
+        """
+        overlay = self.repo / ".flow"
+        overlay.mkdir()
+        overlay_toml = overlay / "flow.toml"
+        overlay_toml.write_text("[expertise_advisory]\nenabled = false\n")
+        result = self._run_install_sh("--develop")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(
+            "enabled = false",
+            overlay_toml.read_text(),
+            "install-flow.sh must reset a conflicting project override, "
+            "the same way `flow install` does from the same cwd",
+        )
+
     def test_install_flow_sh_fails_clearly_without_python_3_10_plus(self) -> None:
         fake_home = self._new_fake_home()
         fake_bin = self._make_fake_python_bin(include_compatible=False)
@@ -2972,7 +3000,7 @@ class FlowCliTests(FlowCliHarness):
 
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), "--release"],
-            cwd=str(REPO_ROOT),
+            cwd=str(self.repo),
             text=True,
             capture_output=True,
             env=env,
@@ -2993,7 +3021,7 @@ class FlowCliTests(FlowCliHarness):
         env = _clean_env(fake_home)
         env.pop("FLOW_MAF_PYTHON", None)  # an override would make readiness pass
         env["FLOW_MAF_BASE_PYTHON"] = str(base)
-        result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=REPO_ROOT,
+        result = subprocess.run(["bash", str(INSTALL_SCRIPT), "--develop"], cwd=self.repo,
                                 text=True, capture_output=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("OpenHands SDK 1.54.0 verified; launcher bound to", result.stdout)
@@ -3016,7 +3044,7 @@ class FlowCliTests(FlowCliHarness):
 
         result = subprocess.run(
             ["bash", str(INSTALL_SCRIPT), "--release"],
-            cwd=str(REPO_ROOT),
+            cwd=str(self.repo),
             text=True,
             capture_output=True,
             env=env,
@@ -3883,6 +3911,7 @@ class FlowCliTests(FlowCliHarness):
                 "codex_registration",
                 "codex_worker",
                 "cost",
+                "defaults_review",
                 "delivery_cancel",
                 "delivery_contracts",
                 "delivery_control",
@@ -9563,7 +9592,16 @@ class CliReferenceDocTests(unittest.TestCase):
 
     def test_quoted_empty_store_output_is_what_the_cli_prints(self) -> None:
         """The doc quotes two literals as searchable symptoms in Failure
-        Modes. A reader greps for them, so they have to be exact."""
+        Modes. A reader greps for them, so they have to be exact.
+
+        `cost active` harvests the SDK project at `repo_root()`, which resolves
+        from the subprocess's cwd, not from `HOME` — isolating `env` alone
+        leaves it reading this very checkout's real `.flow/runs`, so an active
+        session here would make "(no active sessions in range)" false. `home`
+        has no `.flow` or `.git` of its own, so running there as well makes
+        `repo_root()` fall back to `home` itself (see
+        `test_doctor_from_home_reports_not_a_project` for the same pattern).
+        """
         with tempfile.TemporaryDirectory() as scratch:
             home = Path(scratch)
             env = _clean_env(home)
@@ -9575,7 +9613,7 @@ class CliReferenceDocTests(unittest.TestCase):
                     self.assertIn(literal, self.text, "the doc no longer quotes this literal")
                     result = subprocess.run(
                         [sys.executable, str(FLOW_CLI), *cmd],
-                        text=True, capture_output=True, env=env,
+                        text=True, capture_output=True, env=env, cwd=home,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn(literal, result.stdout)

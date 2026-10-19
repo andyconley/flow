@@ -45,7 +45,8 @@ locality = "local"
 operations = ["manage", "read", "edit", "verify", "collect"]
 capabilities = ["structured_output", "structured_edit"]
 cost_class = 0
-enabled = false
+enabled = true
+sdk_tool_use = "default-enabled-unverified"
 
 [[provider_candidates]]
 candidate_id = "claude-hosted"

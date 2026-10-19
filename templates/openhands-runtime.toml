@@ -8,6 +8,7 @@ profile = "ollama"
 [workspace]
 kind = "local"
 # Native workers retain native permissions; a cwd is not an OS sandbox.
+# confirmation = "always" # Opt out of the SDK automatic dispatch default.
 
 # Per-role explicit overrides are independent of the coordinator profile:
 # [roles.test-engineer]
@@ -36,6 +37,8 @@ kind = "local"
 # skills = [".agents/skills/project-tests/SKILL.md"]
 
 # Native profile model/session/permission customizations are preserved.
+# Omitted permission_requests inherits stock-openhands automatic handling.
+# Set interactive below to require human terminal choices.
 # [profiles.claude]
 # session_mode = "default"
 # permission_requests = "interactive"

@@ -13,19 +13,21 @@ SDK_MIN_CONTEXT = 16384
 
 
 def local_eligibility(candidate, profile):
+    if not isinstance(profile, dict):
+        return ['runtime profile must be a table']
     reasons = []
     if ('sdk_tool_calling' not in candidate.get('capabilities', [])
-            and candidate.get('sdk_tool_use') != 'user-enabled-unverified'):
+            and candidate.get('sdk_tool_use') not in {'user-enabled-unverified', 'default-enabled-unverified'}):
         reasons.append('SDK tool use is neither declared nor explicitly user-enabled')
     context = profile.get('max_input_tokens')
-    if context is None or context < SDK_MIN_CONTEXT:
+    if isinstance(context, bool) or not isinstance(context, int) or context < SDK_MIN_CONTEXT:
         reasons.append(f'configured SDK context must be at least {SDK_MIN_CONTEXT} tokens')
     return reasons
 
 
 
-def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR):
-    from openhands_config import FRAMEWORK_ROLES, RuntimeConfigurationError, select
+def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR, diagnostics=None):
+    from openhands_config import FRAMEWORK_ROLES, RuntimeConfigurationError, select, identifier
     from sync import merge_user_overlay, shared_agents
     framework = read_toml(FRAMEWORK_ROLES.parent / 'flow.toml')
     admin = read_toml(user_overlay / 'flow.toml') if (user_overlay / 'flow.toml').is_file() else {}
@@ -33,9 +35,33 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
     project = read_toml(project_path) if project_path.is_file() else {}
     policy = merge_selection_policy(framework.get('provider_selection', {}),
                                    admin.get('provider_selection'), project.get('provider_selection'))
-    catalog = admin.get('provider_candidates', framework.get('provider_candidates', []))
-    explicit_order = any('provider_order' in layer.get('provider_selection', {})
-                         for layer in (admin, project))
+    for layer in (admin, project):
+        entries = layer.get('provider_candidates', [])
+        if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
+            raise RuntimeConfigurationError('provider_candidates must be an array of tables')
+        for item in entries:
+            identifier(item.get('candidate_id'), 'candidate ID')
+    explicit_disables = {item.get('candidate_id') for layer in (admin, project)
+                         for item in layer.get('provider_candidates', [])
+                         if isinstance(item, dict) and item.get('enabled') is False}
+    if explicit_disables:
+        policy = {**policy, 'disabled_candidates': sorted(set(policy['disabled_candidates']) | explicit_disables)}
+        policy.pop('policy_digest', None)
+    catalog = project.get('provider_candidates', admin.get('provider_candidates', framework.get('provider_candidates', [])))
+    if not isinstance(catalog, list) or any(not isinstance(item, dict) for item in catalog):
+        raise RuntimeConfigurationError('provider_candidates must be an array of tables')
+    candidate_ids = [identifier(item.get('candidate_id'), 'candidate ID') for item in catalog]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise RuntimeConfigurationError('provider candidate IDs must be unique')
+    order_layers = [layer.get('provider_selection', {}).get('provider_order') for layer in (admin, project)
+                    if 'provider_order' in layer.get('provider_selection', {})]
+    framework_order = framework.get('provider_selection', {}).get('provider_order')
+    # A single stated order is always a deliberate pin, even if it happens to
+    # match the framework default. But when every layer that states it
+    # restates the identical framework default, that is evidence of a stale
+    # full-file copy (e.g. an old full-overlay install), not a real choice,
+    # and must not silently mask role-specific hosted_preferences below.
+    explicit_order = bool(order_layers) and (len(order_layers) == 1 or any(order != framework_order for order in order_layers))
     preferences = dict(framework.get('implementation_routing', {}).get('hosted_preferences', {}))
     for layer in (admin, project):
         preferences.update(layer.get('implementation_routing', {}).get('hosted_preferences', {}))
@@ -45,10 +71,22 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
     if not isinstance(roster, list) or len(set(roster)) != len(roster):
         raise RuntimeConfigurationError('implementation specialists must be a unique role list')
     result = {}
+    diagnostics = diagnostics if diagnostics is not None else []
     for role in roster:
         options = config.get('roles', {}).get(role, {})
         if 'profile' in options:
             child = select(root, 'implement', role, options['profile'], config=config, user_overlay=user_overlay)
+            matching = [item for item in catalog if item.get('runtime_profile', item.get('provider')) == options['profile']]
+            if matching:
+                eligible = select_candidate({'operation': 'edit', 'minimum_tier': declarations.get(role, {}).get('model_tier', 'working')},
+                    policy, matching, [{'candidate_id': item['candidate_id'], 'state': 'ready'} for item in matching])
+                if eligible['selected_candidate_id'] is None:
+                    raise RuntimeConfigurationError(f'explicit role profile {role} is excluded: {eligible["exclusions"]}')
+            if child.provider['kind'] == 'local':
+                reasons = local_eligibility({'sdk_tool_use': 'user-enabled-unverified'}, child.provider)
+                if reasons:
+                    raise RuntimeConfigurationError(f'explicit local role profile {role} is excluded: {reasons}')
+            diagnostics.append({'role': role, 'resolved_profile': child.profile, 'reason': 'explicit role profile'})
         else:
             declaration = declarations.get(role)
             if declaration is None:
@@ -59,14 +97,24 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
                 candidate = dict(item)
                 provider = candidate.get('provider')
                 profile = candidate.get('runtime_profile', provider)
+                reasons = []
+                if candidate.get('enabled') is False:
+                    reasons.append('candidate disabled')
                 if provider == 'ollama':
-                    # Historical structured-edit grants do not authorize SDK tools.
-                    if profile not in profiles or local_eligibility(candidate, profiles[profile]):
-                        continue
+                    reasons.extend(local_eligibility(candidate, profiles.get(profile, {})))
+                    if config.get('_local_configuration_error'):
+                        reasons.append(config['_local_configuration_error'])
                 if profile not in profiles:
-                    continue
-                kind = profiles[profile].get('kind')
-                if kind != ('local' if provider == 'ollama' else provider):
+                    reasons.append('runtime profile is not configured')
+                elif not isinstance(profiles[profile], dict) or profiles[profile].get('kind') != ('local' if provider == 'ollama' else provider):
+                    reasons.append('runtime profile kind does not match provider')
+                if not reasons:
+                    try:
+                        select(root, 'implement', role, profile, config=config, user_overlay=user_overlay)
+                    except (ValueError, OSError) as exc:
+                        reasons.append(str(exc))
+                if reasons:
+                    diagnostics.append({'role': role, 'candidate_id': candidate.get('candidate_id'), 'reasons': reasons})
                     continue
                 candidate['_profile'] = profile
                 candidates.append(candidate)
@@ -80,24 +128,31 @@ def specialist_selections(root, parent, config, *, user_overlay=USER_OVERLAY_DIR
             decision = select_candidate(requirements, role_policy, candidates,
                 [{'candidate_id': c['candidate_id'], 'state': 'ready'} for c in candidates])
             chosen = next((c for c in candidates if c['candidate_id'] == decision['selected_candidate_id']), None)
+            diagnostics.append({'role': role, 'resolved_profile': chosen['_profile'] if chosen else None, 'decision': decision})
             if chosen is None:
-                raise RuntimeConfigurationError(f'no policy-eligible SDK specialist provider for {role}; configure an explicit role profile or eligible candidate')
+                raise RuntimeConfigurationError(f'no policy-eligible SDK specialist provider for {role}: {diagnostics}; configure an explicit role profile or eligible candidate')
+            for candidate in candidates:
+                eligibility = select_candidate(requirements, role_policy, [candidate],
+                    [{'candidate_id': candidate['candidate_id'], 'state': 'ready'}])
+                if eligibility['selected_candidate_id'] is None:
+                    diagnostics.append({'role': role, 'candidate_id': candidate['candidate_id'], 'reasons': [eligibility]})
+                    continue
+                option = select(root, 'implement', role, candidate['_profile'], config=config, user_overlay=user_overlay)
+                target = f"{role}--{candidate['candidate_id']}"
+                if target in roster:
+                    raise RuntimeConfigurationError(f'provider target collides with a logical role: {target}')
+                result[target] = option
             child = select(root, 'implement', role, chosen['_profile'], config=config, user_overlay=user_overlay)
-            if child.provider['kind'] == 'local':
-                hosted = next((c for entry in decision['ordered_candidates'] for c in candidates
-                    if c['candidate_id'] == entry['candidate_id'] and c['provider'] in {'claude', 'codex'}), None)
-                if hosted:
-                    fallback = select(root, 'implement', role, hosted['_profile'], config=config, user_overlay=user_overlay)
-                    child = replace(child, role_options={**child.role_options,
-                        '_hosted_fallback': hosted['_profile'], '_hosted_fallback_binding': fallback.fingerprint()})
         # A worker cannot become another coordinator through its configuration.
         if child.provider['kind'] == 'openai-subscription':
             raise RuntimeConfigurationError('subscription coordinator profiles cannot be specialist worker bindings')
+        result[role] = child
+    for name, child in result.items():
         options = {**child.role_options, 'specialists': []}
-        options['tools'] = [t for t in options.get('tools', ['terminal', 'file_editor']) if t != 'task']
+        options['tools'] = [tool for tool in options.get('tools', ['terminal', 'file_editor']) if tool != 'task']
         options.pop('model_routing', None)
         options.pop('policy_dispatch', None)
-        result[role] = replace(child, role_options=options, profile_override=True, routing_profiles={})
+        result[name] = replace(child, role_options=options, profile_override=True, routing_profiles={})
     if not result:
         raise RuntimeConfigurationError('implementation coordinator requires at least one approved specialist')
     return result

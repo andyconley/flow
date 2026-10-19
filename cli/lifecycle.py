@@ -45,7 +45,7 @@ from diagnostic_model import (
     support_payload,
 )
 from flowtoml import read_toml
-from fsutil import _remove_path, ensure_dir
+from fsutil import _remove_path, current_project_root, ensure_dir
 from paths import (
     DEFAULT_REMOTE,
     FLOW_CONFIG,
@@ -67,6 +67,13 @@ from maf_runtime import MafRuntimeUnready, provision as provision_maf_runtime
 # updater from the preceding release only has to activate that tree; the first
 # invocation of its new CLI can then complete the bounded runtime bridge.
 MAF_RUNTIME_ACTIVATION_REVISION = 1
+
+# `_sync_installed_adapters` invokes cli/defaults_review.py as a subprocess by
+# path rather than importing it, so it never appears in flow.py's module-scope
+# import graph that `_validate_staging` walks. Declared here so a release
+# staged without it is rejected before the swap, instead of installing cleanly
+# and failing the first time an install/update tries to run it.
+FLOW_REQUIRED_RUNTIME_MODULES = ("defaults_review",)
 
 
 def _now_utc_iso() -> str:
@@ -664,12 +671,30 @@ def record_managed_maf_runtime_unavailable(reason: str) -> None:
     write_install_config(config)
 
 
-def install_command(release: bool, develop_path: str | None) -> int:
+def _with_current_project_scope(projects: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Ordinary install/update reviews the project you're standing in.
+
+    `--project` only ever adds further, explicitly chosen scopes on top of
+    this one — it never replaces the automatic inclusion. See
+    `fsutil.current_project_root` for why a plain `repo_root()` call is not
+    enough on its own (it is also what `defaults_review.py --auto-project`
+    uses for the equivalent shell-installer inclusion).
+    """
+    root = current_project_root()
+    if root is None:
+        return projects
+    if any(project.resolve() == root for project in projects):
+        return projects
+    return (root, *projects)
+
+
+def install_command(release: bool, develop_path: str | None, projects: tuple[Path, ...] = ()) -> int:
+    projects = _with_current_project_scope(projects)
     if release and develop_path is not None:
         print("--release and --develop are mutually exclusive")
         return 2
     if release:
-        return _convert_to_release()
+        return _convert_to_release(projects=projects)
     if develop_path is not None:
         clone = Path(develop_path).expanduser()
         try:
@@ -677,7 +702,7 @@ def install_command(release: bool, develop_path: str | None) -> int:
         except FileNotFoundError:
             print(f"clone path does not exist: {develop_path}")
             return 1
-        return _convert_to_develop(clone)
+        return _convert_to_develop(clone, projects=projects)
     print("flow install requires --release or --develop <clone-path>")
     return 2
 
@@ -778,7 +803,7 @@ def _activate_openhands_source(staging: Path, install: dict) -> bool:
     return True
 
 
-def _convert_to_release() -> int:
+def _convert_to_release(*, projects: tuple[Path, ...] = ()) -> int:
     current = read_install_config()
     current_mode = current.get("mode", "unknown")
     if current_mode == INSTALL_MODE_RELEASE:
@@ -827,10 +852,10 @@ def _convert_to_release() -> int:
     print(f"converted to release mode (version: {version})")
     print(f"clone preserved at: {clone}")
     _remove_path(_stage_path("old"))
-    return _sync_installed_adapters()
+    return _sync_installed_adapters(projects=projects)
 
 
-def _convert_to_develop(clone: Path) -> int:
+def _convert_to_develop(clone: Path, *, projects: tuple[Path, ...] = ()) -> int:
     if not (clone / "cli" / "flow.py").is_file():
         print(f"path is not a flow checkout: {clone}")
         print("(expected to find cli/flow.py)")
@@ -871,14 +896,18 @@ def _convert_to_develop(clone: Path) -> int:
         return 1
     print(f"converted to develop mode (source: {clone})")
     _remove_path(_stage_path("old"))
-    return _sync_installed_adapters()
+    return _sync_installed_adapters(projects=projects)
 
 
-def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False) -> int:
+def update_command(check: bool, resync: bool, remote_override: str | None, as_json: bool = False,
+                    projects: tuple[Path, ...] = ()) -> int:
+    projects = _with_current_project_scope(projects)
     install = read_install_config()
     mode = install.get("mode", "unknown")
 
     if mode == INSTALL_MODE_DEVELOP:
+        if resync and not check:
+            return _sync_installed_adapters(projects=projects)
         diag = diagnostic(
             "update.mode",
             STATUS_WARNING,
@@ -895,6 +924,7 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
         print("develop install — flow update does not apply.")
         print("To roll forward in develop mode, pull and re-sync manually:")
         print(f"  git -C {target} pull --ff-only")
+        print("  flow defaults-review")
         print("  flow sync claude --user")
         print("  flow sync codex --user")
         print("  flow sync openhands --user")
@@ -955,6 +985,8 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
         print(f"latest:  {latest_tag}")
 
     if latest_tag == current_version:
+        if resync and not check:
+            return _sync_installed_adapters(projects=projects)
         diag = diagnostic(
             "update.version",
             STATUS_OK,
@@ -1039,7 +1071,7 @@ def update_command(check: bool, resync: bool, remote_override: str | None, as_js
 
     # Agent conversion/discovery is part of every update, not an optional
     # follow-up that leaves role definitions stale until the next setup.
-    return _sync_installed_adapters()
+    return _sync_installed_adapters(projects=projects)
 
 
 def _apply_release_update(remote: str, tag: str, install: dict) -> int:
@@ -1082,9 +1114,30 @@ def _apply_release_update(remote: str, tag: str, install: dict) -> int:
     return 0
 
 
-def _sync_installed_adapters(*, quiet: bool = False) -> int:
-    """Run the installed renderer after a source swap, never stale imports."""
+def _sync_installed_adapters(*, quiet: bool = False, projects: tuple[Path, ...] = ()) -> int:
+    """Run the installed renderer after a source swap, never stale imports.
+
+    `projects` are the scopes to review alongside the user overlay. This
+    function itself does no cwd discovery — `install_command`/`update_command`
+    fold the current project in via `_with_current_project_scope` before
+    calling here, so a direct call (as every test of this function makes)
+    reviews exactly the scopes it was given, nothing more.
+
+    `quiet` only controls whether subprocess output is captured and relayed
+    rather than streamed live; it never changes `defaults_review.py` into a
+    `--check` preview. Install/update must perform a real reset here, not a
+    report, however this function is invoked.
+    """
     python = read_toml(FLOW_CONFIG).get("flow", {}).get("python", sys.executable) if FLOW_CONFIG.is_file() else sys.executable
+    review_command = [python, str(SOURCE_DIR / "cli/defaults_review.py")]
+    for project in projects:
+        review_command.extend(["--project", str(project)])
+    review = subprocess.run(review_command, check=False, capture_output=quiet, text=quiet)
+    if quiet and (review.stdout or review.stderr):
+        print(review.stdout + review.stderr, file=sys.stderr, end='')
+    if review.returncode:
+        print("source installed; defaults review failed; adapter synchronization stopped", file=sys.stderr)
+        return review.returncode
     failures = []
     for target in ("claude", "codex", "openhands"):
         result = subprocess.run([python, str(SOURCE_DIR / "cli/flow.py"),

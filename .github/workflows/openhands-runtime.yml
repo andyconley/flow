@@ -30,6 +30,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: >-
           python -m unittest
+          tests.test_defaults_review
           tests.test_agent_distribution
           tests.test_acp_permissions
           tests.test_runtime_wiring
@@ -51,6 +52,8 @@ jobs:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
           OPENHANDS_SUPPRESS_BANNER: '1'
         run: python tests/openhands_specialist_eval.py
+      - name: Verify same-role provider choices and automatic dispatch with disposable peers
+        run: python tests/openhands_provider_choices_eval.py
       - name: Verify routed model and pending confirmation across fresh Flow processes
         env:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
