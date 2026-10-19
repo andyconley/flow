@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.50.1](https://github.com/andyconley/flow/compare/v0.50.0...v0.50.1) (2026-10-19)
+
+### Bug Fixes
+
+* validate bundled Goose during prepare dry runs ([745fbfc](https://github.com/andyconley/flow/commit/745fbfcc3dbbd3c4dc2ff5c16394b560772dee59))
+
 ## [0.50.0](https://github.com/andyconley/flow/compare/v0.49.1...v0.50.0) (2026-10-19)
 
 ### Features
