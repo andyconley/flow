@@ -35,4 +35,6 @@ def render(value):
         sections.append(f"Source: {document['path']} ({document['authority']}, {document['revision']})\n{document['content']}")
     if value.get('historical_flow'):
         sections.append(f"Historical Flow artifacts remain at {value['historical_flow']}; verify referenced evidence, do not migrate active runs.")
+    if value.get('legacy_handoff'):
+        sections.append('Explicit legacy handoff (fresh v2 approval required): '+str(value['legacy_handoff']))
     return '\n\n'.join(sections)

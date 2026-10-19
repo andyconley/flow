@@ -101,6 +101,7 @@ def build(artifacts, harness, checker):
 
     def closure(s):
         # Technical readiness and user acceptance are deliberately separate.
+        from .monitoring import report
         payload = {'work_id': s['work_id'], 'outcome': s.get('outcome', s.get('phase')),
                    'acceptance': s.get('acceptance', 'not-recorded'),
                    'brief_ref': s['brief_ref'], 'context_ref': s['context_ref'],
@@ -109,6 +110,8 @@ def build(artifacts, harness, checker):
                    'candidate_revision': s.get('candidate_revision'), 'findings': s.get('findings', []),
                    'test_results': s.get('test_results', {}), 'failure': s.get('failure'),
                    'historical_references': artifacts.read(s['brief_ref'])['payload'].get('historical_references', []),
+                   'followups': artifacts.read(s['brief_ref'])['payload'].get('followups', []),
+                   'usage': report(artifacts.project, job_id=s.get('job_id')),
                    'deployment': 'not-authorized-by-closure'}
         ref = artifacts.publish('closures', 'closure', payload, supersedes=s.get('closure_ref'))
         return {'closure_ref': ref, 'lifecycle_phase': 'closed'}

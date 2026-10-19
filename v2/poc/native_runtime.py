@@ -7,7 +7,7 @@ from .runtime_env import ROOT, environment, node_binary, goose_binary
 from .codex_adapter_guard import build
 
 
-def prepare(workspace, run_dir, role_bundle):
+def prepare(workspace, run_dir, role_bundle, provider=None, model=None):
     workspace, run_dir = Path(workspace).resolve(), Path(run_dir).resolve()
     tools = run_dir/'native-runtime'; tools.mkdir(exist_ok=True)
     bindir = tools/'bin'; bindir.mkdir(exist_ok=True)
@@ -32,7 +32,7 @@ def prepare(workspace, run_dir, role_bundle):
         path=bindir/name;path.write_text(f'#!/bin/sh\nexport GOOSE_PATH_ROOT="{ROOT}/runtime/tmp/native-worker-config"\nexec /usr/bin/sandbox-exec -f "{sandbox}" {command} "$@"\n');path.chmod(0o755)
     executable = os.environ.get('FLOW_V2_CLAUDE') or shutil.which('claude') or str(Path.home()/'.local/bin/claude')
     claude=tools/'claude';claude.write_text('#!/bin/sh\nexport HOME="'+str(Path.home())+'"\nunset CLAUDE_CONFIG_DIR CLAUDE_CODE_SAFE_MODE\nexec '+shlex.quote(executable)+' --setting-sources "" --disable-slash-commands --settings \'{"disableAllHooks":true,"enabledPlugins":{},"autoMemoryEnabled":false}\' --max-turns 4 --no-session-persistence --debug-file "'+str(debug)+'" "$@"\n');claude.chmod(0o755)
-    env=environment();env.pop('OLLAMA_HOST',None);env.pop('CLAUDE_CODE_SAFE_MODE',None)
+    env=environment(project=workspace,provider=provider,model=model);env.pop('OLLAMA_HOST',None);env.pop('CLAUDE_CODE_SAFE_MODE',None)
     env.update(PATH=str(bindir)+':'+env['PATH'],CLAUDE_CODE_EXECUTABLE=str(claude),
                GIT_CONFIG_GLOBAL='/dev/null',GIT_CONFIG_NOSYSTEM='1',GOOSE_SUBAGENT_MAX_TURNS='4')
     # The coordinator needs its own state; only its native worker subtree is sandboxed above.

@@ -25,6 +25,8 @@ flow-v2 --project /absolute/project --work work-id status
 
 Creating and shaping work do not start inference. Final exact-revision approval starts real delivery using the existing accounts; merge/deployment remain separate. See [the installation and command guide](FLOW_V2_INSTALL.md) and [workflow contracts](GLG_WORKFLOWS.md).
 
+Usage, device-context settings and preserved run/archive/backlog access are described in [operations and observability](FLOW_V2_OPERATIONS.md). `flow metrics` reports Goose observations; `flow cost` retains native/legacy history. Unknown native telemetry remains unknown. These views add no token/rate/usage gates.
+
 ## Update, legacy cleanup and rollback
 
 ```sh
