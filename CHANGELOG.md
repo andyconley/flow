@@ -2,6 +2,16 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.50.0](https://github.com/andyconley/flow/compare/v0.49.1...v0.50.0) (2026-10-19)
+
+### Features
+
+* bundle verified Goose build for Apple Silicon ([35a3cf1](https://github.com/andyconley/flow/commit/35a3cf1ddc44659ef3f6b529643e47ce23ffd19b))
+
+### Bug Fixes
+
+* automatically provision bundled Goose during v2 install ([f50c9cc](https://github.com/andyconley/flow/commit/f50c9ccfff5e317ebac0e1351c7bf065f765b29a))
+
 ## [0.49.1](https://github.com/andyconley/flow/compare/v0.49.0...v0.49.1) (2026-10-19)
 
 ### Bug Fixes
