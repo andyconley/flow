@@ -4,11 +4,12 @@ Flow v2.0 uses the native host for shaping and user decisions, LangGraph for dur
 
 ## Install and select
 
-With this Mac's existing isolated runtime, from this checkout:
+From the canonical repository root, prepare the locked dependencies and install:
 
 ```sh
-.venv/bin/python -m poc.install install --dry-run
-.venv/bin/python -m poc.install install
+./install-flow-v2.sh prepare --build-goose
+./install-flow-v2.sh install --dry-run
+./install-flow-v2.sh install
 ~/.local/bin/flow-v2 --version
 ```
 
@@ -44,7 +45,7 @@ The explicit `activate --replace-legacy` selection backs up and replaces the glo
 - `poc/artifacts.py`, `handoffs.py`: versioned context/brief/decision/assignment/result records and recovery.
 - `role-bundle/`: 13 existing specialist agents/recipes with normal broad tools.
 
-Use the existing `.venv/bin/python -m unittest discover -s tests -v`. The cancellation test needs normal macOS process-list access to inspect only its own child processes. Installer tests use disposable homes and check real launcher execution, command mapping, old-to-v2 cleanup, idempotence, rollback and a pre-approval smoke without provider calls.
+From `v2/`, use `.venv/bin/python -m unittest discover -s tests -v` after preparation. The cancellation test needs normal macOS process-list access to inspect only its own child processes. Installer tests use disposable homes and check real launcher execution, command mapping, old-to-v2 cleanup, idempotence, rollback and a pre-approval smoke without provider calls.
 
 The local implementation was exercised with existing native accounts before integration. No private execution records or machine-specific scenarios are distributed here. The shipped offline suite tests workflow, recovery, source locks, roles and installer behavior. See [native permission propagation](GLG_NATIVE_ERRORS.md). Goose is the pinned official v1.55.0 base plus the required [integration patch](vendor/README.md), built under ignored runtime/goose rather than fetched from an unpublished fork.
 
