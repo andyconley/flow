@@ -2,6 +2,18 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.49.0](https://github.com/andyconley/flow/compare/v0.48.0...v0.49.0) (2026-10-18)
+
+### Features
+
+* **flow-v2:** restore observability and legacy work discovery ([26dbf03](https://github.com/andyconley/flow/commit/26dbf0388f30f75e1de30dabdac7036b5108435b))
+
+### Tests
+
+* **flow-v2:** preserve evidence and role rendering regressions ([1af73fd](https://github.com/andyconley/flow/commit/1af73fd05cddbd9c0795495682956a755f44148c))
+* **flow-v2:** retain adapter source guard regression ([cf62073](https://github.com/andyconley/flow/commit/cf6207312138df383266c0f80de76b3a4236b642))
+* **runtime:** isolate sandbox and deadline fixtures from host setup ([44ef294](https://github.com/andyconley/flow/commit/44ef2944a7df70c47b8dd06f3ae61809a3486e39))
+
 ## [0.48.0](https://github.com/andyconley/flow/compare/v0.47.0...v0.48.0) (2026-10-18)
 
 ### Features
