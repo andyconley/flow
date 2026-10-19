@@ -1,11 +1,14 @@
 """Artifact integrity and strict source validation; no Rust, accounts or inference."""
+import contextlib
 import gzip
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -39,6 +42,93 @@ class ArtifactTests(unittest.TestCase):
         self.manifest.write_text(json.dumps(self.meta))
         self.platform = patch.multiple(artifact.platform, system=lambda:'Darwin', machine=lambda:'arm64', mac_ver=lambda:('14.0', (), ''))
         self.platform.start(); self.addCleanup(self.platform.stop)
+
+    def prepare_dry_run_cli(self, *arguments, environment=None):
+        def snapshot():
+            return {p.relative_to(self.root): (p.stat().st_mtime_ns,
+                    p.read_bytes() if p.is_file() else None)
+                    for p in self.root.rglob('*')}
+        before = snapshot()
+        stdout, stderr = io.StringIO(), io.StringIO()
+        code = 0
+        with patch.dict(os.environ, environment or {}, clear=True), \
+                patch.object(bootstrap, 'ROOT', self.root), \
+                patch.object(sys, 'argv', ['bootstrap.py', 'prepare', '--dry-run', *arguments]), \
+                patch.object(bootstrap, 'prepare') as prepare, \
+                patch.object(bootstrap, 'run') as run, \
+                patch.object(bootstrap.subprocess, 'run') as subprocess_run, \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            try:
+                bootstrap.main()
+            except SystemExit as error:
+                code = error.code
+        prepare.assert_not_called()
+        run.assert_not_called()
+        subprocess_run.assert_not_called()
+        self.assertEqual(snapshot(), before)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_prepare_dry_run_cli_rejects_corrupt_archive_without_extraction(self):
+        (self.root/'vendor/artifacts'/self.meta['archive']).write_bytes(b'corrupt')
+        self.assertFalse(artifact.binary_path(self.root).exists())
+        code, stdout, stderr = self.prepare_dry_run_cli()
+        self.assertEqual(code, 2)
+        self.assertIn('archive checksum mismatch', stderr)
+        self.assertNotIn('Would create', stdout)
+        self.assertFalse((self.root/'runtime').exists())
+
+    def test_prepare_dry_run_cli_validates_valid_archive_without_writes(self):
+        with patch.object(artifact, 'provision', wraps=artifact.provision) as provision:
+            code, stdout, stderr = self.prepare_dry_run_cli()
+        self.assertEqual(code, 0, stderr)
+        self.assertIn('Would create', stdout)
+        provision.assert_called_once_with(self.root, dry_run=True)
+        self.assertFalse((self.root/'runtime').exists())
+        self.assertFalse((self.root/'.venv').exists())
+
+    def test_prepare_dry_run_cli_preserves_and_rejects_tampered_executable(self):
+        target = artifact.extract(self.root)
+        target.write_bytes(b'user modification')
+        code, stdout, stderr = self.prepare_dry_run_cli()
+        self.assertEqual(code, 2)
+        self.assertIn('executable checksum mismatch', stderr)
+        self.assertNotIn('Would create', stdout)
+        self.assertEqual(target.read_bytes(), b'user modification')
+        self.assertFalse((self.root/'.venv').exists())
+
+    def test_prepare_dry_run_cli_reports_archive_oserror(self):
+        (self.root/'vendor/artifacts'/self.meta['archive']).unlink()
+        code, stdout, stderr = self.prepare_dry_run_cli()
+        self.assertEqual(code, 2)
+        self.assertIn('No such file', stderr)
+        self.assertNotIn('Traceback', stderr)
+        self.assertNotIn('Would create', stdout)
+
+    def test_prepare_dry_run_cli_source_build_skips_bundled_provision(self):
+        (self.root/'vendor/artifacts'/self.meta['archive']).write_bytes(b'corrupt')
+        with patch.object(artifact, 'provision', wraps=artifact.provision) as provision:
+            code, stdout, stderr = self.prepare_dry_run_cli('--build-goose')
+        self.assertEqual(code, 0, stderr)
+        self.assertIn('build locked Goose source', stdout)
+        provision.assert_not_called()
+
+    def test_prepare_dry_run_cli_preserves_explicit_override(self):
+        (self.root/'vendor/artifacts'/self.meta['archive']).write_bytes(b'corrupt')
+        with patch.object(artifact, 'provision', wraps=artifact.provision) as provision:
+            code, stdout, stderr = self.prepare_dry_run_cli(
+                environment={'FLOW_V2_GOOSE_BINARY':'/qualified/goose'})
+        self.assertEqual(code, 0, stderr)
+        self.assertIn('Would create', stdout)
+        provision.assert_called_once_with(self.root, dry_run=True)
+
+    def test_prepare_dry_run_cli_preserves_other_platform_source_route(self):
+        (self.root/'vendor/artifacts'/self.meta['archive']).write_bytes(b'corrupt')
+        with patch.object(artifact.platform, 'system', return_value='Linux'), \
+                patch.object(artifact, 'verify_archive') as verify_archive:
+            code, stdout, stderr = self.prepare_dry_run_cli()
+        self.assertEqual(code, 0, stderr)
+        self.assertIn('Would create', stdout)
+        verify_archive.assert_not_called()
 
     def test_extract_select_idempotence_and_explicit_override(self):
         with patch.dict(os.environ, {}, clear=True):
