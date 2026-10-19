@@ -60,10 +60,27 @@ class HistoryAccessTests(unittest.TestCase):
     def test_handoff_rejects_same_identity_and_symlink_escape(self):
         failure = self.cli('--work','old-work','create','--request','new','--legacy-run','old-work',expected=2)
         self.assertIn('distinct new',failure.stderr)
+        self.assertFalse(storage(self.project,'old-work').exists())
+        failure = self.cli('--work','old-work','resume',expected=2)
+        self.assertIn('original runtime',failure.stderr)
         outside = self.root/'outside'; outside.mkdir(); (outside/'run.json').write_text('{}')
         (self.project/'.flow/runs/escaped').symlink_to(outside,target_is_directory=True)
         with self.assertRaisesRegex(ValueError,'escapes'):
             history.legacy_run(self.project,'escaped')
+
+    def test_empty_checkpoint_from_rejected_creation_retains_legacy_guidance(self):
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        path = storage(self.project,'old-work')/'workflow.sqlite'
+        path.parent.mkdir(parents=True)
+        with SqliteSaver.from_conn_string(str(path)) as saver:
+            self.assertIsNone(saver.get({'configurable': {'thread_id': 'old-work'}}))
+        before = self.run.read_bytes()
+        for command in ['status', 'resume']:
+            failure = self.cli('--work','old-work',command,expected=2)
+            self.assertIn('No v2 checkpoint exists',failure.stderr)
+            self.assertIn('original runtime',failure.stderr)
+            self.assertNotIn('runtime_options',failure.stderr)
+        self.assertEqual(self.run.read_bytes(),before)
 
     def test_archive_search_and_backlog_view_leave_history_and_ranked_text_unchanged(self):
         path = self.project/'docs/backlog.md'; path.parent.mkdir(); path.write_text('# Backlog\n\n1. Keep ranked work first\n')

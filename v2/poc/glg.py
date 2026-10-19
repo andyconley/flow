@@ -205,8 +205,14 @@ def main(argv=None):
             publish_index(project, records)
             print(json.dumps({'index': str(project / '.glg' / 'INDEX.md'), 'closed_records': len(records)}))
             return
-        if args.command != 'create' and not (state_dir / 'workflow.sqlite').exists():
-            parser.error('No v2 checkpoint exists. Legacy .flow runs require their original runtime or create --legacy-run ID with fresh approval.')
+        missing_checkpoint = 'No v2 checkpoint exists. Legacy .flow runs require their original runtime or create --legacy-run ID with fresh approval.'
+        if args.command == 'create':
+            if args.legacy_run == args.work:
+                parser.error('A legacy handoff requires a distinct new v2 work ID; checkpoints and approvals are not imported')
+            if args.budget_seconds <= 0 or not (args.request or args.brief_file):
+                parser.error('Provide a request/brief and a positive budget')
+        elif not (state_dir / 'workflow.sqlite').exists():
+            parser.error(missing_checkpoint)
         with locked(state_dir), SqliteSaver.from_conn_string(str(state_dir / 'workflow.sqlite')) as saver:
             config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
             checkpoint = saver.get(config)
@@ -214,12 +220,10 @@ def main(argv=None):
             if args.command == 'create':
                 if old:
                     parser.error('Work item already exists; inspect status or resume it')
-                if args.legacy_run == args.work:
-                    parser.error('A legacy handoff requires a distinct new v2 work ID; checkpoints and approvals are not imported')
-                if args.budget_seconds <= 0 or not (args.request or args.brief_file):
-                    parser.error('Provide a request/brief and a positive budget')
                 options = {'provider': args.provider, 'model': args.model, 'budget_seconds': args.budget_seconds}
             else:
+                if not old:
+                    parser.error(missing_checkpoint)
                 options = old['runtime_options']
             graph = build(artifacts, NativeHarness(options), BriefChecker(artifacts)).compile(checkpointer=saver)
             saved = graph.get_state(config, subgraphs=True)
