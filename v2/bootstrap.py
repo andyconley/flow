@@ -78,13 +78,16 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     if args.action == 'prepare':
-        if args.dry_run:
-            print('Would create the local venv, install locked Python/npm packages'+(' and build locked Goose source' if args.build_goose else ' and verify/extract the bundled Goose build on Apple Silicon macOS'))
-        else:
-            try:
+        try:
+            if args.dry_run:
+                if not args.build_goose:
+                    from poc.goose_artifact import provision
+                    provision(ROOT, dry_run=True)
+                print('Would create the local venv, install locked Python/npm packages'+(' and build locked Goose source' if args.build_goose else ' and verify/extract the bundled Goose build on Apple Silicon macOS'))
+            else:
                 prepare(args.build_goose)
-            except (ValueError, OSError) as error:
-                parser.error(str(error))
+        except (ValueError, OSError) as error:
+            parser.error(str(error))
         return
     python = ROOT/'.venv/bin/python'
     if not python.exists():
