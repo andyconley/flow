@@ -40,9 +40,24 @@ does not authorize retrying or accepting an existing blocked work item.
 The existing native-completion guard rejects observed failed-tool evidence even
 when a later report claims success. Failed tests during test-first work can be
 legitimate, but a policy rejection or unresolved permission boundary must not be
-silently treated as success. The requested structured tool-completion events are
-still needed to qualify a distinction between these cases. This patch does not
-clear failed-tool evidence, bypass permission decisions, or rebuild Goose.
+silently treated as success. The historical database stripped rawOutput, and the
+available rollout cannot establish which live ACP completion path was used.
+The policy-rejected command never reached ACP and cannot explain Goose's failed
+tool evidence. Plain non-zero exits and shell denials have no reliable typed
+distinction in these records. This patch does not clear failed-tool evidence,
+infer denial from shell text, bypass permission decisions, or rebuild Goose.
+
+Future Codex workers capture actual server-side ACP tool_call/tool_call_update
+JSON-RPC frames, preserving rawOutput and terminal metadata when present.
+The attempt record's native_evidence_directory points to native-runtime/acp-evidence.
+Each adapter process writes a unique 0600 JSONL file inside a 0700 directory.
+Transport bytes, stdin, stderr and exit status remain unchanged. Authentication
+and conversation frames are excluded; tool output can still contain sensitive
+project data, so keep these ignored runtime files private and inspect/redact
+before sharing. Files stop at 16 MiB and frames over 256 KiB produce an explicit
+capture_gap; capture failures warn on stderr without stopping transport.
+This cannot reconstruct historical frames, observe Codex-internal policy
+rejections, or supply typed seatbelt denial evidence that the adapter lacks.
 
 The Claude wrapper still uses the existing native account configuration. Its
 attempted global config-lock writes can remain denied; no blanket home/config
@@ -60,8 +75,10 @@ manually invoked test suite does not retroactively accept the original run.
 
 ## Validation
 
-All 114 offline v2 tests pass on the Mac Studio with zero skips, including four
-new runtime regressions. The tests use disposable projects, linked worktrees,
+All 117 offline v2 tests pass on the Mac Studio with zero skips, including
+three additional transport tests verifying byte preservation, actual frame
+capture, private permissions, size limits, gaps, separate process files, stdin
+forwarding and capture-failure behavior. The tests use disposable projects, linked worktrees,
 checkpoint databases and scratch directories. Actual Goose execution is limited
 to recipe rendering, with no inference. Distribution checks and git diff --check
 pass. Active installations, account files and the reported application worktree

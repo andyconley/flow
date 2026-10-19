@@ -36,6 +36,7 @@ class GooseJob:
                              s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
                              s.get('project_context',''))
    profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,provider=provider,model=self.model)
+   record['native_evidence_directory'] = native_env.get('FLOW_V2_ACP_EVIDENCE_DIR')
    cmd=cmd[3:];cmd[0]=str(goose_binary())
    position=cmd.index('developer');del cmd[position-1:position+1]
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
