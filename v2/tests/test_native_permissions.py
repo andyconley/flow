@@ -8,7 +8,7 @@ from unittest.mock import patch
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from poc.artifacts import Artifacts
-from poc.codex_adapter_guard import guarded_source
+from poc.codex_adapter_guard import guarded_source, build as build_guard
 from poc.goose_job import GooseJob
 from poc.native_errors import PREFIX, boundary_error
 from poc.project_context import resolve
@@ -21,6 +21,21 @@ MESSAGE = "PermissionError: [Errno 1] Operation not permitted: '/fixture/.venv/p
 
 
 class NativePermissionTests(unittest.TestCase):
+    def test_guard_rejects_unqualified_adapter_source(self):
+        with self.assertRaises(ValueError):
+            guarded_source("unknown adapter implementation")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dist").mkdir()
+            (root / "package.json").write_text(json.dumps({"version": "999.0.0"}))
+            (root / "dist/index.js").write_text("unknown")
+            with self.assertRaises(ValueError):
+                build_guard(root / "dist/index.js", root / "guard.mjs")
+            (root / "package.json").write_text(json.dumps({"version": "2.2.2"}))
+            with self.assertRaises(ValueError):
+                build_guard(root / "dist/index.js", root / "guard.mjs")
+            self.assertFalse((root / "guard.mjs").exists())
+
     def test_actual_guarded_command_renderer_keeps_denial_and_diagnostic(self):
         source = guarded_source((ROOT/'runtime/adapters/node_modules/@agentclientprotocol/codex-acp/dist/index.js').read_text())
         body = source.split('  commandEndRawOutput(end) {', 1)[1].split('\n  }', 1)[0]
