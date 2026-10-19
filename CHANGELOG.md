@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.49.1](https://github.com/andyconley/flow/compare/v0.49.0...v0.49.1) (2026-10-19)
+
+### Bug Fixes
+
+* **flow-v2:** retain guidance after rejected checkpoint creation ([6883ee0](https://github.com/andyconley/flow/commit/6883ee03a32d01cfaadeac4b49f81dd8d9e3855c))
+
 ## [0.49.0](https://github.com/andyconley/flow/compare/v0.48.0...v0.49.0) (2026-10-18)
 
 ### Features
