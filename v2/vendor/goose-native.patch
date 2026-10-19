@@ -1,0 +1,3200 @@
+diff --git a/LOCAL_NATIVE_ACP_PATCH.md b/LOCAL_NATIVE_ACP_PATCH.md
+new file mode 100644
+index 0000000..5e73015
+--- /dev/null
++++ b/LOCAL_NATIVE_ACP_PATCH.md
+@@ -0,0 +1,59 @@
++# Local native ACP completion patch
++
++## Recipe-bound tool evidence and narrow direct-edit qualification
++
++The response JSON schema annotation `x-goose-tool-evidence` accepts `required` or `not_required`. Omission defaults to required; malformed values are rejected. Native completion now distinguishes no_tools_observed from explicit unobservable activity. Only an explicit not_required contract may accept no_tools_observed, with the same strict final JSON, schema, terminal, typed outcome and no-failed/no-pending requirements. Unsupported/unobservable activity is rejected under both policies. No-tools-observed is an observation statement, not proof that invisible activity never occurred or that external effects were verified.
++
++The policy is part of the recipe already hashed into the receipt binding, now native-completion/3. A policy-only change invalidates a saved receipt. Legacy missing observation fields remain unobservable; historical receipts are not silently upgraded. Writer/verifier recipes explicitly require evidence, while the analysis-only example does not attest tool effects.
++
++The actual pinned codex-acp handler and renderer generate 14 fixture sequences. An in-memory ACP agent transports those exact rendered updates to the real Goose provider, then the real native completion validator checks both policies (28 acceptance decisions). Cases include direct edit success/failure, duplicate starts and status-only terminal patches, contradictory/reordered/missing events, opaque/unsupported activity (also mixed with successful edits), legitimate analysis without events, malformed JSON and missing final output. Identical empty terminal patches no longer conflict with previously accumulated start content; contradictory outcomes still fail.
++
++This qualifies event mapping and acceptance, not enforcement of the model's native tool roster. Installed CLI feature-disable candidates were inspected locally with network and credentials denied. They accept the flags and disable code-mode host/shell features, but unified_exec remains enabled in the feature tables; feature state does not itself prove exposure. No authoritative direct-edit-only builtin roster has been established. The future live driver blocks on the failed roster qualification before setup or launch. No live run is permitted by this offline work.
++
++
++## Offline boundary and observation correction
++
++This follow-up preserves ACP messageId and generic local-guard message phase metadata. The final candidate is the last distinct message, not all text since the last tool event. Chunking within that message is preserved; interleaved identities or disappearance of an established identity are rejected. Strict whole-document JSON validation remains. Commentary is not treated as final output.
++
++Native terminal evidence and receipts now record final_message_id, final_message_phase and tool_observation (observed_success, observed_failure, unobservable). Completion requires observed_success and no failed/pending calls. Zero observed tool calls, unsupported opaque results and unsettled calls cannot attest successful work. This intentionally does not qualify text-only native tasks with no observed tools. The existing boolean tool_error means observed protocol error, not proof that all native execution was visible.
++
++The binding includes native-completion/2, so earlier receipts remain historical evidence and cannot be silently reused under the stricter contract. No historical session database is rewritten. Existing tool-capable API providers and real final_output behavior are unchanged.
++
++The paired POC supplies a hash/version-pinned isolated codex-acp 2.2.2 guard. It forwards message phase without advertising proprietary client capabilities; opaque functionCallOutput or unsupported item kinds are reported as unobservable. Such a result fails the evidence contract; it is not a claim that execution itself failed. Both installed Codex 0.160.1 and 0.163.0 schemas include this opaque type, and neither gives it typed execution success. The guard does not parse prose to invent status and cannot qualify successful nested-exec work. Normalized offline replay demonstrates the adapter's drop, but original app-server wire traffic was not captured.
++
++All verification in this follow-up is offline. The broad model-driven goose-self-test recipe remains outside the authorization; its inventory was updated. A new live proof, global replacement, upstream submission or expanded tool permissions requires separate scope.
++
++
++This is an isolated experimental change on official Goose v1.55.0 (`2bcb8583a18a0623eb78c9ed845d597ed99fae48`), related to upstream issue #10275. No public submission, global binary replacement, production rollout or broader Flow migration is part of it.
++
++Enable only for qualified disposable runs with `GOOSE_NATIVE_ACP_COMPLETION=true`. The Codex and Claude ACP factories opt into the new native-completion capability; other ACP factories remain off. Unset the variable to retain the previous structured-recipe rejection. Standard tool-capable providers continue to use real `final_output` calls and the same schema validator.
++
++The patch carries typed native terminal evidence through an additive provider stream. It uses the ACP terminal stop reason, final text after the last tool activity, and a tool ledger; EOF, refusal, truncation, failure, unresolved tools or invalid JSON do not imply success. Strict native parsing rejects duplicate keys, mixed prose/documents, precision-changing number normalization, excessive size/depth and external schema references. No model-based repair or fake tool acknowledgement is used.
++
++The existing response schema is preserved. The delegated recipe instructions and schema are supplied in actual native prompt content, since ACP ignores Goose's system/tool channels. Validated reports are persisted as versioned receipts bound to session, task/recipe, model/provider, working directory, mode and extension selection. Existing foreground subagent result delivery consumes receipts. An interrupted attempt without a receipt is blocked for reconciliation instead of being replayed automatically. Cancelled completion commit cannot be restored as success.
++
++Cancellation on dropped native stream sends `session/cancel` while the prompt is active, then allows a bounded drain. Failure to drain stops the connection; side effects remain uncertain. Notification/terminal sends use bounded backpressure. SDK notification handlers run in receive order; the transport saturation fixture checks the completion ordering. Stream termination does not prove arbitrary subprocess quiescence or roll back file effects; the disposable proof independently observes its own process scope.
++
++## Verification
++
++Use the repository-pinned Rust 1.99.0 toolchain and locked Cargo dependencies. Goose's unit test suite requires `scheduler,tree-sitter` even for focused filters. Native and regression tests use fake providers/ACP protocol fixtures, not Ollama or authenticated native inference. See the task-level regression logs and result manifest for actual outcomes; do not infer a pass from this document.
++
++The live qualification, only after offline checks, is the separately authorized 8-parent-turn / 4-child-Goose-turn / 10-minute create → update → different-native-agent Read verification fixture. It uses existing subscription connections and applies each native worker sandbox once. The host seeds the sentinel only; it does not perform the target-file operations. Native inner model requests are distinct from Goose turns and must not be mislabeled as independently capped by the Goose counter.
++
++The general goose-self-test recipe's feature inventory is updated, but running that broad model-driven suite would exceed the authorized live budget. Use the focused offline fixtures plus the bounded approved live proof instead.
++
++## Upstream and upkeep
++
++The provider stream API is additive but touches published GDK crate surfaces. Review that API, native request preparation, cancellation/transport ordering, receipt persistence and foreground delivery together. A small schema-deletion-only patch is insufficient. Draft upstream PR #12778 may change these seams; do not merge or duplicate its backend redesign without review.
++
++Upstream issue status/design must be reconciled before any public PR. Repository AGENTS.md permits this local exploratory implementation without a Ready issue. No issue/PR posting is authorized.
++
++Rollback: unset the opt-in, or return to the unchanged stock executable. Keep the isolated patch checkout and receipt/evidence history. Do not overwrite a live executable. Old in-flight/receipt records remain audit data and require reconciliation if their bound contract changes; rollback must not redispatch work.
++
++Not solved: transparent native context recovery after host death, exactly-once external file effects, arbitrary daemon tracking, general CLI-provider structured completion, broad system-prompt parity, automatic repair, or production hardening. The initial slice deliberately fails on a reported tool error even if the native agent later claims to have repaired it.
++
++## Verified local checkpoint
++
++Current-source checks passed: 113 ACP-provider tests; 128 state-machine tests; seven builtin-output tests; focused strict-validation/receipt tests; four protocol transport fixtures; 17 shared inference/cancellation/tool tests; and 631 provider-type tests. The ACP bootstrap and subagent-runner regressions passed as well. Counts overlap between focused filters and broader groups; they are not additive totals. Formatting, strict Clippy across the selected crates/all targets, and the isolated CLI build passed. All-target lint includes `acp-http` because upstream test imports require it. No local-inference feature or real provider invocation was used by these checks.
++
++The earlier parallel ACP run was interrupted after one existing shared-config handoff test hung. That test passed in isolation, then all ACP tests passed serially. This is recorded as an interrupted run followed by successful serial checks, not a clean initial parallel pass.
+diff --git a/crates/goose-agent/src/inference.rs b/crates/goose-agent/src/inference.rs
+index a9fec4f..caf3cc4 100644
+--- a/crates/goose-agent/src/inference.rs
++++ b/crates/goose-agent/src/inference.rs
+@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
+ use anyhow::Result;
+ use async_trait::async_trait;
+ use futures::StreamExt;
+-use goose_provider_types::base::Provider;
++use goose_provider_types::base::{NativeTurnEvidence, Provider, ProviderEvent};
+ use goose_provider_types::conversation::message::{InferenceMetadata, Message, MessageContent};
+ use goose_provider_types::conversation::token_usage::ProviderUsage;
+ use goose_provider_types::conversation::{
+@@ -70,6 +70,9 @@ impl<S: MaybeSync> InferenceRequestPreparer<S> for IdentityInferenceRequestPrepa
+ 
+ pub trait InferenceEffect: From<Message> + MaybeSend + 'static {
+     fn record_usage(usage: ProviderUsage) -> Self;
++    fn native_terminal(_evidence: NativeTurnEvidence) -> Option<Self> {
++        None
++    }
+ }
+ 
+ pub const EMPTY_RESPONSE_MESSAGE: &str =
+@@ -207,6 +210,7 @@ pub fn record_chat_usage(span: &tracing::Span, usage: &ProviderUsage) {
+ 
+ #[derive(Default)]
+ struct InferenceOutput {
++    native_terminal: Option<NativeTurnEvidence>,
+     accumulator: Conversation,
+     additional_messages: Vec<Message>,
+     usage: Vec<ProviderUsage>,
+@@ -337,6 +341,7 @@ impl<'a, S: MaybeSync, E: InferenceEffect> InferenceRunner<'a, S, E> {
+             .map(E::from)
+             .collect();
+         effects.extend(output.usage.into_iter().map(E::record_usage));
++        effects.extend(output.native_terminal.and_then(E::native_terminal));
+         effects.extend(output.accumulator.into_iter().map(E::from));
+         effects
+     }
+@@ -444,7 +449,7 @@ impl<S: MaybeSync, E: InferenceEffect> Inference<S, E> for InferenceRunner<'_, S
+             let attempt_start = self.output().usage.len();
+             let stream = self
+                 .provider
+-                .stream(
++                .stream_events(
+                     &self.model_config,
+                     &system_prompt,
+                     conversation_for_provider.messages(),
+@@ -475,8 +480,19 @@ impl<S: MaybeSync, E: InferenceEffect> Inference<S, E> for InferenceRunner<'_, S
+             let mut tool_request_ids = HashSet::new();
+             while let Some(result) = stream.next().await {
+                 let (msg_opt, usage_opt) = match result {
+-                    Ok(chunk) => chunk,
+-                    Err(err) => return self.error_outcome(&err, emit),
++                    Ok(ProviderEvent::Chunk(message, usage)) => (message, usage.map(|usage| *usage)),
++                    Ok(ProviderEvent::NativeTerminal(evidence)) => {
++                        if self.output().native_terminal.is_some() {
++                            self.output().native_terminal.as_mut().unwrap().stop_reason = "duplicate_terminal".into();
++                            return self.error_outcome(&ProviderError::RequestFailed("Duplicate native terminal".into()), emit);
++                        }
++                        self.output().native_terminal = Some(evidence);
++                        continue;
++                    },
++                    Err(err) => {
++                        if let Some(evidence) = self.output().native_terminal.as_mut() { evidence.stop_reason = "stream_error".into(); }
++                        return self.error_outcome(&err, emit);
++                    },
+                 };
+                 if let Some(usage) = usage_opt {
+                     record_chat_usage(&tracing::Span::current(), &usage);
+@@ -485,6 +501,10 @@ impl<S: MaybeSync, E: InferenceEffect> Inference<S, E> for InferenceRunner<'_, S
+                     output.usage.push(usage);
+                 }
+                 if let Some(mut chunk) = msg_opt {
++                    if self.output().native_terminal.is_some() {
++                        self.output().native_terminal.as_mut().unwrap().stop_reason = "post_terminal_update".into();
++                        return self.error_outcome(&ProviderError::RequestFailed("Native content after terminal response".into()), emit);
++                    }
+                     if let Some(inference) = &inference {
+                         chunk = chunk.with_inference_if_assistant(inference.clone());
+                     }
+@@ -511,7 +531,7 @@ impl<S: MaybeSync, E: InferenceEffect> Inference<S, E> for InferenceRunner<'_, S
+                     .any(|message| message.metadata.output_token_limit_reached)
+                     && output.accumulator.iter().all(is_empty_response)
+             };
+-            if !empty_output || successful_tool_response || emit.cancel_token().is_cancelled() {
++            if !empty_output || self.output().native_terminal.is_some() || successful_tool_response || emit.cancel_token().is_cancelled() {
+                 break empty_output;
+             }
+             self.output().accumulator.clear();
+diff --git a/crates/goose-agent/tests/native_terminal.rs b/crates/goose-agent/tests/native_terminal.rs
+new file mode 100644
+index 0000000..b9a82fc
+--- /dev/null
++++ b/crates/goose-agent/tests/native_terminal.rs
+@@ -0,0 +1,110 @@
++use async_trait::async_trait;
++use goose_agent::inference::{InferenceEffect, InferenceRunner};
++use goose_agent::operation::{Emitter, Inference, InferenceInput, OperationResult};
++use goose_provider_types::base::{
++    MessageStream, NativeTurnEvidence, Provider, ProviderEvent, ProviderEventStream,
++};
++use goose_provider_types::conversation::{
++    message::Message, token_usage::ProviderUsage, Conversation,
++};
++use goose_provider_types::errors::ProviderError;
++use goose_provider_types::model::ModelConfig;
++use std::sync::{Arc, Mutex};
++
++struct Fixture(Mutex<Option<Vec<Result<ProviderEvent, ProviderError>>>>);
++#[async_trait]
++impl Provider for Fixture {
++    fn get_name(&self) -> &str {
++        "native-fixture"
++    }
++    fn supports_native_completion(&self) -> bool {
++        true
++    }
++    async fn stream(
++        &self,
++        _: &ModelConfig,
++        _: &str,
++        _: &[Message],
++        _: &[rmcp::model::Tool],
++    ) -> Result<MessageStream, ProviderError> {
++        unreachable!()
++    }
++    async fn stream_events(
++        &self,
++        _: &ModelConfig,
++        _: &str,
++        _: &[Message],
++        _: &[rmcp::model::Tool],
++    ) -> Result<ProviderEventStream, ProviderError> {
++        Ok(Box::pin(futures::stream::iter(
++            self.0.lock().unwrap().take().unwrap(),
++        )))
++    }
++}
++enum Effect {
++    Message,
++    Usage,
++    Terminal(NativeTurnEvidence),
++}
++impl From<Message> for Effect {
++    fn from(_: Message) -> Self {
++        Self::Message
++    }
++}
++impl InferenceEffect for Effect {
++    fn record_usage(_: ProviderUsage) -> Self {
++        Self::Usage
++    }
++    fn native_terminal(e: NativeTurnEvidence) -> Option<Self> {
++        Some(Self::Terminal(e))
++    }
++}
++fn terminal() -> ProviderEvent {
++    ProviderEvent::NativeTerminal(NativeTurnEvidence {
++        attempt_id: "attempt".into(),
++        provider_session_id: "session".into(),
++        stop_reason: "end_turn".into(),
++        final_text: "{}".into(),
++        tool_error: false,
++        pending_tools: false,
++        final_message_id: None,
++        final_message_phase: None,
++        tool_observation: goose_provider_types::base::NativeToolObservation::ObservedSuccess,
++    })
++}
++
++#[tokio::test]
++async fn native_terminal_cannot_hide_later_error_or_duplicate_or_content() {
++    for (last, expected) in [
++        (
++            Err(ProviderError::RequestFailed("transport broke".into())),
++            "stream_error",
++        ),
++        (Ok(terminal()), "duplicate_terminal"),
++        (
++            Ok(ProviderEvent::Chunk(
++                Some(Message::assistant().with_text("late")),
++                None,
++            )),
++            "post_terminal_update",
++        ),
++    ] {
++        let provider = Arc::new(Fixture(Mutex::new(Some(vec![Ok(terminal()), last]))));
++        let runner = InferenceRunner::<(), Effect>::new(provider, ModelConfig::new("fixture"));
++        let conversation = Conversation::new_unvalidated([Message::user().with_text("task")]);
++        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
++        let emit = Emitter::new(tx, tokio_util::sync::CancellationToken::new());
++        let result = runner
++            .infer(&(), &conversation, InferenceInput::default(), &emit)
++            .await
++            .unwrap();
++        let OperationResult::Applied(step) = result else {
++            panic!("applied inference expected")
++        };
++        let reason = step.effects.into_iter().find_map(|effect| match effect {
++            Effect::Terminal(e) => Some(e.stop_reason),
++            _ => None,
++        });
++        assert_eq!(reason.as_deref(), Some(expected));
++    }
++}
+diff --git a/crates/goose-provider-types/src/base.rs b/crates/goose-provider-types/src/base.rs
+index 4a6309b..d1ebef9 100644
+--- a/crates/goose-provider-types/src/base.rs
++++ b/crates/goose-provider-types/src/base.rs
+@@ -347,6 +347,43 @@ pub type MessageStream = Pin<
+ pub type MessageStream =
+     Pin<Box<dyn Stream<Item = Result<(Option<Message>, Option<ProviderUsage>), ProviderError>>>>;
+ 
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum NativeToolObservation {
++    #[default]
++    Unobservable,
++    NoToolsObserved,
++    ObservedSuccess,
++    ObservedFailure,
++}
++
++#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
++pub struct NativeTurnEvidence {
++    pub attempt_id: String,
++    pub provider_session_id: String,
++    pub stop_reason: String,
++    pub final_text: String,
++    pub tool_error: bool,
++    pub pending_tools: bool,
++    #[serde(default)]
++    pub final_message_id: Option<String>,
++    #[serde(default)]
++    pub final_message_phase: Option<String>,
++    #[serde(default)]
++    pub tool_observation: NativeToolObservation,
++}
++
++pub enum ProviderEvent {
++    Chunk(Option<Message>, Option<Box<ProviderUsage>>),
++    NativeTerminal(NativeTurnEvidence),
++}
++
++#[cfg(not(target_arch = "wasm32"))]
++pub type ProviderEventStream =
++    Pin<Box<dyn Stream<Item = Result<ProviderEvent, ProviderError>> + Send>>;
++#[cfg(target_arch = "wasm32")]
++pub type ProviderEventStream = Pin<Box<dyn Stream<Item = Result<ProviderEvent, ProviderError>>>>;
++
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+ pub enum PermissionRouting {
+     ActionRequired,
+@@ -538,6 +575,27 @@ pub trait Provider: MaybeSend + MaybeSync {
+         tools: &[Tool],
+     ) -> Result<MessageStream, ProviderError>;
+ 
++    fn supports_native_completion(&self) -> bool {
++        false
++    }
++
++    async fn stream_events(
++        &self,
++        model_config: &ModelConfig,
++        system: &str,
++        messages: &[Message],
++        tools: &[Tool],
++    ) -> Result<ProviderEventStream, ProviderError> {
++        use futures::StreamExt;
++        Ok(Box::pin(
++            self.stream(model_config, system, messages, tools)
++                .await?
++                .map(|chunk| {
++                    chunk.map(|(message, usage)| ProviderEvent::Chunk(message, usage.map(Box::new)))
++                }),
++        ))
++    }
++
+     async fn complete(
+         &self,
+         model_config: &ModelConfig,
+diff --git a/crates/goose/src/acp/provider.rs b/crates/goose/src/acp/provider.rs
+index f71c356..57bcf7a 100644
+--- a/crates/goose/src/acp/provider.rs
++++ b/crates/goose/src/acp/provider.rs
+@@ -1,10 +1,10 @@
+ use agent_client_protocol::schema::v1::{
+-    Annotations as AcpAnnotations, ClientCapabilities, CloseSessionRequest, ContentBlock,
+-    ContentChunk, EnvVariable, HttpHeader, ImageContent, InitializeRequest, InitializeResponse,
+-    LoadSessionRequest, McpCapabilities, McpServer, McpServerHttp, McpServerStdio,
+-    NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, RequestPermissionOutcome,
+-    RequestPermissionRequest, RequestPermissionResponse, Role as AcpRole, SessionConfigKind,
+-    SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOption,
++    Annotations as AcpAnnotations, CancelNotification, ClientCapabilities, CloseSessionRequest,
++    ContentBlock, ContentChunk, EnvVariable, HttpHeader, ImageContent, InitializeRequest,
++    InitializeResponse, LoadSessionRequest, McpCapabilities, McpServer, McpServerHttp,
++    McpServerStdio, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
++    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, Role as AcpRole,
++    SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOption,
+     SessionConfigSelectOptions, SessionId, SessionModeState, SessionNotification, SessionUpdate,
+     SetSessionConfigOptionRequest, SetSessionModeRequest, SetSessionModeResponse, StopReason,
+     TextContent, ToolCallContent, ToolCallStatus, ToolKind,
+@@ -38,10 +38,14 @@ use crate::config::{Config, ExtensionConfig, GooseMode};
+ use crate::conversation::message::{Message, MessageContent, TOOL_META_EXTERNAL_DISPATCH_KEY};
+ use crate::permission::permission_confirmation::PrincipalType;
+ use crate::permission::{Permission, PermissionConfirmation};
+-use crate::providers::base::{MessageStream, PermissionRouting, Provider};
++use crate::providers::base::{
++    MessageStream, NativeTurnEvidence, PermissionRouting, Provider, ProviderEvent,
++    ProviderEventStream,
++};
+ use crate::subprocess::configure_subprocess;
+ use crate::token_counter::create_token_counter;
+ use crate::utils::sanitize_unicode_tags;
++use futures::StreamExt;
+ use goose_providers::errors::ProviderError;
+ use goose_providers::model::ModelConfig;
+ use goose_providers::thinking::{
+@@ -59,6 +63,7 @@ const EFFORT_CONFIG_OPTION_ID: &str = "effort";
+ pub(super) const THINKING_EFFORT_PARAM: &str = "thinking_effort";
+ 
+ pub struct AcpProviderConfig {
++    pub native_completion: bool,
+     pub command: PathBuf,
+     pub args: Vec<String>,
+     pub env: Vec<(String, String)>,
+@@ -140,7 +145,12 @@ impl Drop for ClientLoopGuard {
+ 
+ #[derive(Debug)]
+ enum AcpUpdate {
+-    Text(TextContent),
++    UnsupportedContent,
++    Message {
++        text: TextContent,
++        id: Option<String>,
++        phase: Option<String>,
++    },
+     Thought(String),
+     ToolCallStart {
+         id: String,
+@@ -162,6 +172,28 @@ enum AcpUpdate {
+     Error(agent_client_protocol::Error),
+ }
+ 
++#[cfg(test)]
++impl AcpUpdate {
++    fn text(text: TextContent) -> Self {
++        Self::Message {
++            text,
++            id: None,
++            phase: None,
++        }
++    }
++}
++
++fn native_tool_signature(value: &impl serde::Serialize) -> Result<Vec<u8>, ProviderError> {
++    let bytes =
++        serde_json::to_vec(value).map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
++    if bytes.len() > 1024 * 1024 {
++        return Err(ProviderError::RequestFailed(
++            "Native tool update exceeds 1 MiB; effects uncertain".into(),
++        ));
++    }
++    Ok(<sha2::Sha256 as sha2::Digest>::digest(bytes).to_vec())
++}
++
+ /// Whether dropping the handoff memo could plausibly change the outcome. An agent that
+ /// rejected the very first update has told us nothing except that it disliked the prompt,
+ /// and the memo is the only part we added — but a spent account or a missing credential
+@@ -272,6 +304,7 @@ impl AcpSessionState {
+ }
+ 
+ pub struct AcpProvider {
++    native_completion: bool,
+     name: String,
+     goose_mode: Arc<Mutex<GooseMode>>,
+     mode_mapping: HashMap<GooseMode, Vec<String>>,
+@@ -384,6 +417,7 @@ impl AcpProvider {
+     ) -> Result<Self> {
+         let (tx, rx) = mpsc::channel(32);
+         let (init_tx, init_rx) = oneshot::channel();
++        let native_completion = config.native_completion;
+         let mode_mapping = config.mode_mapping.clone();
+         let model_config_option_id = config.model_config_option_id.clone();
+         let applied_model = config.model_config_option_id.as_ref().and_then(|id| {
+@@ -438,6 +472,7 @@ impl AcpProvider {
+         };
+ 
+         Ok(Self {
++            native_completion,
+             name,
+             goose_mode: goose_mode_shared,
+             mode_mapping,
+@@ -817,13 +852,38 @@ impl Provider for AcpProvider {
+         false
+     }
+ 
++    fn supports_native_completion(&self) -> bool {
++        self.native_completion
++    }
++
+     async fn stream(
++        &self,
++        model_config: &ModelConfig,
++        system: &str,
++        messages: &[Message],
++        tools: &[Tool],
++    ) -> Result<MessageStream, ProviderError> {
++        let events = self
++            .stream_events(model_config, system, messages, tools)
++            .await?;
++        Ok(Box::pin(events.filter_map(|event| async move {
++            match event {
++                Ok(ProviderEvent::Chunk(message, usage)) => {
++                    Some(Ok((message, usage.map(|usage| *usage))))
++                }
++                Ok(ProviderEvent::NativeTerminal(_)) => None,
++                Err(error) => Some(Err(error)),
++            }
++        })))
++    }
++
++    async fn stream_events(
+         &self,
+         model_config: &ModelConfig,
+         _system: &str,
+         messages: &[Message],
+         _tools: &[Tool],
+-    ) -> Result<MessageStream, ProviderError> {
++    ) -> Result<ProviderEventStream, ProviderError> {
+         let session_id = self.acp_session_id();
+ 
+         self.apply_model_if_changed(&model_config.model_name)
+@@ -909,7 +969,20 @@ impl Provider for AcpProvider {
+         let reject_all_tools = goose_mode == GooseMode::Chat;
+         let model_name = model_config.model_name.clone();
+ 
++        let require_terminal = self.native_completion;
++        let attempt_id = uuid::Uuid::new_v4().to_string();
++        let provider_session_id = self.acp_session_id().to_string();
+         Ok(Box::pin(try_stream! {
++            let mut final_text = String::new();
++            let mut final_message_id: Option<String> = None;
++            let mut final_message_phase: Option<String> = None;
++            let mut closed_messages = HashSet::new();
++            let mut unobservable_tools = false;
++            let mut pending_tools = HashSet::new();
++            let mut tool_starts = HashMap::new();
++            let mut tool_completions: HashMap<String, (Vec<u8>, bool)> = HashMap::new();
++            let mut tool_error = false;
++            let mut terminal_seen = false;
+             let mut suppress_text = false;
+             let mut bare_retry = bare_retry;
+             let mut updates_seen = 0usize;
+@@ -921,15 +994,42 @@ impl Provider for AcpProvider {
+             while let Some(update) = rx.recv().await {
+                 updates_seen += 1;
+                 match update {
+-                    AcpUpdate::Text(text) => {
++                    AcpUpdate::UnsupportedContent => {
++                        if require_terminal { Err(ProviderError::RequestFailed("Native response includes unsupported non-text content".into()))?; }
++                    }
++                    AcpUpdate::Message { text, id: None, phase: None } => {
++                        if require_terminal {
++                            if final_message_id.is_some() { Err(ProviderError::RequestFailed("Native message identity disappeared".into()))?; }
++                            final_text.push_str(&text.text);
++                        }
++                        if require_terminal && final_text.len() > 65536 { Err(ProviderError::RequestFailed("Native final response exceeds 64 KiB".into()))?; }
+                         if !suppress_text {
+                             let (id, ts) = text_run
+                                 .get_or_insert_with(fresh_text_run)
+                                 .clone();
+                             let message = acp_text_update_message(text, id, ts);
+-                            yield (Some(message), None);
++                            yield ProviderEvent::Chunk(Some(message), None);
+                         }
+                     }
++                    AcpUpdate::Message { text, id, phase } => {
++                        if require_terminal {
++                            if final_message_id != id {
++                                if closed_messages.len() >= 1024 { Err(ProviderError::RequestFailed("Native message identity limit exceeded".into()))?; }
++                                if let Some(previous) = final_message_id.take() { closed_messages.insert(previous); }
++                                if id.as_ref().is_some_and(|id| closed_messages.contains(id)) {
++                                    Err(ProviderError::RequestFailed("Interleaved native message identities".into()))?;
++                                }
++                                final_text.clear();
++                                text_run = None;
++                            }
++                            final_message_id = id;
++                            final_message_phase = phase.clone();
++                            if phase.as_deref() != Some("commentary") { final_text.push_str(&text.text); }
++                            if final_text.len() > 65536 { Err(ProviderError::RequestFailed("Native final response exceeds 64 KiB".into()))?; }
++                        }
++                        let (id, ts) = text_run.get_or_insert_with(fresh_text_run).clone();
++                        yield ProviderEvent::Chunk(Some(acp_text_update_message(text, id, ts)), None);
++                    }
+                     AcpUpdate::Thought(text) => {
+                         let (id, ts) = thought_run
+                             .get_or_insert_with(fresh_text_run)
+@@ -938,9 +1038,22 @@ impl Provider for AcpProvider {
+                             .with_thinking(text, "")
+                             .with_visibility(true, false)
+                             .with_id(id);
+-                        yield (Some(message), None);
++                        yield ProviderEvent::Chunk(Some(message), None);
+                     }
+                     AcpUpdate::ToolCallStart { id, name, kind, raw_input } => {
++                        if require_terminal {
++                        if tool_starts.len() >= 1024 { Err(ProviderError::RequestFailed("Native tool ledger exceeds 1024 entries; effects uncertain".into()))?; }
++                        let signature = native_tool_signature(&(&name, &kind, &raw_input))?;
++                        if let Some(previous) = tool_starts.insert(id.clone(), signature.clone()) {
++                            unobservable_tools |= previous != signature;
++                            continue;
++                        }
++                        }
++                        unobservable_tools |= raw_input.as_ref().and_then(|v| v.get("goose.native.toolObservation")).and_then(serde_json::Value::as_str) == Some("unobservable");
++                        final_text.clear();
++                        final_message_id = None;
++                        final_message_phase = None;
++                        pending_tools.insert(id.clone());
+                         text_run = None;
+                         thought_run = None;
+                         if reject_all_tools {
+@@ -965,7 +1078,7 @@ impl Provider for AcpProvider {
+                                 None,
+                                 tool_meta,
+                             );
+-                            yield (Some(message), None);
++                            yield ProviderEvent::Chunk(Some(message), None);
+                         }
+                     }
+                     AcpUpdate::ToolCallComplete {
+@@ -974,6 +1087,26 @@ impl Provider for AcpProvider {
+                         content,
+                         is_error,
+                     } => {
++                        if require_terminal {
++                            if let Some(error) = crate::agents::native_boundary::from_output(raw_output.as_ref(), &id) {
++                                Err(ProviderError::RequestFailed(error))?;
++                            }
++                        }
++                        if require_terminal {
++                        if tool_completions.len() >= 1024 { Err(ProviderError::RequestFailed("Native tool ledger exceeds 1024 entries; effects uncertain".into()))?; }
++                        let signature = native_tool_signature(&(&raw_output, &content, is_error))?;
++                        if let Some((previous, previous_error)) = tool_completions.get(&id) {
++                            if raw_output.is_none() && content.as_ref().is_none_or(Vec::is_empty) && *previous_error == is_error { continue; }
++                            unobservable_tools |= previous != &signature;
++                            tool_error |= is_error;
++                            continue;
++                        }
++                        tool_completions.insert(id.clone(), (signature, is_error));
++                        }
++                        final_text.clear();
++                        pending_tools.remove(&id);
++                        tool_error |= is_error;
++                        unobservable_tools |= raw_output.as_ref().and_then(|v| v.get("goose.native.toolObservation")).and_then(serde_json::Value::as_str) == Some("unobservable");
+                         text_run = None;
+                         thought_run = None;
+                         if rejected_tool_calls.remove(&id) {
+@@ -985,13 +1118,13 @@ impl Provider for AcpProvider {
+                                 let message = Message::assistant()
+                                     .with_text("Tool call was denied.")
+                                     .with_generated_id();
+-                                yield (Some(message), None);
++                                yield ProviderEvent::Chunk(Some(message), None);
+                             } else {
+                                 let denial = vec![RmcpContent::text("Tool call was denied.")];
+                                 let result = CallToolResult::error(denial);
+                                 let message =
+                                     Message::user().with_tool_response(id, Ok(result));
+-                                yield (Some(message), None);
++                                yield ProviderEvent::Chunk(Some(message), None);
+                             }
+                         } else {
+                             let result_content =
+@@ -1002,7 +1135,7 @@ impl Provider for AcpProvider {
+                                 CallToolResult::success(result_content)
+                             };
+                             let message = Message::user().with_tool_response(id, Ok(result));
+-                            yield (Some(message), None);
++                            yield ProviderEvent::Chunk(Some(message), None);
+                         }
+                     }
+                     AcpUpdate::PermissionRequest { request, response_tx } => {
+@@ -1010,9 +1143,13 @@ impl Provider for AcpProvider {
+                         thought_run = None;
+                         if let Some(decision) = permission_decision_from_mode(goose_mode) {
+                             if decision.should_record_rejection() {
++                                tool_error = true;
+                                 rejected_tool_calls.insert(request.tool_call.tool_call_id.0.to_string());
+                             }
+                             let _ = response_tx.send(map_permission_response(&request, decision));
++                            if require_terminal && decision.should_record_rejection() {
++                                Err(ProviderError::RequestFailed(crate::agents::native_boundary::denial(&request.tool_call.tool_call_id.0)))?;
++                            }
+                             continue;
+                         }
+ 
+@@ -1025,7 +1162,7 @@ impl Provider for AcpProvider {
+                             .insert(request_id.clone(), tx);
+ 
+                         if let Some(action_required) = build_action_required_message(&request) {
+-                            yield (Some(action_required), None);
++                            yield ProviderEvent::Chunk(Some(action_required), None);
+                         }
+ 
+                         let confirmation = rx.await.unwrap_or(PermissionConfirmation {
+@@ -1037,11 +1174,28 @@ impl Provider for AcpProvider {
+ 
+                         let decision = PermissionDecision::from(confirmation.permission);
+                         if decision.should_record_rejection() {
++                            tool_error = true;
+                             rejected_tool_calls.insert(request.tool_call.tool_call_id.0.to_string());
+                         }
+                         let _ = response_tx.send(map_permission_response(&request, decision));
++                        if require_terminal && decision.should_record_rejection() {
++                            Err(ProviderError::RequestFailed(crate::agents::native_boundary::denial(&request.tool_call.tool_call_id.0)))?;
++                        }
+                     }
+                     AcpUpdate::Complete(reason, usage) => {
++                        terminal_seen = true;
++                        let stop_reason = serde_json::to_value(reason).map_err(|e| ProviderError::RequestFailed(e.to_string()))?.as_str().unwrap_or("unknown").to_string();
++                        yield ProviderEvent::NativeTerminal(NativeTurnEvidence {
++                            attempt_id: attempt_id.clone(), provider_session_id: provider_session_id.clone(),
++                            stop_reason, final_text: final_text.clone(), tool_error,
++                            final_message_id: final_message_id.clone(), final_message_phase: final_message_phase.clone(),
++                            tool_observation: if tool_error {
++                                goose_providers::base::NativeToolObservation::ObservedFailure
++                            } else if unobservable_tools || !pending_tools.is_empty() { goose_providers::base::NativeToolObservation::Unobservable
++                            } else if tool_starts.is_empty() { goose_providers::base::NativeToolObservation::NoToolsObserved
++                            } else { goose_providers::base::NativeToolObservation::ObservedSuccess },
++                            pending_tools: !pending_tools.is_empty(),
++                        });
+                         // Prefer retrying context over silently losing it. A harness may have
+                         // ingested the memo before cancelling or refusing, so a retry can duplicate
+                         // it, but treating an unprocessed handoff as delivered is unrecoverable.
+@@ -1059,7 +1213,7 @@ impl Provider for AcpProvider {
+                                     Some(usage.total_tokens as i32),
+                                 ),
+                             );
+-                            yield (None, Some(provider_usage));
++                            yield ProviderEvent::Chunk(None, Some(Box::new(provider_usage)));
+                         }
+                         break;
+                     }
+@@ -1096,6 +1250,7 @@ impl Provider for AcpProvider {
+                     }
+                 }
+             }
++            if require_terminal && !terminal_seen { Err(ProviderError::RequestFailed("ACP stream ended without terminal response; effects uncertain".into()))?; }
+         }))
+     }
+ 
+@@ -1260,24 +1415,39 @@ impl AcpClientLoop {
+                             }
+                             _ => {}
+                         }
+-                        if let Some(tx) = prompt_response_tx
++                        let sender = prompt_response_tx
+                             .lock()
+                             .ok()
+-                            .as_ref()
+-                            .and_then(|g| g.as_ref())
+-                        {
++                            .and_then(|g| g.as_ref().cloned());
++                        if let Some(tx) = sender {
+                             match notification.update {
+                                 SessionUpdate::AgentMessageChunk(ContentChunk {
+                                     content: ContentBlock::Text(text),
++                                    message_id,
++                                    meta,
+                                     ..
+                                 }) => {
+-                                    let _ = tx.try_send(AcpUpdate::Text(text));
++                                    let phase = meta
++                                        .as_ref()
++                                        .and_then(|m| m.get("goose.native.messagePhase"))
++                                        .and_then(serde_json::Value::as_str)
++                                        .map(str::to_owned);
++                                    let _ = tx
++                                        .send(AcpUpdate::Message {
++                                            text,
++                                            id: message_id.map(|id| id.0.to_string()),
++                                            phase,
++                                        })
++                                        .await;
++                                }
++                                SessionUpdate::AgentMessageChunk(_) => {
++                                    let _ = tx.send(AcpUpdate::UnsupportedContent).await;
+                                 }
+                                 SessionUpdate::AgentThoughtChunk(ContentChunk {
+                                     content: ContentBlock::Text(TextContent { text, .. }),
+                                     ..
+                                 }) => {
+-                                    let _ = tx.try_send(AcpUpdate::Thought(text));
++                                    let _ = tx.send(AcpUpdate::Thought(text)).await;
+                                 }
+                                 SessionUpdate::ToolCall(tool_call) => {
+                                     let id = tool_call.tool_call_id.0.to_string();
+@@ -1309,27 +1479,31 @@ impl AcpClientLoop {
+                                     // tool_meta for stable categorization, and the
+                                     // goose.external_dispatch marker keeps `name` off the
+                                     // agent loop's routing/auth paths.
+-                                    let _ = tx.try_send(AcpUpdate::ToolCallStart {
+-                                        id: id.clone(),
+-                                        name: tool_call.title.clone(),
+-                                        kind: tool_call.kind,
+-                                        raw_input: tool_call.raw_input.clone(),
+-                                    });
++                                    let _ = tx
++                                        .send(AcpUpdate::ToolCallStart {
++                                            id: id.clone(),
++                                            name: tool_call.title.clone(),
++                                            kind: tool_call.kind,
++                                            raw_input: tool_call.raw_input.clone(),
++                                        })
++                                        .await;
+                                     if let Some(accumulated) = synchronous_accumulated {
+                                         let content = if accumulated.content.is_empty() {
+                                             None
+                                         } else {
+                                             Some(accumulated.content)
+                                         };
+-                                        let _ = tx.try_send(AcpUpdate::ToolCallComplete {
+-                                            id,
+-                                            raw_output: accumulated.raw_output,
+-                                            content,
+-                                            is_error: matches!(
+-                                                initial_status,
+-                                                ToolCallStatus::Failed
+-                                            ),
+-                                        });
++                                        let _ = tx
++                                            .send(AcpUpdate::ToolCallComplete {
++                                                id,
++                                                raw_output: accumulated.raw_output,
++                                                content,
++                                                is_error: matches!(
++                                                    initial_status,
++                                                    ToolCallStatus::Failed
++                                                ),
++                                            })
++                                            .await;
+                                     }
+                                 }
+                                 SessionUpdate::ToolCallUpdate(update) => {
+@@ -1367,12 +1541,14 @@ impl AcpClientLoop {
+                                         } else {
+                                             Some(accumulated.content)
+                                         };
+-                                        let _ = tx.try_send(AcpUpdate::ToolCallComplete {
+-                                            id,
+-                                            raw_output: accumulated.raw_output,
+-                                            content,
+-                                            is_error: matches!(status, ToolCallStatus::Failed),
+-                                        });
++                                        let _ = tx
++                                            .send(AcpUpdate::ToolCallComplete {
++                                                id,
++                                                raw_output: accumulated.raw_output,
++                                                content,
++                                                is_error: matches!(status, ToolCallStatus::Failed),
++                                            })
++                                            .await;
+                                     }
+                                 }
+                                 _ => {}
+@@ -1401,10 +1577,11 @@ impl AcpClientLoop {
+                             return Err(agent_client_protocol::Error::internal_error());
+                         }
+ 
+-                        tx.try_send(AcpUpdate::PermissionRequest {
++                        tx.send(AcpUpdate::PermissionRequest {
+                             request: Box::new(request),
+                             response_tx,
+                         })
++                        .await
+                         .map_err(|_| agent_client_protocol::Error::internal_error())?;
+ 
+                         let response = response_rx.await.unwrap_or_else(|_| {
+@@ -1701,21 +1878,33 @@ async fn handle_requests(
+             } => {
+                 *prompt_response_tx.lock().unwrap() = Some(response_tx.clone());
+ 
+-                let response: Result<PromptResponse, _> = cx
+-                    .send_request(PromptRequest::new(session_id, content))
+-                    .block_task()
+-                    .await;
++                let prompt = cx
++                    .send_request(PromptRequest::new(session_id.clone(), content))
++                    .block_task();
++                tokio::pin!(prompt);
++                let response: Result<PromptResponse, _> = tokio::select! {
++                    response = &mut prompt => response,
++                    _ = response_tx.closed() => {
++                        cx.send_notification(CancelNotification::new(session_id))?;
++                        match tokio::time::timeout(std::time::Duration::from_secs(5), &mut prompt).await {
++                            Ok(response) => response,
++                            Err(_) => return Err(agent_client_protocol::Error::internal_error()),
++                        }
++                    }
++                };
+ 
+                 match response {
+                     Ok(r) => {
+                         log_undelivered(
+-                            response_tx.try_send(AcpUpdate::Complete(r.stop_reason, r.usage)),
++                            response_tx
++                                .send(AcpUpdate::Complete(r.stop_reason, r.usage))
++                                .await,
+                             AGENT_METHOD_NAMES.session_prompt,
+                         );
+                     }
+                     Err(e) => {
+                         log_undelivered(
+-                            response_tx.try_send(AcpUpdate::Error(e)),
++                            response_tx.send(AcpUpdate::Error(e)).await,
+                             AGENT_METHOD_NAMES.session_prompt,
+                         );
+                     }
+@@ -2518,6 +2707,7 @@ mod tests {
+     ) -> (AcpProvider, ModelConfig) {
+         (
+             AcpProvider {
++                native_completion: false,
+                 name: "acp-test".to_string(),
+                 goose_mode: Arc::new(Mutex::new(GooseMode::Auto)),
+                 mode_mapping: HashMap::new(),
+@@ -3987,6 +4177,7 @@ mod tests {
+         session_mode_id: Option<String>,
+     ) -> AcpProviderConfig {
+         AcpProviderConfig {
++            native_completion: false,
+             command: PathBuf::new(),
+             args: vec![],
+             env: vec![],
+@@ -4726,4 +4917,187 @@ mod tests {
+             );
+         }
+     }
++    async fn native_evidence_fixture(
++        updates: Vec<AcpUpdate>,
++    ) -> Result<NativeTurnEvidence, ProviderError> {
++        let (tx, mut requests) = mpsc::channel(1);
++        let (mut provider, model) = test_provider_with_tx(Some(tx));
++        provider.native_completion = true;
++        let mut stream = provider
++            .stream_events(&model, "", &[Message::user().with_text("fixture")], &[])
++            .await?;
++        let response_tx = match requests.recv().await.unwrap() {
++            ClientRequest::Prompt { response_tx, .. } => response_tx,
++            _ => panic!("prompt expected"),
++        };
++        tokio::spawn(async move {
++            for update in updates {
++                if response_tx.send(update).await.is_err() {
++                    break;
++                }
++            }
++        });
++        let mut terminal = None;
++        while let Some(event) = stream.next().await {
++            if let ProviderEvent::NativeTerminal(evidence) = event? {
++                terminal = Some(evidence);
++            }
++        }
++        terminal.ok_or_else(|| ProviderError::RequestFailed("Missing terminal".into()))
++    }
++
++    #[tokio::test]
++    async fn native_completion_rejects_eof_without_terminal() {
++        assert!(
++            native_evidence_fixture(vec![AcpUpdate::text(TextContent::new("{}"))])
++                .await
++                .is_err()
++        );
++    }
++
++    #[tokio::test]
++    async fn native_completion_tool_errors_and_pending_are_preserved() {
++        for failed in [true, false] {
++            let start = AcpUpdate::ToolCallStart {
++                id: "tool".into(),
++                name: "read".into(),
++                kind: ToolKind::Read,
++                raw_input: None,
++            };
++            let mut updates = vec![AcpUpdate::text(TextContent::new("early JSON")), start];
++            if failed {
++                updates.push(AcpUpdate::ToolCallComplete {
++                    id: "tool".into(),
++                    raw_output: None,
++                    content: None,
++                    is_error: true,
++                });
++            }
++            updates.push(AcpUpdate::text(TextContent::new("final JSON")));
++            updates.push(AcpUpdate::Complete(StopReason::EndTurn, None));
++            let evidence = native_evidence_fixture(updates).await.unwrap();
++            assert_eq!(evidence.final_text, "final JSON");
++            assert_eq!(evidence.tool_error, failed);
++            assert_eq!(evidence.pending_tools, !failed);
++        }
++    }
++
++    #[tokio::test]
++    async fn native_completion_duplicate_tool_completion_is_idempotent() {
++        let start = AcpUpdate::ToolCallStart {
++            id: "tool".into(),
++            name: "read".into(),
++            kind: ToolKind::Read,
++            raw_input: None,
++        };
++        let complete = || AcpUpdate::ToolCallComplete {
++            id: "tool".into(),
++            raw_output: None,
++            content: None,
++            is_error: false,
++        };
++        let evidence = native_evidence_fixture(vec![
++            start,
++            complete(),
++            AcpUpdate::text(TextContent::new("{}")),
++            complete(),
++            AcpUpdate::Complete(StopReason::EndTurn, None),
++        ])
++        .await
++        .unwrap();
++        assert_eq!(evidence.final_text, "{}");
++        assert!(!evidence.tool_error);
++        assert!(!evidence.pending_tools);
++    }
++    #[tokio::test]
++    async fn native_completion_rejects_unsupported_response_content() {
++        assert!(native_evidence_fixture(vec![AcpUpdate::UnsupportedContent])
++            .await
++            .is_err());
++    }
++    fn named_text(id: &str, phase: Option<&str>, text: &str) -> AcpUpdate {
++        AcpUpdate::Message {
++            text: TextContent::new(text),
++            id: Some(id.into()),
++            phase: phase.map(str::to_owned),
++        }
++    }
++    #[tokio::test]
++    async fn native_completion_selects_final_message_not_commentary() {
++        let e = native_evidence_fixture(vec![
++            named_text("comment", Some("commentary"), "I will update."),
++            named_text("final", Some("final_answer"), "{\"success\":"),
++            named_text("final", Some("final_answer"), "false}"),
++            AcpUpdate::Complete(StopReason::EndTurn, None),
++        ])
++        .await
++        .unwrap();
++        assert_eq!(e.final_text, "{\"success\":false}");
++        assert_eq!(e.final_message_id.as_deref(), Some("final"));
++        assert_eq!(e.final_message_phase.as_deref(), Some("final_answer"));
++        assert_eq!(
++            e.tool_observation,
++            goose_providers::base::NativeToolObservation::NoToolsObserved
++        );
++    }
++    #[tokio::test]
++    async fn native_completion_uses_message_ids_without_vendor_phase() {
++        let e = native_evidence_fixture(vec![
++            named_text("a", None, "commentary"),
++            named_text("b", None, "{}"),
++            AcpUpdate::Complete(StopReason::EndTurn, None),
++        ])
++        .await
++        .unwrap();
++        assert_eq!(e.final_text, "{}");
++    }
++    #[tokio::test]
++    async fn native_completion_rejects_interleaved_or_missing_identity() {
++        for last in [
++            named_text("a", None, "late"),
++            AcpUpdate::text(TextContent::new("anonymous")),
++        ] {
++            assert!(native_evidence_fixture(vec![
++                named_text("a", None, "one"),
++                named_text("b", None, "two"),
++                last
++            ])
++            .await
++            .is_err());
++        }
++    }
++    #[tokio::test]
++    async fn native_completion_marks_opaque_tool_results_unobservable() {
++        for is_error in [false, true] {
++            let e = native_evidence_fixture(vec![
++                AcpUpdate::ToolCallStart {
++                    id: "exec".into(),
++                    name: "unsupported exec".into(),
++                    kind: ToolKind::Other,
++                    raw_input: None,
++                },
++                AcpUpdate::ToolCallComplete {
++                    id: "exec".into(),
++                    raw_output: Some(
++                        serde_json::json!({"goose.native.toolObservation":"unobservable"}),
++                    ),
++                    content: None,
++                    is_error,
++                },
++                named_text("final", None, "{\"success\":true}"),
++                AcpUpdate::Complete(StopReason::EndTurn, None),
++            ])
++            .await
++            .unwrap();
++            assert_eq!(e.tool_error, is_error);
++            assert_eq!(
++                e.tool_observation,
++                if is_error {
++                    goose_providers::base::NativeToolObservation::ObservedFailure
++                } else {
++                    goose_providers::base::NativeToolObservation::Unobservable
++                }
++            );
++        }
++    }
+ }
+diff --git a/crates/goose/src/agents/final_output_tool.rs b/crates/goose/src/agents/final_output_tool.rs
+index a69574c..cfcd989 100644
+--- a/crates/goose/src/agents/final_output_tool.rs
++++ b/crates/goose/src/agents/final_output_tool.rs
+@@ -26,6 +26,33 @@ pub(crate) fn structured_output_unsupported_message(provider_name: &str) -> Stri
+     )
+ }
+ 
++pub(crate) fn validate_schema_output(
++    schema_value: &Value,
++    output: &Value,
++) -> Result<Value, String> {
++    let compiled_schema = match jsonschema::validator_for(schema_value) {
++        Ok(schema) => schema,
++        Err(e) => {
++            return Err(format!("Internal error: Failed to compile schema: {}", e));
++        }
++    };
++
++    let validation_errors: Vec<String> = compiled_schema
++        .iter_errors(output)
++        .map(|error| format!("- {}: {}", error.instance_path(), error))
++        .collect();
++
++    if validation_errors.is_empty() {
++        Ok(output.clone())
++    } else {
++        Err(format!(
++                "Validation failed:\n{}\n\nExpected format:\n{}\n\nPlease correct your output to match the expected JSON schema and try again.",
++                validation_errors.join("\n"),
++                serde_json::to_string_pretty(schema_value).unwrap_or_else(|_| "Invalid schema".to_string())
++            ))
++    }
++}
++
+ pub struct FinalOutputTool {
+     pub response: Response,
+     /// The final output collected for the user. It will be a single line string for easy script extraction from output.
+@@ -152,28 +179,7 @@ impl FinalOutputTool {
+     }
+ 
+     async fn validate_json_output(&self, output: &Value) -> Result<Value, String> {
+-        let compiled_schema =
+-            match jsonschema::validator_for(self.response.json_schema.as_ref().unwrap()) {
+-                Ok(schema) => schema,
+-                Err(e) => {
+-                    return Err(format!("Internal error: Failed to compile schema: {}", e));
+-                }
+-            };
+-
+-        let validation_errors: Vec<String> = compiled_schema
+-            .iter_errors(output)
+-            .map(|error| format!("- {}: {}", error.instance_path(), error))
+-            .collect();
+-
+-        if validation_errors.is_empty() {
+-            Ok(output.clone())
+-        } else {
+-            Err(format!(
+-                "Validation failed:\n{}\n\nExpected format:\n{}\n\nPlease correct your output to match the expected JSON schema and try again.",
+-                validation_errors.join("\n"),
+-                serde_json::to_string_pretty(self.response.json_schema.as_ref().unwrap()).unwrap_or_else(|_| "Invalid schema".to_string())
+-            ))
+-        }
++        validate_schema_output(self.response.json_schema.as_ref().unwrap(), output)
+     }
+ 
+     pub async fn execute_tool_call(&mut self, tool_call: CallToolRequestParams) -> ToolCallResult {
+diff --git a/crates/goose/src/agents/mod.rs b/crates/goose/src/agents/mod.rs
+index d3d21e5..d1c4cae 100644
+--- a/crates/goose/src/agents/mod.rs
++++ b/crates/goose/src/agents/mod.rs
+@@ -56,3 +56,6 @@ pub(crate) fn latest_provider_session_id<'a>(
+         .then_some(inference.provider_session_id.as_deref())
+         .flatten()
+ }
++
++pub(crate) mod native_boundary;
++pub(crate) mod native_completion;
+diff --git a/crates/goose/src/agents/native_boundary.rs b/crates/goose/src/agents/native_boundary.rs
+new file mode 100644
+index 0000000..3196393
+--- /dev/null
++++ b/crates/goose/src/agents/native_boundary.rs
+@@ -0,0 +1,80 @@
++//! Explicit native permission/scope errors that must cross coordinator boundaries.
++use serde_json::{json, Value};
++
++pub(crate) const PREFIX: &str = "GLG_NATIVE_BOUNDARY:";
++
++pub(crate) fn from_output(output: Option<&Value>, tool_call_id: &str) -> Option<String> {
++    let original = output?;
++    let boundary = original.get("goose.native.boundary")?;
++    let kind = boundary.get("kind")?.as_str()?;
++    if !matches!(kind, "permission_required" | "scope_required") {
++        return None;
++    }
++    boundary.get("message")?.as_str()?;
++    boundary.get("code")?.as_str()?;
++    Some(format!(
++        "{PREFIX}{}",
++        json!({
++            "schema_version": 1, "kind": kind, "source": "acp_tool",
++            "tool_call_id": tool_call_id, "error": boundary, "original_output": original,
++        })
++    ))
++}
++
++pub(crate) fn denial(tool_call_id: &str) -> String {
++    format!(
++        "{PREFIX}{}",
++        json!({"schema_version": 1,
++            "kind": "permission_required", "source": "acp_permission_decision",
++            "tool_call_id": tool_call_id,
++            "error": {"code": "permission_rejected", "message": "ACP permission decision rejected the requested action"},
++        })
++    )
++}
++
++pub(crate) fn is_boundary(reason: &str) -> bool {
++    let Some((_, payload)) = reason.split_once(PREFIX) else {
++        return false;
++    };
++    let Some(Ok(value)) = serde_json::Deserializer::from_str(payload)
++        .into_iter::<Value>()
++        .next()
++    else {
++        return false;
++    };
++    value["schema_version"] == 1
++        && matches!(
++            value["kind"].as_str(),
++            Some("permission_required" | "scope_required")
++        )
++        && value["error"].is_object()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn explicit_permission_and_scope_keep_original_error() {
++        for kind in ["permission_required", "scope_required"] {
++            let raw = json!({"goose.native.boundary": {"kind":kind,"code":"EPERM","message":"PermissionError: [Errno 1] Operation not permitted: pyvenv.cfg"},"exit_code":1});
++            let error = from_output(Some(&raw), "tool-42").unwrap();
++            let value: Value = serde_json::from_str(error.strip_prefix(PREFIX).unwrap()).unwrap();
++            assert_eq!(value["kind"], kind);
++            assert_eq!(value["original_output"], raw);
++            assert_eq!(value["tool_call_id"], "tool-42");
++        }
++    }
++    #[test]
++    fn missing_or_generic_failure_is_not_permission_evidence() {
++        for raw in [
++            json!({}),
++            json!({"exit_code":1}),
++            json!({"message":"permission may be missing"}),
++        ] {
++            assert!(from_output(Some(&raw), "tool").is_none());
++        }
++        assert!(from_output(None, "tool").is_none());
++        assert!(is_boundary(&denial("tool")));
++        assert!(!is_boundary("generic GLG_NATIVE_BOUNDARY:unknown"));
++    }
++}
+diff --git a/crates/goose/src/agents/native_completion.rs b/crates/goose/src/agents/native_completion.rs
+new file mode 100644
+index 0000000..a2cbe10
+--- /dev/null
++++ b/crates/goose/src/agents/native_completion.rs
+@@ -0,0 +1,497 @@
++use crate::providers::base::NativeTurnEvidence;
++use crate::session::Session;
++use anyhow::{bail, Result};
++use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
++use serde_json::Value;
++use sha2::{Digest, Sha256};
++use std::fmt;
++
++pub(crate) const RECEIPT: &str = "native_completion";
++
++pub(crate) fn binding(session: &Session) -> String {
++    let bytes = serde_json::to_vec(&(
++        "native-completion/4",
++        &session.id,
++        &session.recipe,
++        &session.provider_name,
++        &session.model_config,
++        &session.working_dir,
++        &session.goose_mode,
++        session
++            .extension_data
++            .get_extension_state("enabled_extensions", "v0"),
++    ))
++    .expect("session contract serializes");
++    Sha256::digest(bytes)
++        .iter()
++        .map(|byte| format!("{byte:02x}"))
++        .collect()
++}
++
++pub(crate) fn output_digest(output: &str) -> String {
++    Sha256::digest(output.as_bytes())
++        .iter()
++        .map(|byte| format!("{byte:02x}"))
++        .collect()
++}
++
++pub(crate) fn saved_result(session: &Session) -> Option<Result<String, String>> {
++    let receipt = session.extension_data.get_extension_state(RECEIPT, "v0")?;
++    if receipt.get("binding")?.as_str()? != binding(session) {
++        return Some(Err(
++            "Native completion contract changed; reconciliation required".into(),
++        ));
++    }
++    Some(match receipt.get("error").and_then(Value::as_str) {
++        Some(error) => Err(error.to_owned()),
++        None => match receipt.get("output").and_then(Value::as_str) {
++            Some(output)
++                if receipt.get("output_digest").and_then(Value::as_str)
++                    == Some(output_digest(output).as_str()) =>
++            {
++                Ok(output.to_owned())
++            }
++            _ => Err(
++                "Native receipt result digest is missing or mismatched; reconciliation required"
++                    .into(),
++            ),
++        },
++    })
++}
++
++pub(crate) fn validate(evidence: &NativeTurnEvidence, schema: &Value) -> Result<Value> {
++    if evidence.attempt_id.is_empty() || evidence.provider_session_id.is_empty() {
++        bail!("Native terminal identity is missing");
++    }
++    if evidence.stop_reason != "end_turn" {
++        bail!(
++            "Native turn stopped with {}; effects may be partial",
++            evidence.stop_reason
++        );
++    }
++    if evidence.tool_observation == goose_providers::base::NativeToolObservation::ObservedFailure {
++        bail!("Native tool execution reported failure; effects may be partial");
++    }
++    if evidence.final_message_phase.as_deref() == Some("commentary") {
++        bail!("Native final candidate is commentary, not a final answer");
++    }
++    if evidence.tool_error {
++        bail!("Native tool execution reported failure; effects may be partial");
++    }
++    if evidence.final_text.len() > 65536 {
++        bail!("Native final response exceeds 64 KiB");
++    }
++    depth(schema, 0)?;
++    reject_external_refs(schema)?;
++    let text = evidence.final_text.trim();
++    let text = if let Some(fenced) = text.strip_prefix("```json\n") {
++        fenced
++            .strip_suffix("```")
++            .ok_or_else(|| anyhow::anyhow!("Unclosed JSON fence"))?
++            .trim()
++    } else {
++        text
++    };
++    let mut parser = serde_json::Deserializer::from_str(text);
++    let StrictValue(value) = StrictValue::deserialize(&mut parser)?;
++    parser.end()?;
++    depth(&value, 0)?;
++    check_numbers(text)?;
++    crate::agents::final_output_tool::validate_schema_output(schema, &value)
++        .map_err(anyhow::Error::msg)?;
++    if value.get("success").and_then(Value::as_bool) == Some(false)
++        || value.get("verified").and_then(Value::as_bool) == Some(false)
++    {
++        bail!("Native report explicitly indicates unsuccessful work; inspect retained report");
++    }
++    Ok(value)
++}
++
++fn reject_external_refs(value: &Value) -> Result<()> {
++    match value {
++        Value::Object(map) => {
++            for (key, value) in map {
++                if matches!(key.as_str(), "$ref" | "$dynamicRef")
++                    && value.as_str().is_some_and(|s| !s.starts_with('#'))
++                {
++                    bail!("External schema references are unsupported for native completion");
++                }
++                reject_external_refs(value)?;
++            }
++        }
++        Value::Array(array) => {
++            for value in array {
++                reject_external_refs(value)?;
++            }
++        }
++        _ => (),
++    }
++    Ok(())
++}
++
++fn depth(value: &Value, level: usize) -> Result<()> {
++    if level > 64 {
++        bail!("Native JSON nesting exceeds 64");
++    }
++    match value {
++        Value::Object(map) => {
++            for value in map.values() {
++                depth(value, level + 1)?;
++            }
++        }
++        Value::Array(array) => {
++            for value in array {
++                depth(value, level + 1)?;
++            }
++        }
++        _ => (),
++    }
++    Ok(())
++}
++
++fn decimal(token: &str) -> Result<(bool, String, i64)> {
++    let negative = token.starts_with('-');
++    let token = token.trim_start_matches('-');
++    let (mantissa, exponent) = token.split_once(['e', 'E']).unwrap_or((token, "0"));
++    let mut exponent: i64 = exponent.parse()?;
++    let fractional = mantissa
++        .split_once('.')
++        .map_or(0, |(_, fraction)| fraction.len());
++    exponent -= fractional as i64;
++    let mut digits = mantissa.replace('.', "").trim_start_matches('0').to_owned();
++    while digits.ends_with('0') {
++        digits.pop();
++        exponent += 1;
++    }
++    if digits.is_empty() {
++        return Ok((false, "0".into(), 0));
++    }
++    Ok((negative, digits, exponent))
++}
++
++fn check_numbers(text: &str) -> Result<()> {
++    let bytes = text.as_bytes();
++    let mut index = 0;
++    let mut quoted = false;
++    while index < bytes.len() {
++        match bytes[index] {
++            b'\\' if quoted => {
++                index += 2;
++                continue;
++            }
++            b'"' => quoted = !quoted,
++            b'-' | b'0'..=b'9' if !quoted => {
++                let start = index;
++                while index < bytes.len()
++                    && matches!(bytes[index], b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E')
++                {
++                    index += 1;
++                }
++                let token = text
++                    .get(start..index)
++                    .ok_or_else(|| anyhow::anyhow!("Invalid native number boundary"))?;
++                let number: serde_json::Number = token.parse()?;
++                if decimal(token)? != decimal(&number.to_string())? {
++                    bail!("Native JSON number cannot be normalized without precision loss");
++                }
++                continue;
++            }
++            _ => (),
++        }
++        index += 1;
++    }
++    Ok(())
++}
++
++struct StrictValue(Value);
++impl<'de> Deserialize<'de> for StrictValue {
++    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        struct StrictVisitor;
++        impl<'de> Visitor<'de> for StrictVisitor {
++            type Value = StrictValue;
++            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++                f.write_str("one JSON value without duplicate keys")
++            }
++            fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
++                Ok(StrictValue(v.into()))
++            }
++            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
++                Ok(StrictValue(v.into()))
++            }
++            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
++                Ok(StrictValue(v.into()))
++            }
++            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
++                serde_json::Number::from_f64(v)
++                    .map(|n| StrictValue(Value::Number(n)))
++                    .ok_or_else(|| E::custom("Nonfinite number"))
++            }
++            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
++                Ok(StrictValue(v.into()))
++            }
++            fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
++                Ok(StrictValue(v.into()))
++            }
++            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
++                Ok(StrictValue(Value::Null))
++            }
++            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
++                let mut values = Vec::new();
++                while let Some(StrictValue(value)) = seq.next_element()? {
++                    values.push(value);
++                }
++                Ok(StrictValue(Value::Array(values)))
++            }
++            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
++                let mut values = serde_json::Map::new();
++                while let Some(key) = map.next_key::<String>()? {
++                    if values.contains_key(&key) {
++                        return Err(de::Error::custom("Duplicate JSON key"));
++                    }
++                    let StrictValue(value) = map.next_value()?;
++                    values.insert(key, value);
++                }
++                Ok(StrictValue(Value::Object(values)))
++            }
++        }
++        deserializer.deserialize_any(StrictVisitor)
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use serde_json::json;
++    fn evidence(text: &str) -> NativeTurnEvidence {
++        NativeTurnEvidence {
++            attempt_id: "attempt".into(),
++            provider_session_id: "native".into(),
++            stop_reason: "end_turn".into(),
++            final_text: text.into(),
++            tool_error: false,
++            pending_tools: false,
++            final_message_id: None,
++            final_message_phase: None,
++            tool_observation: goose_providers::base::NativeToolObservation::ObservedSuccess,
++        }
++    }
++    #[test]
++    fn native_completion_strict_contract() {
++        let schema = json!({"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false});
++        for text in [
++            r#"{"summary":"done"}"#,
++            "```json\n{\"summary\":\"done\"}\n```",
++        ] {
++            assert!(validate(&evidence(text), &schema).is_ok());
++        }
++        for text in [
++            "",
++            "done",
++            r#"{"summary":"a","summary":"b"}"#,
++            r#"{"summary":"ok"} {"summary":"ok"}"#,
++            r#"{"summary":3}"#,
++            r#"{"summary":"ok","extra":1}"#,
++            r#"{"summary":"ok""#,
++        ] {
++            assert!(validate(&evidence(text), &schema).is_err(), "{text}");
++        }
++    }
++    #[test]
++    fn native_completion_terminal_is_not_success() {
++        for reason in [
++            "cancelled",
++            "refusal",
++            "max_tokens",
++            "max_turn_requests",
++            "unknown",
++        ] {
++            let mut e = evidence(r#"{"summary":"done"}"#);
++            e.stop_reason = reason.into();
++            assert!(validate(&e, &json!({})).is_err());
++        }
++        for (error, pending) in [(true, false), (false, true)] {
++            let mut e = evidence("{}");
++            e.tool_error = error;
++            e.pending_tools = pending;
++            assert_eq!(validate(&e, &json!({})).is_err(), error);
++        }
++    }
++    #[test]
++    fn native_completion_limits_and_precision() {
++        assert!(validate(&evidence(&format!("\"{}\"", "x".repeat(65536))), &json!({})).is_err());
++        assert!(validate(&evidence("0.10000000000000001"), &json!({})).is_err());
++        assert!(validate(&evidence("0.1"), &json!({})).is_ok());
++        assert!(validate(
++            &evidence("{}"),
++            &json!({"$ref":"https://example.com/schema"})
++        )
++        .is_err());
++        assert!(validate(
++            &evidence(&format!("{}0{}", "[".repeat(66), "]".repeat(66))),
++            &json!({})
++        )
++        .is_err());
++    }
++    #[tokio::test]
++    async fn native_completion_receipt_survives_reload_and_rejects_rebinding() {
++        let dir = tempfile::tempdir().unwrap();
++        let manager = crate::session::SessionManager::new(dir.path().to_path_buf());
++        let session = manager
++            .create_session(
++                dir.path().into(),
++                "native receipt".into(),
++                crate::session::SessionType::SubAgent,
++                crate::config::GooseMode::Auto,
++            )
++            .await
++            .unwrap();
++        let receipt = json!({"binding":binding(&session),"output":"{\"summary\":\"done\"}","output_digest":output_digest("{\"summary\":\"done\"}"),"attempt_id":"one"});
++        manager
++            .set_extension_value(&session.id, RECEIPT, "v0", receipt)
++            .await
++            .unwrap();
++        drop(manager);
++        let manager = crate::session::SessionManager::new(dir.path().to_path_buf());
++        let reloaded = manager.get_session(&session.id, true).await.unwrap();
++        assert_eq!(
++            saved_result(&reloaded).unwrap().unwrap(),
++            "{\"summary\":\"done\"}"
++        );
++        let mut corrupted = reloaded.clone();
++        corrupted
++            .extension_data
++            .extension_states
++            .get_mut("native_completion.v0")
++            .unwrap()["output"] = json!("{}");
++        assert!(saved_result(&corrupted)
++            .unwrap()
++            .unwrap_err()
++            .contains("digest"));
++        let mut changed = reloaded;
++        changed.provider_name = Some("other".into());
++        assert!(saved_result(&changed).unwrap().is_err());
++    }
++    #[tokio::test]
++    async fn native_completion_cancelled_commit_cannot_be_replayed_as_success() {
++        use crate::agents::state_machine::{Emitter, GooseEffect};
++        use goose_agent::machine::EffectHandler;
++        let dir = tempfile::tempdir().unwrap();
++        let manager = crate::session::SessionManager::new(dir.path().to_path_buf());
++        let session = manager
++            .create_session(
++                dir.path().into(),
++                "cancel commit".into(),
++                crate::session::SessionType::SubAgent,
++                crate::config::GooseMode::Auto,
++            )
++            .await
++            .unwrap();
++        let cancel = tokio_util::sync::CancellationToken::new();
++        cancel.cancel();
++        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
++        let emit = Emitter::new(tx, cancel);
++        let mut effects = vec![GooseEffect::SetExtensionState {
++            extension_name: RECEIPT,
++            version: "v0",
++            value: json!({"binding":binding(&session),"output":"{}"}),
++        }];
++        manager
++            .apply_effects(&session, &mut effects, &emit)
++            .await
++            .unwrap();
++        let reloaded = manager.get_session(&session.id, true).await.unwrap();
++        assert!(saved_result(&reloaded)
++            .unwrap()
++            .unwrap_err()
++            .contains("cancelled"));
++    }
++    #[test]
++    fn native_completion_accepts_unknown_observation_but_rejects_typed_failure() {
++        let schema = json!({"type":"object","properties":{"success":{"type":"boolean"},"summary":{"type":"string"}},"required":["success","summary"],"additionalProperties":false});
++        assert!(validate(
++            &evidence(r#"{"success":false,"summary":"failed"}"#),
++            &schema
++        )
++        .is_err());
++        assert!(validate(&evidence(r#"{"summary":"done"}"#), &schema).is_err());
++        let mut e = evidence(r#"{"success":true,"summary":"done"}"#);
++        assert!(validate(&e, &schema).is_ok());
++        e.tool_observation = goose_providers::base::NativeToolObservation::Unobservable;
++        assert!(validate(&e, &schema).is_ok());
++        e.tool_observation = goose_providers::base::NativeToolObservation::ObservedFailure;
++        assert!(validate(&e, &schema).is_err());
++        e.tool_observation = goose_providers::base::NativeToolObservation::ObservedSuccess;
++        e.final_message_phase = Some("commentary".into());
++        assert!(validate(&e, &schema).is_err());
++    }
++    #[test]
++    fn native_completion_telemetry_is_not_outcome_verification() {
++        use goose_providers::base::NativeToolObservation as Observation;
++        let mut e = evidence(r#"{"success":true,"summary":"done"}"#);
++        for status in [
++            Observation::NoToolsObserved,
++            Observation::Unobservable,
++            Observation::ObservedSuccess,
++        ] {
++            e.tool_observation = status;
++            e.pending_tools = true;
++            assert!(validate(&e, &json!({})).is_ok());
++        }
++        e.tool_error = true;
++        assert!(validate(&e, &json!({})).is_err());
++        e.tool_error = false;
++        e.tool_observation = Observation::ObservedFailure;
++        assert!(validate(&e, &json!({})).is_err());
++        e.tool_observation = Observation::NoToolsObserved;
++        e.final_text = "prose{}".into();
++        assert!(validate(&e, &json!({})).is_err());
++    }
++    #[tokio::test]
++    async fn native_completion_schema_is_receipt_bound() {
++        let dir = tempfile::tempdir().unwrap();
++        let manager = crate::session::SessionManager::new(dir.path().to_path_buf());
++        let mut session = manager
++            .create_session(
++                dir.path().into(),
++                "policy".into(),
++                crate::session::SessionType::SubAgent,
++                crate::config::GooseMode::Auto,
++            )
++            .await
++            .unwrap();
++        session.recipe = Some(serde_json::from_value(json!({"version":"1.0.0","title":"policy","description":"policy test","response":{"json_schema":{"description":"original contract"}}})).unwrap());
++        let original = binding(&session);
++        let output = "{}";
++        manager
++            .set_extension_value(
++                &session.id,
++                RECEIPT,
++                "v0",
++                json!({"binding":original,"output":output,"output_digest":output_digest(output)}),
++            )
++            .await
++            .unwrap();
++        session.extension_data = manager
++            .get_session(&session.id, false)
++            .await
++            .unwrap()
++            .extension_data;
++        assert!(saved_result(&session).unwrap().is_ok());
++        session
++            .recipe
++            .as_mut()
++            .unwrap()
++            .response
++            .as_mut()
++            .unwrap()
++            .json_schema
++            .as_mut()
++            .unwrap()["description"] = json!("revised contract");
++        assert_ne!(binding(&session), original);
++        assert!(saved_result(&session).unwrap().is_err());
++    }
++}
++
++#[cfg(test)]
++#[path = "native_completion_transport_tests.rs"]
++mod transport_tests;
+diff --git a/crates/goose/src/agents/native_completion_transport_tests.rs b/crates/goose/src/agents/native_completion_transport_tests.rs
+new file mode 100644
+index 0000000..1d70fd3
+--- /dev/null
++++ b/crates/goose/src/agents/native_completion_transport_tests.rs
+@@ -0,0 +1,216 @@
++use crate::acp::{AcpProvider, AcpProviderConfig};
++use crate::config::GooseMode;
++use crate::providers::base::{Provider, ProviderEvent};
++use agent_client_protocol::schema::v1::{
++    CancelNotification, ContentBlock, ContentChunk, InitializeRequest, InitializeResponse,
++    NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, SessionNotification,
++    SessionUpdate, StopReason,
++};
++use agent_client_protocol::schema::ProtocolVersion;
++use agent_client_protocol::{on_receive_notification, on_receive_request, Agent, ByteStreams};
++use futures::StreamExt;
++use goose_providers::conversation::message::Message;
++use goose_providers::model::ModelConfig;
++use std::collections::HashMap;
++use std::sync::Arc;
++use tokio::sync::Notify;
++use tokio::time::{timeout, Duration};
++use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
++
++async fn scripted_provider(
++    chunks: usize,
++    reason: StopReason,
++    wait_cancel: bool,
++    ignore_cancel: bool,
++    updates: Vec<SessionUpdate>,
++) -> (AcpProvider, tokio::task::JoinHandle<()>, Arc<Notify>) {
++    let (client_read, agent_write) = tokio::io::duplex(4096);
++    let (agent_read, client_write) = tokio::io::duplex(4096);
++    let cancelled = Arc::new(Notify::new());
++    let cancel_signal = cancelled.clone();
++    let waiter = cancelled.clone();
++    let agent = tokio::spawn(async move {
++        let _ = Agent
++            .builder()
++            .name("native-fixture")
++            .on_receive_request(
++                async |_req: InitializeRequest, responder, _cx| {
++                    responder.respond(InitializeResponse::new(ProtocolVersion::LATEST))
++                },
++                on_receive_request!(),
++            )
++            .on_receive_request(
++                async |_req: NewSessionRequest, responder, _cx| {
++                    responder.respond(NewSessionResponse::new("native-fixture-session"))
++                },
++                on_receive_request!(),
++            )
++            .on_receive_notification(
++                async move |_req: CancelNotification, _cx| {
++                    cancel_signal.notify_waiters();
++                    Ok(())
++                },
++                on_receive_notification!(),
++            )
++            .on_receive_request(
++                async move |req: PromptRequest, responder, cx| {
++                    let connection = cx.clone();
++                    let waiter = waiter.clone();
++                    let updates = updates.clone();
++                    cx.spawn(async move {
++                        for _ in 0..chunks {
++                            connection.send_notification(SessionNotification::new(
++                                req.session_id.clone(),
++                                SessionUpdate::AgentMessageChunk(ContentChunk::new(
++                                    ContentBlock::Text(
++                                        agent_client_protocol::schema::v1::TextContent::new("x"),
++                                    ),
++                                )),
++                            ))?;
++                        }
++                        for update in updates {
++                            connection.send_notification(SessionNotification::new(
++                                req.session_id.clone(),
++                                update,
++                            ))?;
++                        }
++                        if wait_cancel {
++                            if ignore_cancel {
++                                std::future::pending::<()>().await;
++                            }
++                            waiter.notified().await;
++                        }
++                        responder.respond(PromptResponse::new(reason))
++                    })?;
++                    Ok(())
++                },
++                on_receive_request!(),
++            )
++            .connect_to(ByteStreams::new(
++                agent_write.compat_write(),
++                agent_read.compat(),
++            ))
++            .await;
++    });
++    let config = AcpProviderConfig {
++        native_completion: true,
++        command: "unused".into(),
++        args: vec![],
++        env: vec![],
++        env_remove: vec![],
++        work_dir: std::env::temp_dir(),
++        mcp_servers: vec![],
++        session_mode_id: None,
++        session_config_options: vec![],
++        model_config_option_id: None,
++        mode_mapping: HashMap::new(),
++        notification_callback: None,
++    };
++    let provider = AcpProvider::connect_with_transport(
++        "fixture-acp".into(),
++        GooseMode::Auto,
++        config,
++        ByteStreams::new(client_write.compat_write(), client_read.compat()),
++    )
++    .await
++    .unwrap();
++    (provider, agent, cancelled)
++}
++
++#[tokio::test]
++async fn native_completion_actual_adapter_transport_contract_matrix() {
++    let fixture: serde_json::Value =
++        serde_json::from_str(include_str!("../../tests/fixtures/native-direct-edit.json")).unwrap();
++    for case in fixture["cases"].as_array().unwrap() {
++        let updates: Vec<SessionUpdate> = serde_json::from_value(case["updates"].clone()).unwrap();
++        let (provider, agent, _) =
++            scripted_provider(0, StopReason::EndTurn, false, false, updates).await;
++        let mut stream = provider
++            .stream_events(
++                &ModelConfig::new("current"),
++                "",
++                &[Message::user().with_text("offline adapter fixture")],
++                &[],
++            )
++            .await
++            .unwrap();
++        let mut terminal = None;
++        timeout(Duration::from_secs(10), async {
++            while let Some(event) = stream.next().await {
++                if let ProviderEvent::NativeTerminal(e) = event.unwrap() {
++                    terminal = Some(e);
++                }
++            }
++        })
++        .await
++        .unwrap();
++        let evidence = terminal.unwrap();
++        assert_eq!(
++            serde_json::to_value(evidence.tool_observation).unwrap(),
++            case["observation"],
++            "{}",
++            case["name"]
++        );
++        let schema = serde_json::json!({"type":"object","properties":{"success":{"type":"boolean"},"summary":{"type":"string"}},"required":["success","summary"],"additionalProperties":false});
++        let accepted = super::validate(&evidence, &schema).is_ok();
++        assert_eq!(
++            accepted,
++            case["accepted"].as_bool().unwrap(),
++            "{} evidence={:?}",
++            case["name"],
++            evidence
++        );
++        drop(provider);
++        agent.abort();
++    }
++}
++
++#[tokio::test]
++async fn native_boundary_transport_stops_on_explicit_error_before_terminal() {
++    let raw = serde_json::json!({
++        "exit_code": 1,
++        "output": "PermissionError: [Errno 1] Operation not permitted: '/fixture/.venv/pyvenv.cfg'",
++        "goose.native.boundary": {"kind":"permission_required","code":"EPERM",
++            "message":"PermissionError: [Errno 1] Operation not permitted: '/fixture/.venv/pyvenv.cfg'"}
++    });
++    let updates: Vec<SessionUpdate> = serde_json::from_value(serde_json::json!([
++        {"sessionUpdate":"tool_call","toolCallId":"denied-1","title":"python check","kind":"execute","status":"in_progress"},
++        {"sessionUpdate":"tool_call_update","toolCallId":"denied-1","status":"failed","rawOutput":raw}
++    ])).unwrap();
++    let (provider, agent, cancelled) =
++        scripted_provider(0, StopReason::EndTurn, true, false, updates).await;
++    let mut stream = provider
++        .stream_events(
++            &ModelConfig::new("current"),
++            "",
++            &[Message::user().with_text("offline denial regression")],
++            &[],
++        )
++        .await
++        .unwrap();
++    let error = timeout(Duration::from_secs(10), async {
++        while let Some(event) = stream.next().await {
++            match event {
++                Err(error) => return error.to_string(),
++                Ok(ProviderEvent::NativeTerminal(_)) => {
++                    panic!("denial continued to normal terminal")
++                }
++                _ => (),
++            }
++        }
++        panic!("explicit denial was lost")
++    })
++    .await
++    .unwrap();
++    assert!(error.contains(crate::agents::native_boundary::PREFIX));
++    assert!(error.contains("pyvenv.cfg"));
++    assert!(error.contains("EPERM"));
++    let cancellation = cancelled.notified();
++    tokio::pin!(cancellation);
++    cancellation.as_mut().enable();
++    drop(stream);
++    timeout(Duration::from_secs(10), cancellation)
++        .await
++        .unwrap();
++    agent.abort();
++}
+diff --git a/crates/goose/src/agents/state_machine/inference_preparation.rs b/crates/goose/src/agents/state_machine/inference_preparation.rs
+index 5f31e8b..82b2d9c 100644
+--- a/crates/goose/src/agents/state_machine/inference_preparation.rs
++++ b/crates/goose/src/agents/state_machine/inference_preparation.rs
+@@ -18,6 +18,7 @@ pub struct GooseInferenceRequestPreparer<'a> {
+     pub(crate) extension_lease: Arc<StdMutex<Option<Arc<ExtensionLease>>>>,
+     pub(crate) tool_inspection_manager: &'a ToolInspectionManager,
+     pub(crate) context_limit: usize,
++    pub(crate) provider: Arc<dyn crate::providers::base::Provider>,
+ }
+ 
+ #[async_trait]
+@@ -73,7 +74,7 @@ impl InferenceRequestPreparer<Session> for GooseInferenceRequestPreparer<'_> {
+             .find(|message| message.is_turn_context())
+             .map(Message::as_concat_text);
+         let context_limit = Some(self.context_limit);
+-        let additional_messages = crate::agents::moim::turn_context_event(
++        let mut additional_messages: Vec<Message> = crate::agents::moim::turn_context_event(
+             &session.working_dir,
+             context_limit,
+             input.moim_parts,
+@@ -82,6 +83,19 @@ impl InferenceRequestPreparer<Session> for GooseInferenceRequestPreparer<'_> {
+         .filter(|event| Some(event.as_concat_text()) != last)
+         .into_iter()
+         .collect();
++        if self.provider.supports_native_completion() {
++            if let Some(recipe) = &session.recipe {
++                if let Some(response) = &recipe.response {
++                    let contract = serde_json::to_string(response)?;
++                    if contract.len() > 65536 {
++                        anyhow::bail!("Native response contract exceeds 64 KiB");
++                    }
++                    additional_messages.push(Message::user().with_text(format!(
++                        "Delegated recipe instructions: {}\nReturn exactly one JSON document matching this response contract as your FINAL text after all tool work. Do not call final_output; it is not a native tool. No prose or extra JSON documents. Response contract: {}",
++                        recipe.instructions.as_deref().unwrap_or(""), contract)));
++                }
++            }
++        }
+         Ok(PreparedInferenceRequest {
+             system_prompt,
+             tools,
+diff --git a/crates/goose/src/agents/state_machine/ops_llm.rs b/crates/goose/src/agents/state_machine/ops_llm.rs
+index 3303c05..d3af127 100644
+--- a/crates/goose/src/agents/state_machine/ops_llm.rs
++++ b/crates/goose/src/agents/state_machine/ops_llm.rs
+@@ -6,7 +6,9 @@ use async_trait::async_trait;
+ use futures::StreamExt;
+ use goose_agent::inference::InferenceEffect;
+ pub use goose_agent::inference::InferenceRunner;
+-use goose_providers::base::{MessageStream, ModelInfo, Provider};
++use goose_providers::base::{
++    MessageStream, ModelInfo, NativeTurnEvidence, Provider, ProviderEventStream,
++};
+ use goose_providers::conversation::message::Message;
+ use goose_providers::conversation::token_usage::ProviderUsage;
+ use goose_providers::errors::ProviderError;
+@@ -31,6 +33,13 @@ impl GooseInferenceProvider {
+ }
+ 
+ impl InferenceEffect for GooseEffect {
++    fn native_terminal(evidence: NativeTurnEvidence) -> Option<Self> {
++        Some(GooseEffect::SetExtensionState {
++            extension_name: "native_turn",
++            version: "v0",
++            value: serde_json::to_value(evidence).expect("native evidence serializes"),
++        })
++    }
+     fn record_usage(usage: ProviderUsage) -> Self {
+         GooseEffect::RecordUsage(usage)
+     }
+@@ -142,6 +151,35 @@ impl Provider for GooseInferenceProvider {
+         self.inner.resume(session_id).await
+     }
+ 
++    fn supports_native_completion(&self) -> bool {
++        self.inner.supports_native_completion()
++    }
++
++    async fn stream_events(
++        &self,
++        model_config: &ModelConfig,
++        system: &str,
++        messages: &[Message],
++        tools: &[rmcp::model::Tool],
++    ) -> Result<ProviderEventStream, ProviderError> {
++        if self.inner.supports_native_completion() {
++            return self
++                .inner
++                .stream_events(model_config, system, messages, tools)
++                .await;
++        }
++        use futures::StreamExt;
++        Ok(Box::pin(
++            self.stream(model_config, system, messages, tools)
++                .await?
++                .map(|result| {
++                    result.map(|(message, usage)| {
++                        goose_providers::base::ProviderEvent::Chunk(message, usage.map(Box::new))
++                    })
++                }),
++        ))
++    }
++
+     async fn stream(
+         &self,
+         model_config: &ModelConfig,
+diff --git a/crates/goose/src/agents/state_machine/ops_recipe.rs b/crates/goose/src/agents/state_machine/ops_recipe.rs
+index 7281bbc..8da368d 100644
+--- a/crates/goose/src/agents/state_machine/ops_recipe.rs
++++ b/crates/goose/src/agents/state_machine/ops_recipe.rs
+@@ -200,6 +200,9 @@ impl Operation<Session, GooseEffect> for RecipeOperation {
+     }
+ 
+     async fn inference_tools(&self, session: &Session) -> Result<Vec<Tool>> {
++        if self.provider.supports_native_completion() {
++            return Ok(Vec::new());
++        }
+         Ok(final_output_tool(session)?
+             .as_ref()
+             .map(FinalOutputTool::tool)
+@@ -225,6 +228,49 @@ impl Operation<Session, GooseEffect> for RecipeOperation {
+             return not_applicable();
+         };
+ 
++        if self.provider.supports_native_completion() {
++            let Some(raw) = session
++                .extension_data
++                .get_extension_state("native_turn", "v0")
++            else {
++                return not_applicable();
++            };
++            let binding = crate::agents::native_completion::binding(session);
++            if raw.get("binding").and_then(serde_json::Value::as_str) != Some(binding.as_str()) {
++                return self.command_error(
++                    conversation,
++                    "Native completion contract mismatch; reconciliation required".into(),
++                    emit,
++                );
++            }
++            if crate::agents::native_completion::saved_result(session).is_some() {
++                return yielded_with([]);
++            }
++            let evidence: crate::providers::base::NativeTurnEvidence =
++                serde_json::from_value(raw["evidence"].clone())?;
++            let result = if emit.cancel_token().is_cancelled() {
++                Err(anyhow!("Native turn cancelled; effects uncertain"))
++            } else {
++                crate::agents::native_completion::validate(
++                    &evidence,
++                    final_output.response.json_schema.as_ref().unwrap(),
++                )
++            };
++            let receipt = match result {
++                Ok(value) => {
++                    serde_json::json!({"binding":binding, "attempt_id":evidence.attempt_id, "native_session_id":evidence.provider_session_id, "stop_reason":evidence.stop_reason, "final_message_id":evidence.final_message_id,"final_message_phase":evidence.final_message_phase,"tool_observation":evidence.tool_observation, "output":value.to_string(), "output_digest":crate::agents::native_completion::output_digest(&value.to_string()), "raw_digest":crate::agents::native_completion::output_digest(&evidence.final_text)})
++                }
++                Err(error) => {
++                    serde_json::json!({"binding":binding, "attempt_id":evidence.attempt_id, "native_session_id":evidence.provider_session_id, "stop_reason":evidence.stop_reason, "final_message_id":evidence.final_message_id,"final_message_phase":evidence.final_message_phase,"tool_observation":evidence.tool_observation, "error":error.to_string()})
++                }
++            };
++            return yielded_with([GooseEffect::SetExtensionState {
++                extension_name: crate::agents::native_completion::RECEIPT,
++                version: "v0",
++                value: receipt,
++            }]);
++        }
++
+         if !self.provider.supports_builtin_tools() {
+             return self.command_error(
+                 conversation,
+diff --git a/crates/goose/src/agents/state_machine/ops_subagent.rs b/crates/goose/src/agents/state_machine/ops_subagent.rs
+index f11b94d..5da4a2c 100644
+--- a/crates/goose/src/agents/state_machine/ops_subagent.rs
++++ b/crates/goose/src/agents/state_machine/ops_subagent.rs
+@@ -260,6 +260,7 @@ impl Operation<Session, GooseEffect> for SubagentOperation {
+                 .await
+             {
+                 SubagentStart::HasOutcome(outcome) => {
++                    stop_on_native_boundary(&outcome)?;
+                     if let Some(message) =
+                         subagent_result_message(subagent_id, outcome, pending.len() > 1, emit)
+                     {
+@@ -294,6 +295,7 @@ impl Operation<Session, GooseEffect> for SubagentOperation {
+             .subagent_ids
+             .remove(&task_id)
+             .ok_or_else(|| anyhow!("Unknown subagent task {task_id}"))?;
++        stop_on_native_boundary(&outcome)?;
+         match subagent_result_message(&subagent_id, outcome, pending.len() > 1, emit) {
+             Some(message) => applied([message]),
+             None => not_applicable(),
+@@ -301,6 +303,15 @@ impl Operation<Session, GooseEffect> for SubagentOperation {
+     }
+ }
+ 
++fn stop_on_native_boundary(outcome: &SubagentOutcome) -> Result<()> {
++    if let SubagentOutcome::Failed(reason) = outcome {
++        if crate::agents::native_boundary::is_boundary(reason) {
++            return Err(anyhow!(reason.clone()));
++        }
++    }
++    Ok(())
++}
++
+ #[cfg(test)]
+ mod tests {
+     use std::sync::Arc;
+@@ -312,6 +323,17 @@ mod tests {
+     use tokio::sync::mpsc;
+ 
+     use super::*;
++    #[test]
++    fn native_boundary_stops_before_failed_delegate_is_returned_to_parent() {
++        let reason = crate::agents::native_boundary::denial("denied-tool");
++        let error = stop_on_native_boundary(&SubagentOutcome::Failed(reason.clone())).unwrap_err();
++        assert_eq!(error.to_string(), reason);
++        assert!(
++            stop_on_native_boundary(&SubagentOutcome::Failed("generic tool failure".into()))
++                .is_ok()
++        );
++        assert!(stop_on_native_boundary(&SubagentOutcome::Completed(reason)).is_ok());
++    }
+     use crate::agents::final_output_tool::{FINAL_OUTPUT_SUCCESS_MESSAGE, FINAL_OUTPUT_TOOL_NAME};
+     use crate::agents::state_machine::{ConversationEffect, RunStatus};
+     use crate::config::GooseMode;
+diff --git a/crates/goose/src/agents/state_machine/session.rs b/crates/goose/src/agents/state_machine/session.rs
+index 37f092c..c1fe35f 100644
+--- a/crates/goose/src/agents/state_machine/session.rs
++++ b/crates/goose/src/agents/state_machine/session.rs
+@@ -107,8 +107,41 @@ impl EffectHandler<Session, GooseEffect> for SessionManager {
+                     version,
+                     value,
+                 } => {
+-                    self.set_extension_value(&session.id, extension_name, version, value.clone())
+-                        .await?;
++                    let value = if *extension_name == "native_turn" {
++                        serde_json::json!({"binding": crate::agents::native_completion::binding(session), "evidence": value})
++                    } else {
++                        value.clone()
++                    };
++                    if *extension_name == crate::agents::native_completion::RECEIPT {
++                        let write_started = std::sync::atomic::AtomicBool::new(false);
++                        let persist = async {
++                            write_started.store(true, std::sync::atomic::Ordering::SeqCst);
++                            self.set_extension_value(
++                                &session.id,
++                                extension_name,
++                                version,
++                                value.clone(),
++                            )
++                            .await
++                        };
++                        tokio::pin!(persist);
++                        tokio::select! {
++                            biased;
++                            _ = emit.cancel_token().cancelled() => {
++                                if write_started.load(std::sync::atomic::Ordering::SeqCst) { let _ = (&mut persist).await; }
++                                let mut cancelled = value.clone();
++                                if let Some(object) = cancelled.as_object_mut() {
++                                    object.remove("output");
++                                    object.insert("error".into(), serde_json::json!("Native turn cancelled before completion commit; effects uncertain"));
++                                }
++                                self.set_extension_value(&session.id, extension_name, version, cancelled).await?;
++                            }
++                            result = &mut persist => { result?; }
++                        }
++                    } else {
++                        self.set_extension_value(&session.id, extension_name, version, value)
++                            .await?;
++                    }
+                 }
+                 GooseEffect::RecordUsage(provider_usage) => {
+                     usage::record(self, session, provider_usage, false).await?;
+diff --git a/crates/goose/src/agents/state_machine_builder.rs b/crates/goose/src/agents/state_machine_builder.rs
+index 634a372..dc9eb8e 100644
+--- a/crates/goose/src/agents/state_machine_builder.rs
++++ b/crates/goose/src/agents/state_machine_builder.rs
+@@ -107,6 +107,7 @@ pub(crate) fn build_state_machine(
+     ];
+     operations.extend(remaining_operations);
+     let request_preparer = GooseInferenceRequestPreparer {
++        provider: provider.clone(),
+         extension_manager,
+         extension_lease,
+         tool_inspection_manager,
+diff --git a/crates/goose/src/agents/subagent_handler.rs b/crates/goose/src/agents/subagent_handler.rs
+index 9590239..bf4ae2f 100644
+--- a/crates/goose/src/agents/subagent_handler.rs
++++ b/crates/goose/src/agents/subagent_handler.rs
+@@ -125,6 +125,19 @@ impl SubagentRunner {
+                 "it does not belong to this session".to_string(),
+             ));
+         }
++        if let Some(result) = crate::agents::native_completion::saved_result(&subagent) {
++            return SubagentStart::HasOutcome(match result {
++                Ok(output) => SubagentOutcome::Completed(output),
++                Err(error) => SubagentOutcome::Failed(error),
++            });
++        }
++        if subagent
++            .extension_data
++            .get_extension_state("native_started", "v0")
++            .is_some()
++        {
++            return SubagentStart::HasOutcome(SubagentOutcome::Failed("Interrupted native attempt has uncertain effects; reconciliation required, no automatic replay".into()));
++        }
+         if let Some(output) = subagent
+             .conversation
+             .as_ref()
+@@ -152,6 +165,14 @@ impl SubagentRunner {
+             .as_deref()
+             .ok_or_else(|| anyhow!("Subagent {} has no parent", subagent.id))?;
+         let session_config = prepare_subagent(&self.agent, subagent).await?;
++        if self
++            .agent
++            .provider(&subagent.id)
++            .await?
++            .supports_native_completion()
++        {
++            self.session_manager().set_extension_value(&subagent.id, "native_started", "v0", serde_json::json!({"binding": crate::agents::native_completion::binding(subagent)})).await?;
++        }
+         let mut events = self
+             .agent
+             .stream_subagent_turn(session_config, cancel)
+@@ -189,6 +210,12 @@ impl SubagentRunner {
+             Ok(subagent) => subagent,
+             Err(error) => return SubagentOutcome::Failed(error.to_string()),
+         };
++        if let Some(result) = crate::agents::native_completion::saved_result(&subagent) {
++            return match result {
++                Ok(output) => SubagentOutcome::Completed(output),
++                Err(error) => SubagentOutcome::Failed(error),
++            };
++        }
+         let messages = subagent.conversation.as_ref().map(Conversation::messages);
+         if let Some(output) =
+             messages.and_then(|messages| FinalOutputTool::successful_output(messages))
+diff --git a/crates/goose/src/providers/amp_acp.rs b/crates/goose/src/providers/amp_acp.rs
+index f8d1cad..6df2e59 100644
+--- a/crates/goose/src/providers/amp_acp.rs
++++ b/crates/goose/src/providers/amp_acp.rs
+@@ -76,6 +76,7 @@ impl ProviderDef for AmpAcpProvider {
+             ]);
+ 
+             let provider_config = AcpProviderConfig {
++                native_completion: false,
+                 command: resolved_command,
+                 args: vec![],
+                 env: vec![],
+diff --git a/crates/goose/src/providers/claude_acp.rs b/crates/goose/src/providers/claude_acp.rs
+index 7271c5f..1618c58 100644
+--- a/crates/goose/src/providers/claude_acp.rs
++++ b/crates/goose/src/providers/claude_acp.rs
+@@ -83,6 +83,9 @@ impl ProviderDef for ClaudeAcpProvider {
+             ]);
+ 
+             let provider_config = AcpProviderConfig {
++                native_completion: config
++                    .get_param("GOOSE_NATIVE_ACP_COMPLETION")
++                    .unwrap_or(false),
+                 command: resolved_command,
+                 args: vec![],
+                 env: vec![],
+diff --git a/crates/goose/src/providers/codex_acp.rs b/crates/goose/src/providers/codex_acp.rs
+index ef94161..f4a6cfc 100644
+--- a/crates/goose/src/providers/codex_acp.rs
++++ b/crates/goose/src/providers/codex_acp.rs
+@@ -78,6 +78,9 @@ impl ProviderDef for CodexAcpProvider {
+             ]);
+ 
+             let provider_config = AcpProviderConfig {
++                native_completion: config
++                    .get_param("GOOSE_NATIVE_ACP_COMPLETION")
++                    .unwrap_or(false),
+                 command: resolved_command,
+                 args: vec![],
+                 env: vec![],
+diff --git a/crates/goose/src/providers/copilot_acp.rs b/crates/goose/src/providers/copilot_acp.rs
+index d280553..35d021b 100644
+--- a/crates/goose/src/providers/copilot_acp.rs
++++ b/crates/goose/src/providers/copilot_acp.rs
+@@ -84,6 +84,7 @@ impl CopilotAcpProvider {
+             ]);
+ 
+             let provider_config = AcpProviderConfig {
++                native_completion: false,
+                 command: resolved_command,
+                 args,
+                 env: vec![],
+diff --git a/crates/goose/src/providers/pi_acp.rs b/crates/goose/src/providers/pi_acp.rs
+index 14b4b27..7eb0b8c 100644
+--- a/crates/goose/src/providers/pi_acp.rs
++++ b/crates/goose/src/providers/pi_acp.rs
+@@ -67,6 +67,7 @@ impl PiAcpProvider {
+             };
+ 
+             let provider_config = AcpProviderConfig {
++                native_completion: false,
+                 command: resolved_command,
+                 args: vec![],
+                 env: vec![],
+diff --git a/crates/goose/tests/acp_bootstrap_effort_test.rs b/crates/goose/tests/acp_bootstrap_effort_test.rs
+index cda8cbb..874dba1 100644
+--- a/crates/goose/tests/acp_bootstrap_effort_test.rs
++++ b/crates/goose/tests/acp_bootstrap_effort_test.rs
+@@ -88,6 +88,7 @@ async fn bootstrap_config_option_response_refreshes_the_effort_mirror() {
+     });
+ 
+     let config = AcpProviderConfig {
++        native_completion: false,
+         command: "unused".into(),
+         args: vec![],
+         env: vec![],
+@@ -172,6 +173,7 @@ async fn new_session_preserves_pre_response_effort_update() {
+         "scripted-acp".to_string(),
+         GooseMode::default(),
+         AcpProviderConfig {
++            native_completion: false,
+             command: "unused".into(),
+             args: vec![],
+             env: vec![],
+@@ -271,6 +273,7 @@ async fn loaded_session_refreshes_the_effort_mirror() {
+     });
+ 
+     let config = AcpProviderConfig {
++        native_completion: false,
+         command: "unused".into(),
+         args: vec![],
+         env: vec![],
+diff --git a/crates/goose/tests/acp_fixtures/provider.rs b/crates/goose/tests/acp_fixtures/provider.rs
+index ef28fcb..a193aba 100644
+--- a/crates/goose/tests/acp_fixtures/provider.rs
++++ b/crates/goose/tests/acp_fixtures/provider.rs
+@@ -176,6 +176,7 @@ impl Connection for AcpProviderConnection {
+         let session_models: SessionModels = Arc::new(std::sync::Mutex::new(HashMap::new()));
+         let sink_clone = notification_sink.clone();
+         let provider_config = AcpProviderConfig {
++            native_completion: false,
+             command: "unused".into(),
+             args: vec![],
+             env: vec![],
+diff --git a/crates/goose/tests/fixtures/native-direct-edit.json b/crates/goose/tests/fixtures/native-direct-edit.json
+new file mode 100644
+index 0000000..57f04b2
+--- /dev/null
++++ b/crates/goose/tests/fixtures/native-direct-edit.json
+@@ -0,0 +1,481 @@
++{
++  "origin": "Actual pinned adapter CodexEventHandler and AcpToolCallRenderer; synthetic native input items, not live execution",
++  "cases": [
++    {
++      "name": "direct_success",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "observed_success",
++      "accepted": true
++    },
++    {
++      "name": "direct_failure",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "failed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":false,\"summary\":\"failed\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "observed_failure",
++      "accepted": false
++    },
++    {
++      "name": "duplicate_terminal_patch",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "observed_success",
++      "accepted": true
++    },
++    {
++      "name": "duplicate_start",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "observed_success",
++      "accepted": true
++    },
++    {
++      "name": "contradictory_terminal",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "failed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "observed_failure",
++      "accepted": false
++    },
++    {
++      "name": "reordered_completion",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "unobservable",
++      "accepted": true
++    },
++    {
++      "name": "missing_completion",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "unobservable",
++      "accepted": true
++    },
++    {
++      "name": "missing_start",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "no_tools_observed",
++      "accepted": true
++    },
++    {
++      "name": "opaque",
++      "updates": [
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "no_tools_observed",
++      "accepted": true
++    },
++    {
++      "name": "mixed_success_and_opaque",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        },
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "observed_success",
++      "accepted": true
++    },
++    {
++      "name": "unsupported_item",
++      "updates": [
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "no_tools_observed",
++      "accepted": true
++    },
++    {
++      "name": "analysis_zero_events",
++      "updates": [
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "{\"success\":true,\"summary\":\"done\"}"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "no_tools_observed",
++      "accepted": true
++    },
++    {
++      "name": "zero_events_bad_json",
++      "updates": [
++        {
++          "sessionUpdate": "agent_message_chunk",
++          "messageId": "answer",
++          "content": {
++            "type": "text",
++            "text": "not JSON"
++          },
++          "_meta": {
++            "goose.native.messagePhase": "final_answer"
++          }
++        }
++      ],
++      "observation": "no_tools_observed",
++      "accepted": false
++    },
++    {
++      "name": "missing_final",
++      "updates": [
++        {
++          "sessionUpdate": "tool_call",
++          "toolCallId": "direct-edit",
++          "kind": "edit",
++          "title": "Editing files",
++          "status": "in_progress",
++          "content": [
++            {
++              "type": "diff",
++              "oldText": "phase=created\nrevision=1\n",
++              "newText": "phase=updated\nrevision=2\n",
++              "path": "target.txt",
++              "_meta": {
++                "kind": "update"
++              }
++            }
++          ]
++        },
++        {
++          "sessionUpdate": "tool_call_update",
++          "toolCallId": "direct-edit",
++          "status": "completed"
++        }
++      ],
++      "observation": "observed_success",
++      "accepted": false
++    }
++  ]
++}
+diff --git a/crates/goose/tests/native_completion_protocol_test.rs b/crates/goose/tests/native_completion_protocol_test.rs
+new file mode 100644
+index 0000000..f9594d1
+--- /dev/null
++++ b/crates/goose/tests/native_completion_protocol_test.rs
+@@ -0,0 +1,274 @@
++use agent_client_protocol::schema::v1::{
++    CancelNotification, ContentBlock, ContentChunk, InitializeRequest, InitializeResponse,
++    NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, SessionNotification,
++    SessionUpdate, StopReason,
++};
++use agent_client_protocol::schema::ProtocolVersion;
++use agent_client_protocol::{on_receive_notification, on_receive_request, Agent, ByteStreams};
++use futures::StreamExt;
++use goose::acp::{AcpProvider, AcpProviderConfig};
++use goose::config::GooseMode;
++use goose::providers::base::{Provider, ProviderEvent};
++use goose_providers::conversation::message::Message;
++use goose_providers::model::ModelConfig;
++use std::collections::HashMap;
++use std::sync::Arc;
++use tokio::sync::Notify;
++use tokio::time::{timeout, Duration};
++use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
++
++async fn scripted_provider(
++    chunks: usize,
++    reason: StopReason,
++    wait_cancel: bool,
++    ignore_cancel: bool,
++    updates: Vec<SessionUpdate>,
++) -> (AcpProvider, tokio::task::JoinHandle<()>, Arc<Notify>) {
++    let (client_read, agent_write) = tokio::io::duplex(4096);
++    let (agent_read, client_write) = tokio::io::duplex(4096);
++    let cancelled = Arc::new(Notify::new());
++    let cancel_signal = cancelled.clone();
++    let waiter = cancelled.clone();
++    let agent = tokio::spawn(async move {
++        let _ = Agent
++            .builder()
++            .name("native-fixture")
++            .on_receive_request(
++                async |_req: InitializeRequest, responder, _cx| {
++                    responder.respond(InitializeResponse::new(ProtocolVersion::LATEST))
++                },
++                on_receive_request!(),
++            )
++            .on_receive_request(
++                async |_req: NewSessionRequest, responder, _cx| {
++                    responder.respond(NewSessionResponse::new("native-fixture-session"))
++                },
++                on_receive_request!(),
++            )
++            .on_receive_notification(
++                async move |_req: CancelNotification, _cx| {
++                    cancel_signal.notify_waiters();
++                    Ok(())
++                },
++                on_receive_notification!(),
++            )
++            .on_receive_request(
++                async move |req: PromptRequest, responder, cx| {
++                    let connection = cx.clone();
++                    let waiter = waiter.clone();
++                    let updates = updates.clone();
++                    cx.spawn(async move {
++                        for _ in 0..chunks {
++                            connection.send_notification(SessionNotification::new(
++                                req.session_id.clone(),
++                                SessionUpdate::AgentMessageChunk(ContentChunk::new(
++                                    ContentBlock::Text(
++                                        agent_client_protocol::schema::v1::TextContent::new("x"),
++                                    ),
++                                )),
++                            ))?;
++                        }
++                        for update in updates {
++                            connection.send_notification(SessionNotification::new(
++                                req.session_id.clone(),
++                                update,
++                            ))?;
++                        }
++                        if wait_cancel {
++                            if ignore_cancel {
++                                std::future::pending::<()>().await;
++                            }
++                            waiter.notified().await;
++                        }
++                        responder.respond(PromptResponse::new(reason))
++                    })?;
++                    Ok(())
++                },
++                on_receive_request!(),
++            )
++            .connect_to(ByteStreams::new(
++                agent_write.compat_write(),
++                agent_read.compat(),
++            ))
++            .await;
++    });
++    let config = AcpProviderConfig {
++        native_completion: true,
++        command: "unused".into(),
++        args: vec![],
++        env: vec![],
++        env_remove: vec![],
++        work_dir: std::env::temp_dir(),
++        mcp_servers: vec![],
++        session_mode_id: None,
++        session_config_options: vec![],
++        model_config_option_id: None,
++        mode_mapping: HashMap::new(),
++        notification_callback: None,
++    };
++    let provider = AcpProvider::connect_with_transport(
++        "fixture-acp".into(),
++        GooseMode::Auto,
++        config,
++        ByteStreams::new(client_write.compat_write(), client_read.compat()),
++    )
++    .await
++    .unwrap();
++    (provider, agent, cancelled)
++}
++
++#[tokio::test]
++async fn native_completion_protocol_preserves_terminal_and_saturated_chunks() {
++    let (provider, agent, _) =
++        scripted_provider(256, StopReason::EndTurn, false, false, vec![]).await;
++    let model = ModelConfig::new("current");
++    let mut stream = provider
++        .stream_events(&model, "", &[Message::user().with_text("fixture")], &[])
++        .await
++        .unwrap();
++    tokio::time::sleep(Duration::from_millis(50)).await;
++    let mut text = String::new();
++    let mut terminal = None;
++    timeout(Duration::from_secs(10), async {
++        while let Some(event) = stream.next().await {
++            match event.unwrap() {
++                ProviderEvent::Chunk(Some(message), _) => text.push_str(&message.as_concat_text()),
++                ProviderEvent::NativeTerminal(evidence) => {
++                    assert!(terminal.is_none());
++                    terminal = Some(evidence);
++                }
++                _ => (),
++            }
++        }
++    })
++    .await
++    .unwrap();
++    let terminal = terminal.expect("terminal evidence");
++    assert_eq!(terminal.stop_reason, "end_turn");
++    assert_eq!(text.len(), 256);
++    assert_eq!(terminal.final_text, text);
++    drop(provider);
++    agent.abort();
++}
++
++#[tokio::test]
++async fn native_completion_protocol_retains_non_success_reason() {
++    let (provider, agent, _) =
++        scripted_provider(1, StopReason::MaxTokens, false, false, vec![]).await;
++    let model = ModelConfig::new("current");
++    let mut stream = provider
++        .stream_events(&model, "", &[Message::user().with_text("fixture")], &[])
++        .await
++        .unwrap();
++    let mut reason = None;
++    timeout(Duration::from_secs(10), async {
++        while let Some(event) = stream.next().await {
++            if let ProviderEvent::NativeTerminal(e) = event.unwrap() {
++                reason = Some(e.stop_reason);
++            }
++        }
++    })
++    .await
++    .unwrap();
++    assert_eq!(reason.as_deref(), Some("max_tokens"));
++    drop(provider);
++    agent.abort();
++}
++
++#[tokio::test]
++async fn native_completion_protocol_stream_drop_sends_cancel() {
++    let (provider, agent, cancelled) =
++        scripted_provider(1, StopReason::Cancelled, true, false, vec![]).await;
++    let observed = cancelled.notified();
++    tokio::pin!(observed);
++    observed.as_mut().enable();
++    let model = ModelConfig::new("current");
++    let mut stream = provider
++        .stream_events(&model, "", &[Message::user().with_text("fixture")], &[])
++        .await
++        .unwrap();
++    assert!(timeout(Duration::from_secs(5), stream.next())
++        .await
++        .unwrap()
++        .is_some());
++    drop(stream);
++    timeout(Duration::from_secs(5), observed)
++        .await
++        .expect("remote receives cancellation");
++    drop(provider);
++    agent.abort();
++}
++
++#[tokio::test]
++async fn native_completion_protocol_cancel_timeout_quarantines_connection() {
++    let (provider, agent, cancelled) =
++        scripted_provider(1, StopReason::Cancelled, true, true, vec![]).await;
++    let observed = cancelled.notified();
++    tokio::pin!(observed);
++    observed.as_mut().enable();
++    let model = ModelConfig::new("current");
++    let mut stream = provider
++        .stream_events(&model, "", &[Message::user().with_text("fixture")], &[])
++        .await
++        .unwrap();
++    assert!(timeout(Duration::from_secs(5), stream.next())
++        .await
++        .unwrap()
++        .is_some());
++    drop(stream);
++    timeout(Duration::from_secs(5), observed).await.unwrap();
++    tokio::time::sleep(Duration::from_millis(5200)).await;
++    assert!(provider
++        .stream_events(
++            &model,
++            "",
++            &[Message::user().with_text("must not replay")],
++            &[]
++        )
++        .await
++        .is_err());
++    drop(provider);
++    agent.abort();
++}
++
++#[tokio::test]
++async fn native_completion_protocol_preserves_message_boundaries_and_unobservable_status() {
++    for unknown in [false, true] {
++        let updates = vec![
++            serde_json::from_value(serde_json::json!({"sessionUpdate":"agent_message_chunk","messageId":"comment","content":{"type":"text","text":"I will update."},"_meta":{"goose.native.messagePhase":"commentary"}})).unwrap(),
++            serde_json::from_value(serde_json::json!({"sessionUpdate":"tool_call","toolCallId":"exec","title":"native execution","kind":"other","status":"completed","rawOutput":if unknown {serde_json::json!({"goose.native.toolObservation":"unobservable"})} else {serde_json::json!({"success":true})}})).unwrap(),
++            serde_json::from_value(serde_json::json!({"sessionUpdate":"agent_message_chunk","messageId":"final","content":{"type":"text","text":"{\"success\":true,\"summary\":\"done\"}"},"_meta":{"goose.native.messagePhase":"final_answer"}})).unwrap(),
++        ];
++        let (provider, agent, _) =
++            scripted_provider(0, StopReason::EndTurn, false, false, updates).await;
++        let model = ModelConfig::new("current");
++        let mut stream = provider
++            .stream_events(&model, "", &[Message::user().with_text("fixture")], &[])
++            .await
++            .unwrap();
++        let mut terminal = None;
++        while let Some(event) = stream.next().await {
++            if let ProviderEvent::NativeTerminal(e) = event.unwrap() {
++                terminal = Some(e);
++            }
++        }
++        let e = terminal.unwrap();
++        assert_eq!(e.final_message_id.as_deref(), Some("final"));
++        assert_eq!(e.final_message_phase.as_deref(), Some("final_answer"));
++        assert_eq!(
++            serde_json::from_str::<serde_json::Value>(&e.final_text).unwrap()["success"],
++            true
++        );
++        assert!(!e.tool_error);
++        assert_eq!(
++            e.tool_observation,
++            if unknown {
++                goose_providers::base::NativeToolObservation::Unobservable
++            } else {
++                goose_providers::base::NativeToolObservation::ObservedSuccess
++            }
++        );
++        drop(provider);
++        agent.abort();
++    }
++}
+diff --git a/goose-self-test.yaml b/goose-self-test.yaml
+index 121de50..3f71cb9 100644
+--- a/goose-self-test.yaml
++++ b/goose-self-test.yaml
+@@ -15,6 +15,8 @@ activities:
+   - Test extension discovery and management
+   - Test load tool for knowledge injection and discovery
+   - Test delegate tool for task delegation
++  - Validate native ACP typed terminal evidence and schema-checked completion with the offline native_completion_protocol_test suite; live native qualification requires an explicit bounded budget
++  - Validate native final-message boundaries, typed worker failures and unsupported tool-observation rejection offline
+   - Test multi-turn thinking preservation for providers that reject replayed reasoning_content
+   - Test Z.AI Coding Plan streamed tool calls and interruption recovery
+   - Validate ACP thinking-effort discovery, forwarding, and provider switching

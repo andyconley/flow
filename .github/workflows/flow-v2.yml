@@ -1,0 +1,35 @@
+name: Flow v2 offline workflow and installer
+on:
+  pull_request:
+    paths: ['v2/**', 'install-flow-v2.sh', '.github/workflows/flow-v2.yml']
+  push:
+    branches: [main]
+    paths: ['v2/**', 'install-flow-v2.sh', '.github/workflows/flow-v2.yml']
+permissions:
+  contents: read
+jobs:
+  offline-v2:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
+      - name: Install locked offline-test dependencies
+        run: |
+          python -m venv v2/.venv
+          v2/.venv/bin/python -m pip install -r v2/requirements.lock
+          mkdir -p v2/runtime/adapters
+          cp v2/adapters.package.json v2/runtime/adapters/package.json
+          cp v2/adapters.package-lock.json v2/runtime/adapters/package-lock.json
+          npm ci --ignore-scripts --prefix v2/runtime/adapters
+      - name: Test workflow, explicit native errors, installer selection and rollback
+        working-directory: v2
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Check patch lock and publishable source
+        run: |
+          python v2/scripts/check_distribution.py
+          git diff --check

@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 
 .venv-openhands/
+
+# Flow v2 local dependencies, credentials references and execution artifacts.
+v2/.venv/
+v2/runtime/
+v2/artifacts/
+v2/workspaces/
+v2/.venv

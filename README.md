@@ -2,6 +2,12 @@
 
 Portable workflow framework for AI-assisted development.
 
+## Flow v2.0 preview (Goose/LangGraph)
+
+The opt-in v2 implementation is in [v2/](v2/README.md). It provides native-host shaping, versioned handoffs, LangGraph approvals/recovery, Goose specialist execution, and a reversible installer with ownership-aware legacy cleanup. Existing Flow installs and active run artifacts are not silently migrated.
+
+See [v2 installation and selection](v2/FLOW_V2_INSTALL.md). On a new source checkout, `./install-flow-v2.sh prepare --build-goose` prepares locked dependencies and the pinned official Goose source plus shipped integration patch; `./install-flow-v2.sh install` installs the opt-in launcher. Default replacement is a separate explicit `flow-v2 activate --replace-legacy` selection with backups and rollback. The legacy installer and documentation below remain available during the preview.
+
 ## OpenHands-backed Flow (this branch)
 
 Flow owns define, solution, plan, implement, review and archive, specialist roles,

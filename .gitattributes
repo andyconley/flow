@@ -1,0 +1,2 @@
+# A source patch includes single-space context lines; preserve its exact digest.
+v2/vendor/*.patch -whitespace
