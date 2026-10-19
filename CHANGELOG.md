@@ -2,6 +2,20 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.48.0](https://github.com/andyconley/flow/compare/v0.47.0...v0.48.0) (2026-10-18)
+
+### Features
+
+* **flow-v2:** add Goose LangGraph preview and reversible installer ([2b0b29d](https://github.com/andyconley/flow/commit/2b0b29d22e7a4824794ff4588c2230e9194b0020))
+
+### Bug Fixes
+
+* **runtime:** pin compatible LiteLLM for OpenHands transport ([5cd21cf](https://github.com/andyconley/flow/commit/5cd21cf9f6413f8425fe792ff5f040c931845466))
+
+### Documentation
+
+* **flow-v2:** lead with reproducible source preparation ([a234083](https://github.com/andyconley/flow/commit/a23408370b9023d5b70f2b94504b7770cec4f99d))
+
 ## [0.47.0](https://github.com/andyconley/flow/compare/v0.46.1...v0.47.0) (2026-10-17)
 
 ### ⚠ BREAKING CHANGES
