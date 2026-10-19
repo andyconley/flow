@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# Disposable providers need the base interpreter, not SDK venv metadata outside confinement.
+PROVIDER_PYTHON = getattr(sys, "_base_executable", sys.executable)
 sys.path.insert(0, str(ROOT / "cli"))
 
 from macos_sandbox import confined_argv  # noqa: E402
@@ -28,7 +30,7 @@ class MacOSSandboxTests(unittest.TestCase):
 
     def _disposable_provider(self, root: Path, body: str) -> Path:
         executable = root / "disposable-provider"
-        executable.write_text(f"#!{sys.executable}\n{body}\n")
+        executable.write_text(f"#!{PROVIDER_PYTHON}\n{body}\n")
         executable.chmod(0o755)
         return executable
 
@@ -47,7 +49,7 @@ class MacOSSandboxTests(unittest.TestCase):
                       "print(Path(sys.argv[1]).read_text()); "
                       "print(Path(sys.argv[2]).read_text())")
             argv = confined_argv(
-                [sys.executable, "-c", script, str(allowed), str(denied)],
+                [PROVIDER_PYTHON, "-c", script, str(allowed), str(denied)],
                 workspace=workspace, private_home=private_home,
             )
             result = self._run_or_skip_nested(argv, cwd=workspace)
@@ -61,7 +63,7 @@ class MacOSSandboxTests(unittest.TestCase):
             workspace, private_home = root / "workspace", root / "home"
             workspace.mkdir()
             private_home.mkdir()
-            argv = confined_argv([sys.executable, "-c", "pass"], workspace=workspace,
+            argv = confined_argv([PROVIDER_PYTHON, "-c", "pass"], workspace=workspace,
                                  private_home=private_home)
             profile = argv[2]
             self.assertIn(str(workspace), profile)
