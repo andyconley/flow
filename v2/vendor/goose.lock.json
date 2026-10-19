@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/aaif-goose/goose.git",
+  "version": "1.55.0",
+  "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
+  "integration_commit_reference": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
+  "patch": "goose-native.patch",
+  "patch_sha256": "6d31c884eaecdb310f95fe231eac123203d9dff5063fb313e28ddd2548f3dc4e",
+  "build_package": "goose-cli",
+  "features": [
+    "scheduler",
+    "tree-sitter",
+    "rustls-tls"
+  ]
+}

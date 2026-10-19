@@ -1,0 +1,137 @@
+{
+  "roles": [
+    {
+      "role": "architect",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "opus",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/architect.md",
+      "agent": ".agents/agents/architect.md",
+      "recipe": "recipes/architect.yaml"
+    },
+    {
+      "role": "solution-architect",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "opus",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/solution-architect.md",
+      "agent": ".agents/agents/solution-architect.md",
+      "recipe": "recipes/solution-architect.yaml"
+    },
+    {
+      "role": "business-analyst",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "sonnet",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/business-analyst.md",
+      "agent": ".agents/agents/business-analyst.md",
+      "recipe": "recipes/business-analyst.yaml"
+    },
+    {
+      "role": "quality-reviewer",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "opus",
+      "responsibility": "review",
+      "source": "scaffolds/default/agents/quality-reviewer.md",
+      "agent": ".agents/agents/quality-reviewer.md",
+      "recipe": "recipes/quality-reviewer.yaml"
+    },
+    {
+      "role": "data-engineer",
+      "profile": "codex",
+      "provider": "codex-acp",
+      "model": "gpt-5.6-terra",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/data-engineer.md",
+      "agent": ".agents/agents/data-engineer.md",
+      "recipe": "recipes/data-engineer.yaml"
+    },
+    {
+      "role": "lead-developer",
+      "profile": "codex",
+      "provider": "codex-acp",
+      "model": "gpt-5.6-terra",
+      "responsibility": "implement",
+      "source": "scaffolds/default/agents/lead-developer.md",
+      "agent": ".agents/agents/lead-developer.md",
+      "recipe": "recipes/lead-developer.yaml"
+    },
+    {
+      "role": "product-manager",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "sonnet",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/product-manager.md",
+      "agent": ".agents/agents/product-manager.md",
+      "recipe": "recipes/product-manager.yaml"
+    },
+    {
+      "role": "security-reviewer",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "opus",
+      "responsibility": "review",
+      "source": "scaffolds/default/agents/security-reviewer.md",
+      "agent": ".agents/agents/security-reviewer.md",
+      "recipe": "recipes/security-reviewer.yaml"
+    },
+    {
+      "role": "sre",
+      "profile": "codex",
+      "provider": "codex-acp",
+      "model": "gpt-5.6-terra",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/sre.md",
+      "agent": ".agents/agents/sre.md",
+      "recipe": "recipes/sre.yaml"
+    },
+    {
+      "role": "support-lead",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "haiku",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/support-lead.md",
+      "agent": ".agents/agents/support-lead.md",
+      "recipe": "recipes/support-lead.yaml"
+    },
+    {
+      "role": "tech-writer",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "haiku",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/tech-writer.md",
+      "agent": ".agents/agents/tech-writer.md",
+      "recipe": "recipes/tech-writer.yaml"
+    },
+    {
+      "role": "test-engineer",
+      "profile": "codex",
+      "provider": "codex-acp",
+      "model": "gpt-5.6-terra",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/test-engineer.md",
+      "agent": ".agents/agents/test-engineer.md",
+      "recipe": "recipes/test-engineer.yaml"
+    },
+    {
+      "role": "ux-specialist",
+      "profile": "claude",
+      "provider": "claude-acp",
+      "model": "sonnet",
+      "responsibility": "role",
+      "source": "scaffolds/default/agents/ux-specialist.md",
+      "agent": ".agents/agents/ux-specialist.md",
+      "recipe": "recipes/ux-specialist.yaml"
+    }
+  ],
+  "count": 13,
+  "skipped": [],
+  "live_calls_for_catalog_expansion": 0
+}
