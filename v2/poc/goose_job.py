@@ -27,7 +27,7 @@ class GooseJob:
   store(p,record) # Before submit: crash here is explicitly uncertain, never silently resubmitted.
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
   output=p.with_suffix('.jsonl');err=p.with_suffix('.stderr')
-  cmd=scoped([str(ROOT/'runtime/bin/goose'),'run','--no-profile','--with-builtin','developer','--with-builtin','summon','--provider',provider,'--model',self.model,'--max-turns','25','--max-tool-repetitions','3','--output-format','stream-json','--name',f'{s["job_id"]}-{kind}-{index}','--instructions',str(instructions)])
+  cmd=scoped([str(goose_binary()),'run','--no-profile','--with-builtin','developer','--with-builtin','summon','--provider',provider,'--model',self.model,'--max-turns','25','--max-tool-repetitions','3','--output-format','stream-json','--name',f'{s["job_id"]}-{kind}-{index}','--instructions',str(instructions)])
   env=environment(project=s['workspace'],provider=provider,model=self.model);env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model
   if self.role_bundle:
    from .native_runtime import prepare

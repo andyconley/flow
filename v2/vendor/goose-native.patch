@@ -1,6 +1,6 @@
 diff --git a/LOCAL_NATIVE_ACP_PATCH.md b/LOCAL_NATIVE_ACP_PATCH.md
 new file mode 100644
-index 0000000..5e73015
+index 0000000000000000000000000000000000000000..5e73015fc7bccb3d97ca3104dba18b30b0fc1f5c
 --- /dev/null
 +++ b/LOCAL_NATIVE_ACP_PATCH.md
 @@ -0,0 +1,59 @@
@@ -64,7 +64,7 @@ index 0000000..5e73015
 +
 +The earlier parallel ACP run was interrupted after one existing shared-config handoff test hung. That test passed in isolation, then all ACP tests passed serially. This is recorded as an interrupted run followed by successful serial checks, not a clean initial parallel pass.
 diff --git a/crates/goose-agent/src/inference.rs b/crates/goose-agent/src/inference.rs
-index a9fec4f..caf3cc4 100644
+index a9fec4f27b51d96a8a567e492600bfb7e89c93d7..caf3cc44c459bdb1bb46bd4e91da7a7e131881cd 100644
 --- a/crates/goose-agent/src/inference.rs
 +++ b/crates/goose-agent/src/inference.rs
 @@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
@@ -155,7 +155,7 @@ index a9fec4f..caf3cc4 100644
              self.output().accumulator.clear();
 diff --git a/crates/goose-agent/tests/native_terminal.rs b/crates/goose-agent/tests/native_terminal.rs
 new file mode 100644
-index 0000000..b9a82fc
+index 0000000000000000000000000000000000000000..b9a82fcfbc8874cd9fb7b42b9d27939f844615a9
 --- /dev/null
 +++ b/crates/goose-agent/tests/native_terminal.rs
 @@ -0,0 +1,110 @@
@@ -270,7 +270,7 @@ index 0000000..b9a82fc
 +    }
 +}
 diff --git a/crates/goose-provider-types/src/base.rs b/crates/goose-provider-types/src/base.rs
-index 4a6309b..d1ebef9 100644
+index 4a6309b282faab5413b7ea8c55645c281fca0686..d1ebef93113f2ad577580c71d0d4a2f3f43279ef 100644
 --- a/crates/goose-provider-types/src/base.rs
 +++ b/crates/goose-provider-types/src/base.rs
 @@ -347,6 +347,43 @@ pub type MessageStream = Pin<
@@ -346,7 +346,7 @@ index 4a6309b..d1ebef9 100644
          &self,
          model_config: &ModelConfig,
 diff --git a/crates/goose/src/acp/provider.rs b/crates/goose/src/acp/provider.rs
-index f71c356..57bcf7a 100644
+index f71c35680dfa9e1287203d3ff3124268b687729f..57bcf7ac8d45c99500bf2736ab8a82ed57401727 100644
 --- a/crates/goose/src/acp/provider.rs
 +++ b/crates/goose/src/acp/provider.rs
 @@ -1,10 +1,10 @@
@@ -1089,7 +1089,7 @@ index f71c356..57bcf7a 100644
 +    }
  }
 diff --git a/crates/goose/src/agents/final_output_tool.rs b/crates/goose/src/agents/final_output_tool.rs
-index a69574c..cfcd989 100644
+index a69574c99731da58d9782d757720fc930ec248f0..cfcd9895bbc996d720d31bad5ed649a218a16ca4 100644
 --- a/crates/goose/src/agents/final_output_tool.rs
 +++ b/crates/goose/src/agents/final_output_tool.rs
 @@ -26,6 +26,33 @@ pub(crate) fn structured_output_unsupported_message(provider_name: &str) -> Stri
@@ -1157,7 +1157,7 @@ index a69574c..cfcd989 100644
  
      pub async fn execute_tool_call(&mut self, tool_call: CallToolRequestParams) -> ToolCallResult {
 diff --git a/crates/goose/src/agents/mod.rs b/crates/goose/src/agents/mod.rs
-index d3d21e5..d1c4cae 100644
+index d3d21e557aae4be2adeb7cefb1235b7f460847bc..d1c4cae9ca5f63c1b721fc8d2803ee98eb855774 100644
 --- a/crates/goose/src/agents/mod.rs
 +++ b/crates/goose/src/agents/mod.rs
 @@ -56,3 +56,6 @@ pub(crate) fn latest_provider_session_id<'a>(
@@ -1169,7 +1169,7 @@ index d3d21e5..d1c4cae 100644
 +pub(crate) mod native_completion;
 diff --git a/crates/goose/src/agents/native_boundary.rs b/crates/goose/src/agents/native_boundary.rs
 new file mode 100644
-index 0000000..3196393
+index 0000000000000000000000000000000000000000..31963937fd6b211a9fee4bcfc2e613477e1749bf
 --- /dev/null
 +++ b/crates/goose/src/agents/native_boundary.rs
 @@ -0,0 +1,80 @@
@@ -1255,7 +1255,7 @@ index 0000000..3196393
 +}
 diff --git a/crates/goose/src/agents/native_completion.rs b/crates/goose/src/agents/native_completion.rs
 new file mode 100644
-index 0000000..a2cbe10
+index 0000000000000000000000000000000000000000..a2cbe10c32b0064fbee167ab8ae3b94dcf2f900d
 --- /dev/null
 +++ b/crates/goose/src/agents/native_completion.rs
 @@ -0,0 +1,497 @@
@@ -1758,7 +1758,7 @@ index 0000000..a2cbe10
 +mod transport_tests;
 diff --git a/crates/goose/src/agents/native_completion_transport_tests.rs b/crates/goose/src/agents/native_completion_transport_tests.rs
 new file mode 100644
-index 0000000..1d70fd3
+index 0000000000000000000000000000000000000000..1d70fd350096f28a738011613cdb9b8e1f6a40d8
 --- /dev/null
 +++ b/crates/goose/src/agents/native_completion_transport_tests.rs
 @@ -0,0 +1,216 @@
@@ -1979,7 +1979,7 @@ index 0000000..1d70fd3
 +    agent.abort();
 +}
 diff --git a/crates/goose/src/agents/state_machine/inference_preparation.rs b/crates/goose/src/agents/state_machine/inference_preparation.rs
-index 5f31e8b..82b2d9c 100644
+index 5f31e8b4b199f27cd0a5dc4a232cdc3de99baf4b..82b2d9c60cf67c46e5eaccdba2223bfaaaf9dc52 100644
 --- a/crates/goose/src/agents/state_machine/inference_preparation.rs
 +++ b/crates/goose/src/agents/state_machine/inference_preparation.rs
 @@ -18,6 +18,7 @@ pub struct GooseInferenceRequestPreparer<'a> {
@@ -2020,7 +2020,7 @@ index 5f31e8b..82b2d9c 100644
              system_prompt,
              tools,
 diff --git a/crates/goose/src/agents/state_machine/ops_llm.rs b/crates/goose/src/agents/state_machine/ops_llm.rs
-index 3303c05..d3af127 100644
+index 3303c0560ad3926b1474bf5051406850f09a7b45..d3af127dc00c033faca29e4d8ec0c908ad7348f5 100644
 --- a/crates/goose/src/agents/state_machine/ops_llm.rs
 +++ b/crates/goose/src/agents/state_machine/ops_llm.rs
 @@ -6,7 +6,9 @@ use async_trait::async_trait;
@@ -2085,7 +2085,7 @@ index 3303c05..d3af127 100644
          &self,
          model_config: &ModelConfig,
 diff --git a/crates/goose/src/agents/state_machine/ops_recipe.rs b/crates/goose/src/agents/state_machine/ops_recipe.rs
-index 7281bbc..8da368d 100644
+index 7281bbcea63c4e7958b5d4f0e7a0dfc900ff320c..8da368de45bae7557e853dc0d815831307421969 100644
 --- a/crates/goose/src/agents/state_machine/ops_recipe.rs
 +++ b/crates/goose/src/agents/state_machine/ops_recipe.rs
 @@ -200,6 +200,9 @@ impl Operation<Session, GooseEffect> for RecipeOperation {
@@ -2149,7 +2149,7 @@ index 7281bbc..8da368d 100644
              return self.command_error(
                  conversation,
 diff --git a/crates/goose/src/agents/state_machine/ops_subagent.rs b/crates/goose/src/agents/state_machine/ops_subagent.rs
-index f11b94d..5da4a2c 100644
+index f11b94d71c070a4a94c6e66b2e86d0c527286476..5da4a2c571d97efadc92a10c8d70706b52cccb58 100644
 --- a/crates/goose/src/agents/state_machine/ops_subagent.rs
 +++ b/crates/goose/src/agents/state_machine/ops_subagent.rs
 @@ -260,6 +260,7 @@ impl Operation<Session, GooseEffect> for SubagentOperation {
@@ -2203,7 +2203,7 @@ index f11b94d..5da4a2c 100644
      use crate::agents::state_machine::{ConversationEffect, RunStatus};
      use crate::config::GooseMode;
 diff --git a/crates/goose/src/agents/state_machine/session.rs b/crates/goose/src/agents/state_machine/session.rs
-index 37f092c..c1fe35f 100644
+index 37f092c29d68a03e220a669521e8f63ae05c2239..c1fe35feab043d74484a72bd6f068819dcf773d7 100644
 --- a/crates/goose/src/agents/state_machine/session.rs
 +++ b/crates/goose/src/agents/state_machine/session.rs
 @@ -107,8 +107,41 @@ impl EffectHandler<Session, GooseEffect> for SessionManager {
@@ -2251,7 +2251,7 @@ index 37f092c..c1fe35f 100644
                  GooseEffect::RecordUsage(provider_usage) => {
                      usage::record(self, session, provider_usage, false).await?;
 diff --git a/crates/goose/src/agents/state_machine_builder.rs b/crates/goose/src/agents/state_machine_builder.rs
-index 634a372..dc9eb8e 100644
+index 634a372358ca73f20ff71a3f5afe8d665821c9a9..dc9eb8ed6ac211d6858bd191168bc3c76564b794 100644
 --- a/crates/goose/src/agents/state_machine_builder.rs
 +++ b/crates/goose/src/agents/state_machine_builder.rs
 @@ -107,6 +107,7 @@ pub(crate) fn build_state_machine(
@@ -2263,7 +2263,7 @@ index 634a372..dc9eb8e 100644
          extension_lease,
          tool_inspection_manager,
 diff --git a/crates/goose/src/agents/subagent_handler.rs b/crates/goose/src/agents/subagent_handler.rs
-index 9590239..bf4ae2f 100644
+index 9590239705769d120496e3d002bfccde0e5d70bb..bf4ae2f24f382b88188988730b7e4d0c120e9b20 100644
 --- a/crates/goose/src/agents/subagent_handler.rs
 +++ b/crates/goose/src/agents/subagent_handler.rs
 @@ -125,6 +125,19 @@ impl SubagentRunner {
@@ -2315,7 +2315,7 @@ index 9590239..bf4ae2f 100644
          if let Some(output) =
              messages.and_then(|messages| FinalOutputTool::successful_output(messages))
 diff --git a/crates/goose/src/providers/amp_acp.rs b/crates/goose/src/providers/amp_acp.rs
-index f8d1cad..6df2e59 100644
+index f8d1cadc4baaa09212ede5b5e36e0ed5507bc0cf..6df2e59e6ca433f41d60658dc4d5d07ffe2f4e1c 100644
 --- a/crates/goose/src/providers/amp_acp.rs
 +++ b/crates/goose/src/providers/amp_acp.rs
 @@ -76,6 +76,7 @@ impl ProviderDef for AmpAcpProvider {
@@ -2327,7 +2327,7 @@ index f8d1cad..6df2e59 100644
                  args: vec![],
                  env: vec![],
 diff --git a/crates/goose/src/providers/claude_acp.rs b/crates/goose/src/providers/claude_acp.rs
-index 7271c5f..1618c58 100644
+index 7271c5f1146e5c5492b10f4f23de9da5e46c583a..1618c58c7a03083b0a6b0048c87a08d0d0d7d82f 100644
 --- a/crates/goose/src/providers/claude_acp.rs
 +++ b/crates/goose/src/providers/claude_acp.rs
 @@ -83,6 +83,9 @@ impl ProviderDef for ClaudeAcpProvider {
@@ -2341,7 +2341,7 @@ index 7271c5f..1618c58 100644
                  args: vec![],
                  env: vec![],
 diff --git a/crates/goose/src/providers/codex_acp.rs b/crates/goose/src/providers/codex_acp.rs
-index ef94161..f4a6cfc 100644
+index ef94161c3cf242909b652f630be47169b99b9ca6..f4a6cfc19de93d70412e9cb1415c428c1be24ae0 100644
 --- a/crates/goose/src/providers/codex_acp.rs
 +++ b/crates/goose/src/providers/codex_acp.rs
 @@ -78,6 +78,9 @@ impl ProviderDef for CodexAcpProvider {
@@ -2355,7 +2355,7 @@ index ef94161..f4a6cfc 100644
                  args: vec![],
                  env: vec![],
 diff --git a/crates/goose/src/providers/copilot_acp.rs b/crates/goose/src/providers/copilot_acp.rs
-index d280553..35d021b 100644
+index d280553decf260c43248e46c28d5d961fd382689..35d021b017ef37c6c0acc928038465ba8dbc20b6 100644
 --- a/crates/goose/src/providers/copilot_acp.rs
 +++ b/crates/goose/src/providers/copilot_acp.rs
 @@ -84,6 +84,7 @@ impl CopilotAcpProvider {
@@ -2367,7 +2367,7 @@ index d280553..35d021b 100644
                  args,
                  env: vec![],
 diff --git a/crates/goose/src/providers/pi_acp.rs b/crates/goose/src/providers/pi_acp.rs
-index 14b4b27..7eb0b8c 100644
+index 14b4b275874053f8d8f01d0c4069436cc532f1d1..7eb0b8c3ad9994a8cb1315047eab9f84fb605cce 100644
 --- a/crates/goose/src/providers/pi_acp.rs
 +++ b/crates/goose/src/providers/pi_acp.rs
 @@ -67,6 +67,7 @@ impl PiAcpProvider {
@@ -2379,7 +2379,7 @@ index 14b4b27..7eb0b8c 100644
                  args: vec![],
                  env: vec![],
 diff --git a/crates/goose/tests/acp_bootstrap_effort_test.rs b/crates/goose/tests/acp_bootstrap_effort_test.rs
-index cda8cbb..874dba1 100644
+index cda8cbb079386131c3be7435acbf9b6625d29118..874dba1b559af3668f63fbf1cd05c50bff836c32 100644
 --- a/crates/goose/tests/acp_bootstrap_effort_test.rs
 +++ b/crates/goose/tests/acp_bootstrap_effort_test.rs
 @@ -88,6 +88,7 @@ async fn bootstrap_config_option_response_refreshes_the_effort_mirror() {
@@ -2407,7 +2407,7 @@ index cda8cbb..874dba1 100644
          args: vec![],
          env: vec![],
 diff --git a/crates/goose/tests/acp_fixtures/provider.rs b/crates/goose/tests/acp_fixtures/provider.rs
-index ef28fcb..a193aba 100644
+index ef28fcbd16679b3b724f0be93a3df43424597353..a193aba9b48faaca74bc519e0b1783cf93a5536f 100644
 --- a/crates/goose/tests/acp_fixtures/provider.rs
 +++ b/crates/goose/tests/acp_fixtures/provider.rs
 @@ -176,6 +176,7 @@ impl Connection for AcpProviderConnection {
@@ -2420,7 +2420,7 @@ index ef28fcb..a193aba 100644
              env: vec![],
 diff --git a/crates/goose/tests/fixtures/native-direct-edit.json b/crates/goose/tests/fixtures/native-direct-edit.json
 new file mode 100644
-index 0000000..57f04b2
+index 0000000000000000000000000000000000000000..57f04b2bcbfeb0d035078e6458ea2433797883a7
 --- /dev/null
 +++ b/crates/goose/tests/fixtures/native-direct-edit.json
 @@ -0,0 +1,481 @@
@@ -2907,7 +2907,7 @@ index 0000000..57f04b2
 +}
 diff --git a/crates/goose/tests/native_completion_protocol_test.rs b/crates/goose/tests/native_completion_protocol_test.rs
 new file mode 100644
-index 0000000..f9594d1
+index 0000000000000000000000000000000000000000..f9594d1450f969aeb9e798303694e50ebf174d5e
 --- /dev/null
 +++ b/crates/goose/tests/native_completion_protocol_test.rs
 @@ -0,0 +1,274 @@
@@ -3186,7 +3186,7 @@ index 0000000..f9594d1
 +    }
 +}
 diff --git a/goose-self-test.yaml b/goose-self-test.yaml
-index 121de50..3f71cb9 100644
+index 121de50d9e3408e335fcb7dbe7e17d006b7b30d6..3f71cb9312bc4cfa6cc02b7334b4fef63e196805 100644
 --- a/goose-self-test.yaml
 +++ b/goose-self-test.yaml
 @@ -15,6 +15,8 @@ activities:

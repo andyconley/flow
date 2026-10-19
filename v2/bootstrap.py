@@ -15,6 +15,21 @@ def run(command, **kwargs):
     subprocess.run([str(x) for x in command], check=True, **kwargs)
 
 
+def verify_goose_source(source, lock):
+    """Validate exact tracked patch and reject unrelated untracked source."""
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
+    if head != lock['base_commit']:
+        raise SystemExit('Existing Goose source is not at the locked upstream base')
+    untracked = subprocess.check_output(['git','ls-files','--others','--exclude-standard'], cwd=source, text=True).splitlines()
+    if any(path != '.flow-v2-patch.json' for path in untracked):
+        raise SystemExit('Existing Goose source contains unrelated untracked files; preserve them before building')
+    applied = subprocess.check_output(['git','diff','--binary','--full-index','--no-ext-diff',
+                                      '--no-textconv','--no-renames','--no-color',
+                                      '--src-prefix=a/','--dst-prefix=b/',lock['base_commit']], cwd=source)
+    if hashlib.sha256(applied).hexdigest() != lock['patch_sha256']:
+        raise SystemExit('Existing Goose source differs from the locked integration patch; refusing to build unrelated edits')
+
+
 def prepare(build_goose=False):
     if sys.version_info < (3, 12):
         raise SystemExit('Flow v2 preparation requires Python 3.12 or later')
@@ -47,12 +62,7 @@ def prepare(build_goose=False):
             run(['git','apply','--check',patch],cwd=source)
             run(['git','apply','--index',patch],cwd=source)
             stamp.write_text(json.dumps(lock,indent=2)+'\n')
-        untracked = subprocess.check_output(['git','ls-files','--others','--exclude-standard'], cwd=source, text=True).splitlines()
-        if any(path != '.flow-v2-patch.json' for path in untracked):
-            raise SystemExit('Existing Goose source contains unrelated untracked files; preserve them before building')
-        applied = subprocess.check_output(['git','diff','--binary',lock['base_commit']], cwd=source)
-        if hashlib.sha256(applied).hexdigest() != lock['patch_sha256']:
-            raise SystemExit('Existing Goose source differs from the locked integration patch; refusing to build unrelated edits')
+        verify_goose_source(source, lock)
         run(['cargo','build','--locked','-p','goose-cli','--bin','goose','--no-default-features','--features',','.join(lock['features'])],cwd=source)
 
 

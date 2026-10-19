@@ -4,6 +4,8 @@ Flow v2.0 uses the native host for shaping and user decisions, LangGraph for dur
 
 ## Install and select
 
+On Apple Silicon macOS, the [bundled Goose artifact](vendor/artifacts/README.md) avoids compiling Rust. Extract it once with `cd v2 && python3.12 -m poc.goose_artifact --extract`, return to the repository root, then run `./install-flow-v2.sh prepare` without `--build-goose`. Other platforms can build from source as below.
+
 From the canonical repository root, prepare the locked dependencies and install:
 
 ```sh
@@ -49,6 +51,6 @@ The explicit `activate --replace-legacy` selection backs up and replaces the glo
 
 From `v2/`, use `.venv/bin/python -m unittest discover -s tests -v` after preparation. The cancellation test needs normal macOS process-list access to inspect only its own child processes. Installer tests use disposable homes and check real launcher execution, command mapping, old-to-v2 cleanup, idempotence, rollback and a pre-approval smoke without provider calls.
 
-The local implementation was exercised with existing native accounts before integration. No private execution records or machine-specific scenarios are distributed here. The shipped offline suite tests workflow, recovery, source locks, roles and installer behavior. See [native permission propagation](GLG_NATIVE_ERRORS.md). Goose is the pinned official v1.55.0 base plus the required [integration patch](vendor/README.md), built under ignored runtime/goose rather than fetched from an unpublished fork.
+The local implementation was exercised with existing native accounts before integration. No private execution records or machine-specific scenarios are distributed here. The shipped offline suite tests workflow, recovery, source locks, roles and installer behavior. See [native permission propagation](GLG_NATIVE_ERRORS.md). Goose is the pinned official v1.55.0 base plus the required [integration patch](vendor/README.md), available as the verified bundled Apple Silicon artifact or built under ignored runtime/goose from the shipped source lock.
 
 The preview does not migrate active legacy runs, create credentials, alter global security settings or deploy applications. Existing account adapters remain client-owned.

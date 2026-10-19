@@ -15,7 +15,13 @@ def node_binary():
 
 
 def goose_binary(source=ROOT):
-    return Path(os.environ.get('FLOW_V2_GOOSE_BINARY', str(source/'runtime/goose/target/debug/goose'))).resolve()
+    explicit = os.environ.get('FLOW_V2_GOOSE_BINARY')
+    if explicit:
+        return Path(explicit).resolve()
+    from .goose_artifact import binary_path, selected_binary
+    if binary_path(source).exists() or binary_path(source).is_symlink():
+        return selected_binary(source)
+    return (source/'runtime/goose/target/debug/goose').resolve()
 
 
 def environment(project=None, provider=None, model=None):
