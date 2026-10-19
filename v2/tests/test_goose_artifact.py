@@ -82,6 +82,61 @@ class ArtifactTests(unittest.TestCase):
                 with self.assertRaises(ValueError): artifact.extract(self.root)
         self.assertFalse(artifact.binary_path(self.root).exists())
 
+    def test_prepare_automatically_extracts_without_cargo_and_reruns(self):
+        for name in ('adapters.package.json', 'adapters.package-lock.json'):
+            (self.root/name).write_text('{}')
+        with patch.dict(os.environ, {}, clear=True), patch.object(bootstrap, 'ROOT', self.root), patch.object(bootstrap, 'run') as run:
+            bootstrap.prepare()
+            target = artifact.binary_path(self.root)
+            before = target.stat().st_mtime_ns
+            bootstrap.prepare()
+            self.assertEqual(target.stat().st_mtime_ns, before)
+            self.assertFalse(any(str(call.args[0][0]) in ('cargo', 'git') for call in run.call_args_list))
+
+    def test_install_and_update_extract_automatically_and_dry_run_is_read_only(self):
+        from poc.install import install
+        # Supply real distributed skill content and an existing Python environment;
+        # the executable is a tiny offline fixture, never used for inference.
+        import shutil
+        shutil.copytree(ROOT/'skills', self.root/'skills')
+        (self.root/'role-bundle').mkdir()
+        (self.root/'role-bundle/catalog.json').write_text('{}')
+        (self.root/'.venv/bin').mkdir(parents=True)
+        (self.root/'.venv/bin/python').symlink_to(os.sys.executable)
+        home = self.root/'home'
+        with patch.dict(os.environ, {}, clear=True):
+            dry = install('install', home, source=self.root, dry_run=True)
+            self.assertIn('goose_extraction_planned', dry)
+            self.assertFalse((self.root/'runtime').exists())
+            self.assertFalse(home.exists())
+            install('install', home, source=self.root)
+            target = artifact.binary_path(self.root)
+            before = target.stat().st_mtime_ns
+            self.assertEqual(install('install', home, source=self.root)['changed'], [])
+            self.assertEqual(target.stat().st_mtime_ns, before)
+            target.unlink()
+            install('update', home, source=self.root)
+            self.assertTrue(target.is_file())
+            target.write_bytes(b'user changed binary')
+            with self.assertRaisesRegex(ValueError, 'executable checksum'):
+                install('update', home, source=self.root)
+            self.assertEqual(target.read_bytes(), b'user changed binary')
+
+    def test_provision_preserves_override_source_build_and_incompatible_host(self):
+        with patch.dict(os.environ, {'FLOW_V2_GOOSE_BINARY':'/explicit/goose'}, clear=True):
+            self.assertEqual(artifact.provision(self.root), (Path('/explicit/goose'), False))
+        with patch.dict(os.environ, {}, clear=True):
+            with patch.object(artifact.platform, 'system', return_value='Linux'):
+                self.assertEqual(artifact.provision(self.root), ((self.root/'runtime/goose/target/debug/goose').resolve(), False))
+                self.assertFalse((self.root/'runtime').exists())
+            with patch.object(artifact.platform, 'mac_ver', return_value=('10.15', (), '')):
+                with self.assertRaises(ValueError): artifact.provision(self.root)
+            (self.root/'vendor/artifacts'/self.meta['archive']).write_bytes(b'bad')
+            for dry in (True, False):
+                with self.assertRaisesRegex(ValueError, 'archive checksum'):
+                    artifact.provision(self.root, dry_run=dry)
+            self.assertFalse((self.root/'runtime').exists())
+
     def test_shipped_artifact_and_lock_identity(self):
         value = artifact.metadata(ROOT)
         archive = ROOT/'vendor/artifacts'/value['archive']

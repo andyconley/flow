@@ -13,24 +13,32 @@ executable hashes; it is not a signed build attestation.
 
 ## Consume without Rust
 
-Use a fresh checkout of this branch on an Apple Silicon Mac, with a native arm64
-Python 3.12+ process. From the repository root:
+Use a checkout containing this artifact on an Apple Silicon Mac, with a native
+arm64 Python 3.12+ process and Node/npm. From the repository root:
 
 ```sh
-cd v2
-python3.12 -m poc.goose_artifact --extract
-python3.12 -m poc.goose_artifact
-runtime/bundled-goose/goose --version
-cd ..
 ./install-flow-v2.sh prepare
+./install-flow-v2.sh install --dry-run
+./install-flow-v2.sh install
 ```
+
+`prepare`, `install` and `update` automatically verify and extract the bundle.
+Existing source-bound `flow-v2 install` / `flow-v2 update` also use this behavior
+once their source checkout contains this change. Rerunning install/update reuses
+the verified executable; it never compiles Rust. Dry runs validate the archive
+and report `goose_extraction_planned` when extraction would be needed, without
+writing files. A prepared Python environment is still required for install/update.
+The release bootstrap `install.sh` continues to select tagged releases; this
+branch must be merged and released separately before that path can acquire it.
 
 Extraction verifies the source lock, shipped patch, archive size/hash, executable
 size/hash, platform and macOS version. It writes only the ignored local
 `v2/runtime/bundled-goose/goose`; an existing conflicting executable is preserved
-and rejected. The normal dependency preparation above installs Python/npm
-packages; it does not compile Rust. Installing/selecting Flow remains a separate,
-explicit step described in `../../FLOW_V2_INSTALL.md`.
+and rejected. Preparation installs Python/npm packages and does not compile Rust
+unless `--build-goose` is explicitly supplied. Installing/selecting Flow remains a
+separate step described in `../../FLOW_V2_INSTALL.md`. The standalone
+`cd v2 && python3.12 -m poc.goose_artifact --extract` command remains available for
+manual extraction and `python3.12 -m poc.goose_artifact` verifies the selected bundle.
 
 After extraction, native and scoped Goose jobs use the verified bundled build.
 Selection order is an explicit `FLOW_V2_GOOSE_BINARY` override, then a verified

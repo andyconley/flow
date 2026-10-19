@@ -4,16 +4,16 @@ Flow v2.0 uses the native host for shaping and user decisions, LangGraph for dur
 
 ## Install and select
 
-On Apple Silicon macOS, the [bundled Goose artifact](vendor/artifacts/README.md) avoids compiling Rust. Extract it once with `cd v2 && python3.12 -m poc.goose_artifact --extract`, return to the repository root, then run `./install-flow-v2.sh prepare` without `--build-goose`. Other platforms can build from source as below.
-
-From the canonical repository root, prepare the locked dependencies and install:
+On Apple Silicon macOS, preparation and install/update automatically verify and extract the [bundled Goose artifact](vendor/artifacts/README.md). No Rust toolchain or separate extraction command is needed. From the repository root:
 
 ```sh
-./install-flow-v2.sh prepare --build-goose
+./install-flow-v2.sh prepare
 ./install-flow-v2.sh install --dry-run
 ./install-flow-v2.sh install
 ~/.local/bin/flow-v2 --version
 ```
+
+Other platforms can prepare a local source build with `./install-flow-v2.sh prepare --build-goose`, or supply an existing qualified build through `FLOW_V2_GOOSE_BINARY`.
 
 Default installation is opt-in: `flow-v2` plus one native-host `flow-v2` entry skill for Codex and Claude. The supported `flow-*` v2 command bodies are staged privately. Existing legacy `flow` and `flow-*` skills remain selected until an explicit cutover.
 

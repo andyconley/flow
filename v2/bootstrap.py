@@ -33,6 +33,9 @@ def verify_goose_source(source, lock):
 def prepare(build_goose=False):
     if sys.version_info < (3, 12):
         raise SystemExit('Flow v2 preparation requires Python 3.12 or later')
+    if not build_goose:
+        from poc.goose_artifact import provision
+        provision(ROOT)
     python = ROOT/'.venv/bin/python'
     if not python.exists():
         run([sys.executable, '-m', 'venv', ROOT/'.venv'])
@@ -76,9 +79,12 @@ def main():
     args = parser.parse_args()
     if args.action == 'prepare':
         if args.dry_run:
-            print('Would create the local venv, install locked Python/npm packages'+(' and build locked Goose source' if args.build_goose else ''))
+            print('Would create the local venv, install locked Python/npm packages'+(' and build locked Goose source' if args.build_goose else ' and verify/extract the bundled Goose build on Apple Silicon macOS'))
         else:
-            prepare(args.build_goose)
+            try:
+                prepare(args.build_goose)
+            except (ValueError, OSError) as error:
+                parser.error(str(error))
         return
     python = ROOT/'.venv/bin/python'
     if not python.exists():

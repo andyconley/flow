@@ -50,3 +50,20 @@ executable and stamped source were preserved. No MacBook operation, installer
 activation, merge, release, LFS setup, Rust compilation or provider call was
 performed. macOS 11.0 is the binary's deployment target, not evidence of testing
 on that OS; the MacBook itself has not been qualified here.
+
+## Automatic installer follow-up
+
+Preparation now provisions the bundled executable automatically on Apple Silicon
+macOS unless `--build-goose` or an explicit binary override is supplied. The v2
+installer's install/update actions also extract it when missing. Reruns verify
+and reuse the existing executable. Dry runs validate the archive and report
+planned extraction without changing runtime or installation paths. Unsupported
+platforms retain the existing source-build/explicit-override route; no automatic
+Rust compilation was introduced.
+
+All 103 offline v2 tests pass, zero skips. The three additional regressions cover
+automatic preparation without Git/Cargo commands; install/update extraction,
+reinstall idempotence, dry-run preservation and modified-binary rejection; and
+platform/override/source-build handling with archive-corruption rejection. The
+public release bootstrap still selects tagged releases; merging and publishing
+this branch remain separate work.
