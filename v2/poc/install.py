@@ -108,7 +108,15 @@ def install(action, home, source=ROOT, replace_legacy=False, dry_run=False):
         return public_inventory(legacy)
     if action == 'activate' and not replace_legacy:
         raise ValueError('Activation requires --replace-legacy; normal install preserves legacy Flow')
-    for required in (source/'.venv/bin/python', source/'role-bundle/catalog.json', goose_binary(source)):
+    binary = goose_binary(source)
+    extraction_planned = False
+    if action in ('install', 'update'):
+        from .goose_artifact import provision
+        binary, extraction_planned = provision(source, dry_run=dry_run)
+    requirements = [source/'.venv/bin/python', source/'role-bundle/catalog.json']
+    if not extraction_planned:
+        requirements.append(binary)
+    for required in requirements:
         if not required.exists():
             raise ValueError(f'Existing local runtime is missing: {required}; this installer does not download dependencies')
     staged = content(source, home)
@@ -158,6 +166,8 @@ def install(action, home, source=ROOT, replace_legacy=False, dry_run=False):
               'changed': changed, 'managed_paths': [str(p) for p in files], 'dry_run': dry_run,
               'legacy_preserved': not activate}
     result['legacy_cleanup'] = public_inventory(legacy)
+    if extraction_planned:
+        result['goose_extraction_planned'] = str(binary)
     if dry_run:
         return result
     backup = previous.get('backup')

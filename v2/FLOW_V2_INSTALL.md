@@ -4,21 +4,21 @@ Flow v2.0 is the product name. Goose/LangGraph is its engine. `poc.glg`, `.glg/`
 
 ## Reproducible source preparation
 
-From the canonical Flow repository root, use Python 3.12+, Node/npm and a Rust toolchain already installed on the host:
+From the canonical Flow repository root, use Python 3.12+ and Node/npm already installed on the host:
 
 ```sh
-./install-flow-v2.sh prepare --build-goose
+./install-flow-v2.sh prepare
 ./install-flow-v2.sh install --dry-run
 ./install-flow-v2.sh install
 ```
 
-Preparation is explicit: it installs locked Python/npm dependencies and builds the official pinned Goose base plus the shipped patch. It never downloads a model or signs into an account. The source and patch digest/build features are recorded in `vendor/goose.lock.json`; see `vendor/README.md`. Existing native Claude/Codex authentication remains client-owned. Native sandbox execution currently targets macOS; Linux CI exercises offline contracts and installation fixtures without user accounts.
+Preparation installs locked Python/npm dependencies. On Apple Silicon macOS it automatically verifies and extracts the bundled patched Goose executable; Rust and a separate extraction command are unnecessary. Install/update also extract a missing bundled executable, including when invoked through an existing v2 launcher. Reruns verify and reuse it; dry runs validate the archive and report planned extraction without writing. Modified or incompatible extracted binaries are rejected and preserved. On other platforms, use `prepare --build-goose` with a Rust toolchain to build the official pinned Goose base plus the shipped patch. It never downloads a model or signs into an account. The source and patch digest/build features are recorded in `vendor/goose.lock.json`; see `vendor/README.md`. Existing native Claude/Codex authentication remains client-owned. Native sandbox execution currently targets macOS; Linux CI exercises offline contracts and installation fixtures without user accounts.
 
-For an existing matching Goose build, set `FLOW_V2_GOOSE_BINARY` to its absolute path. Node discovery uses PATH or `FLOW_V2_NODE`. The v2 source is the repository's `v2/` directory; all generated dependencies, logs and account references stay in its ignored local runtime directories. No machine-specific runtime or test artifacts are distributed.
+For an existing matching Goose build, set `FLOW_V2_GOOSE_BINARY` to its absolute path. Node discovery uses PATH or `FLOW_V2_NODE`. The v2 source is the repository's `v2/` directory; all generated dependencies, logs and account references stay in its ignored local runtime directories. The bundled executable and its build provenance are distributed; machine-specific runtime state and credentials are not.
 
 ## Existing-Mac installation
 
-This installer binds to this source checkout, its existing `.venv`, the locked patched Goose binary under runtime/goose (or the explicit FLOW_V2_GOOSE_BINARY path) and the existing role bundle. It does not download dependencies, create credentials, install a daemon, change security permissions or contact providers. Moving/removing the checkout breaks that binding; rerun with `--source /new/checkout` after the matching local runtime is available. Updates refresh the selected source; they do not fetch remote code or build dependencies automatically.
+This installer binds to this source checkout, its existing `.venv`, the verified bundled Goose executable, a source build under runtime/goose, or the explicit FLOW_V2_GOOSE_BINARY path and the existing role bundle. It does not download dependencies, create credentials, install a daemon, change security permissions or contact providers. Moving/removing the checkout breaks that binding; rerun with `--source /new/checkout` after the matching local runtime is available. Updates refresh the selected source; they do not fetch remote code or build dependencies automatically.
 
 From the source checkout:
 

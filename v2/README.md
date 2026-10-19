@@ -4,14 +4,16 @@ Flow v2.0 uses the native host for shaping and user decisions, LangGraph for dur
 
 ## Install and select
 
-From the canonical repository root, prepare the locked dependencies and install:
+On Apple Silicon macOS, preparation and install/update automatically verify and extract the [bundled Goose artifact](vendor/artifacts/README.md). No Rust toolchain or separate extraction command is needed. From the repository root:
 
 ```sh
-./install-flow-v2.sh prepare --build-goose
+./install-flow-v2.sh prepare
 ./install-flow-v2.sh install --dry-run
 ./install-flow-v2.sh install
 ~/.local/bin/flow-v2 --version
 ```
+
+Other platforms can prepare a local source build with `./install-flow-v2.sh prepare --build-goose`, or supply an existing qualified build through `FLOW_V2_GOOSE_BINARY`.
 
 Default installation is opt-in: `flow-v2` plus one native-host `flow-v2` entry skill for Codex and Claude. The supported `flow-*` v2 command bodies are staged privately. Existing legacy `flow` and `flow-*` skills remain selected until an explicit cutover.
 
@@ -49,6 +51,6 @@ The explicit `activate --replace-legacy` selection backs up and replaces the glo
 
 From `v2/`, use `.venv/bin/python -m unittest discover -s tests -v` after preparation. The cancellation test needs normal macOS process-list access to inspect only its own child processes. Installer tests use disposable homes and check real launcher execution, command mapping, old-to-v2 cleanup, idempotence, rollback and a pre-approval smoke without provider calls.
 
-The local implementation was exercised with existing native accounts before integration. No private execution records or machine-specific scenarios are distributed here. The shipped offline suite tests workflow, recovery, source locks, roles and installer behavior. See [native permission propagation](GLG_NATIVE_ERRORS.md). Goose is the pinned official v1.55.0 base plus the required [integration patch](vendor/README.md), built under ignored runtime/goose rather than fetched from an unpublished fork.
+The local implementation was exercised with existing native accounts before integration. No private execution records or machine-specific scenarios are distributed here. The shipped offline suite tests workflow, recovery, source locks, roles and installer behavior. See [native permission propagation](GLG_NATIVE_ERRORS.md). Goose is the pinned official v1.55.0 base plus the required [integration patch](vendor/README.md), available as the verified bundled Apple Silicon artifact or built under ignored runtime/goose from the shipped source lock.
 
 The preview does not migrate active legacy runs, create credentials, alter global security settings or deploy applications. Existing account adapters remain client-owned.
