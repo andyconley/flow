@@ -214,9 +214,6 @@ def prepare_release(release, root):
     v2=release/'v2'; state=root/'state'; state.mkdir(exist_ok=True)
     for name in ('artifacts','workspaces'):
         target=state/name; target.mkdir(exist_ok=True); (v2/name).symlink_to(target)
-    if (release/'knowledge/manifest.json').exists():
-        from .knowledge import locked,reconcile_shared
-        with locked(state/'knowledge'):reconcile_shared(state/'knowledge',release/'knowledge')
     runtime=v2/'runtime'; runtime.mkdir()
     for name in ('goose-home','codex-home','home','tmp','claude-home'):
         target=state/name; target.mkdir(exist_ok=True); (runtime/name).symlink_to(target)
@@ -235,57 +232,196 @@ def switch(root,target):
     temporary=root/('current-'+uuid.uuid4().hex);temporary.symlink_to(target);temporary.replace(root/'current')
 
 
-def install_release(home, manifest, *, urls=None, bundle=None, preparer=prepare_release):
+class KnowledgeCancellationUncertain(ValueError):
+    """Do not restore authority while a worker may still be writing it."""
+
+
+def knowledge_files(root):
+    store=root/'state/knowledge'
+    return [*sorted(store.glob('*.json')), *[p for name in ('notes','incoming') for p in sorted((store/name).rglob('*')) if p.is_file()]]
+
+
+def knowledge_inventory(root):
+    return {str(p.relative_to(root/'state/knowledge')):sha(p) for p in knowledge_files(root)}
+
+
+@contextlib.contextmanager
+def knowledge_transaction(root):
+    """Hold the writer lock across the staged subprocess via an inherited fd."""
+    from .knowledge import locked
+    store=root/'state/knowledge'
+    if (root/'knowledge-provision-uncertain.json').exists():raise ValueError('Prior knowledge provisioning execution is uncertain; inspect '+str(root/'knowledge-provision-uncertain.json')+' and reconcile recorded processes before retry. No retry attempted.')
+    saved=root/'backups'/('knowledge-'+uuid.uuid4().hex);saved.mkdir(parents=True)
+    names=('FLOW_INSTALL_KNOWLEDGE_FD','FLOW_INSTALL_KNOWLEDGE_ROOT','FLOW_INSTALL_WRITE_RECEIPT')
+    previous={name:os.environ.get(name) for name in names}
+    audit=root/('knowledge-writes-'+uuid.uuid4().hex+'.json')
+    with locked(store,True) as descriptor:
+        baseline=knowledge_inventory(root)
+        for rel in baseline:
+            target=saved/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(store/rel,target)
+        os.environ.update(FLOW_INSTALL_KNOWLEDGE_FD=str(descriptor),FLOW_INSTALL_KNOWLEDGE_ROOT=str(store),FLOW_INSTALL_WRITE_RECEIPT=str(audit))
+        try:
+            yield saved
+        except BaseException as error:
+            expected={**baseline,**(json.loads(audit.read_text()) if audit.exists() else {})}
+            conflicts=[] if isinstance(error,KnowledgeCancellationUncertain) else restore_knowledge(root,saved,expected=expected)
+            if isinstance(error,KnowledgeCancellationUncertain):
+                write(root/'knowledge-provision-uncertain.json',{'error':str(error),'processes':getattr(error,'processes',{}),'backup':str(saved),'audit':str(audit),'retry_blocked':True})
+                print('Knowledge cancellation uncertain; authority/audit retained for inspection; retry blocked until workers are reconciled',file=sys.stderr)
+            from .knowledge import write as knowledge_write
+            knowledge_write(store/'last-install-failure.json',{'error':str(error),'runtime_activated':False,'cancellation_uncertain':isinstance(error,KnowledgeCancellationUncertain),'preserved_conflicts':conflicts,'recovery':'Retry install/update with --knowledge download, offline or defer after resolving the cause','backup':str(saved)})
+            raise
+        finally:
+            for name,value in previous.items():
+                if value is None:os.environ.pop(name,None)
+                else:os.environ[name]=value
+            if not (root/'knowledge-provision-uncertain.json').exists():audit.unlink(missing_ok=True)
+
+
+def finalize_knowledge(root,saved,rollback_base=None):
+    """Finish rollback preservation before any runtime/surface activation."""
+    store=root/'state/knowledge';rollback_base=Path(rollback_base or saved)
+    baseline={str(p.relative_to(saved)):sha(p) for p in Path(saved).rglob('*') if p.is_file()}
+    audit=Path(os.environ['FLOW_INSTALL_WRITE_RECEIPT'])
+    expected={**baseline,**(json.loads(audit.read_text()) if audit.exists() else {})}
+    actual=knowledge_inventory(root)
+    manual=sorted(rel for rel in set(actual)|set(expected) if actual.get(rel)!=expected.get(rel))
+    for rel in manual:
+        target=rollback_base/rel;target.unlink(missing_ok=True)
+        if (store/rel).exists():target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(store/rel,target)
+    if manual:print('Manual knowledge changes preserved in active notes and rollback baseline: '+json.dumps(manual),file=sys.stderr)
+    return {'manual':manual,'inventory':actual}
+
+
+def restore_knowledge(root,saved,*,expected,strict=False,held=False):
+    from .knowledge import locked
+    store=root/'state/knowledge'
+    failed=root/'backups'/('knowledge-unselected-'+uuid.uuid4().hex)
+    with contextlib.nullcontext() if held else locked(store,True):
+        actual=knowledge_inventory(root)
+        conflicts=sorted(rel for rel in set(actual)|set(expected) if actual.get(rel)!=expected.get(rel))
+        if strict and conflicts:raise ValueError('Knowledge edits prevent rollback; preserve/reconcile: '+', '.join(conflicts))
+        failed.mkdir(parents=True)
+        for rel in set(actual)|set(expected):
+            if rel in conflicts:continue  # Manual edits/deletions remain authoritative.
+            path=store/rel;prior=Path(saved)/rel
+            if path.exists():
+                dest=failed/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest);path.unlink()
+            if prior.exists():path.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(prior,path)
+    print('Flow knowledge transaction restored; attempt retained at '+str(failed)+'; manual changes preserved: '+json.dumps(conflicts),file=sys.stderr)
+    return conflicts
+
+
+def provision_knowledge(release,root,mode):
+    if not (release/'knowledge/manifest.json').exists():return {'state':'not_distributed','ready':False}
+    result=root/('knowledge-result-'+uuid.uuid4().hex+'.json');uncertain=False
+    env={key:value for key,value in os.environ.items() if not any(secret in key.upper() for secret in ('TOKEN','SECRET','PASSWORD','API_KEY'))}
+    env.update(PYTHONPATH=str(release/'v2'),FLOW_KNOWLEDGE_HOME=str(root/'state/knowledge'))
+    try:
+        from .lifecycle import ProcessScope
+        import time
+        command=[str(release/'v2/.venv/bin/python'),'-m','poc.install_knowledge','--root',str(root/'state/knowledge'),'--mode',mode,'--result',str(result)]
+        child=subprocess.Popen(command,cwd=release/'v2',env=env,pass_fds=(int(env['FLOW_INSTALL_KNOWLEDGE_FD']),),start_new_session=True)
+        try:scope=ProcessScope(child.pid)
+        except BaseException:
+            import signal
+            try:
+                try:os.killpg(child.pid,signal.SIGTERM)
+                except ProcessLookupError:pass
+                child.wait(timeout=10)
+                try:os.killpg(child.pid,0)
+                except ProcessLookupError:pass
+                else:raise RuntimeError('Provisioning process group still exists')
+            except BaseException as error:
+                uncertain=True
+                failure=KnowledgeCancellationUncertain('Cannot confirm provisioning group stopped; root PID '+str(child.pid)+'; inspect before retry');failure.processes={'root_pid':child.pid,'identity_unavailable':True}
+                raise failure from error
+            raise
+        deadline=time.monotonic()+1800
+        try:
+            while child.poll() is None:
+                scope.observe()
+                if time.monotonic()>=deadline:raise subprocess.TimeoutExpired(command,1800)
+                time.sleep(.2)
+            if child.returncode:raise subprocess.CalledProcessError(child.returncode,command)
+        except BaseException:
+            try:
+                stopped=scope.stop()
+                if stopped['alive'] or stopped['signal_errors']:raise RuntimeError(json.dumps(stopped))
+                child.wait(timeout=10)
+            except BaseException as error:
+                uncertain=True
+                failure=KnowledgeCancellationUncertain('Knowledge provisioning cancellation uncertain; inspect retained process identities before retry: '+str(error));failure.processes={'root_pid':child.pid,'known':scope.known}
+                raise failure from error
+            raise
+        return json.loads(result.read_text())
+    finally:
+        if not uncertain:result.unlink(missing_ok=True)
+
+
+def install_release(home, manifest, *, urls=None, bundle=None, preparer=prepare_release, knowledge_mode='ask', knowledge_runner=provision_knowledge):
     home=Path(home).resolve();root=home/'.flow/v2';validate(manifest)
     with lock(root):
-        current=(root/'current').resolve() if (root/'current').exists() else None
-        if current and json.loads((current/'release-manifest.json').read_text())==manifest:
-            return {'version':manifest['version'],'changed':False,'runtime':str(current)}
-        quiescent(root/'state/artifacts'); migrate_state(home,root)
-        with tempfile.TemporaryDirectory(prefix='download-',dir=root) as temporary:
-            downloads=Path(temporary);fetch_assets(manifest,downloads,urls,bundle)
-            release=root/'releases'/(manifest['version']+'-'+manifest['source_sha'][:12]+'-'+uuid.uuid4().hex[:8]);release.mkdir(parents=True)
-            unpack(downloads/'flow-code.tar.gz',release);unpack(downloads/'python-wheels.tar.gz',release/'wheels')
-            vendor=release/'v2/vendor/artifacts'
-            for name in ('goose-macos-arm64.gz','goose-macos-arm64.json'):shutil.copyfile(downloads/name,vendor/name)
-            write(release/'release-manifest.json',manifest)
-            preparer(release,root)
         quiescent(root/'state/artifacts')
-        from . import install as surfaces
-        old_receipt=home/'.flow-v2/install.json'
-        files={**surfaces.content(release/'v2',home),**surfaces.active_files(release/'v2',home,surfaces.content(release/'v2',home))}
-        paths=[*surfaces.selected_targets(home,files),old_receipt]
-        inventory=surfaces.inventory(home);paths.extend(surfaces.selected_targets(home,inventory['remove']));paths.extend(inventory['edits'])
-        backup=root/'backups'/uuid.uuid4().hex;backup.mkdir(parents=True)
-        snapshots={}
-        for i,path in enumerate(surfaces.collapsed(paths)):
-            exists=path.exists() or path.is_symlink();saved=backup/str(i)
-            if exists:surfaces.copy_path(path,saved)
-            snapshots[str(path)]={'exists':exists,'saved':str(saved)}
-        moved=[]
-        try:
-            moved=relocate_clients(home,root)
-            surfaces.install('install',home,source=release/'v2')
-            surfaces.install('activate',home,source=release/'v2',replace_legacy=True)
-            for name in ('flow','flow-v2'):
-                path=home/'.local/bin'/name;path.write_text(launcher(root));path.chmod(0o755)
-            receipt=json.loads(old_receipt.read_text())
-            for name in ('flow','flow-v2'):
-                path=home/'.local/bin'/name;receipt['files'][str(path)]=sha(path)
-            write(old_receipt,receipt)
-            switch(root,release)
-            write(root/'install.json',{'version':manifest['version'],'source_sha':manifest['source_sha'],'current':str(release),
-                  'previous':str(current) if current else None,'backup':str(backup),'snapshots':snapshots,
-                  'after':{str(p):tree_digest(p) for p in surfaces.collapsed(paths)}})
-        except BaseException:
-            for name,entry in snapshots.items():
-                path=Path(name);surfaces.remove_path(path)
-                if entry['exists']:surfaces.copy_path(Path(entry['saved']),path)
-            if current:switch(root,current)
-            elif (root/'current').is_symlink():(root/'current').unlink()
-            undo_client_moves(moved)
-            raise
-        return {'version':manifest['version'],'changed':True,'runtime':str(release),'rollback':'flow rollback'}
+        with knowledge_transaction(root) as knowledge_backup:
+            current=(root/'current').resolve() if (root/'current').exists() else None
+            if current and json.loads((current/'release-manifest.json').read_text())==manifest:
+                knowledge=knowledge_runner(current,root,knowledge_mode)
+                if (root/'install.json').exists():
+                    receipt=json.loads((root/'install.json').read_text())
+                    finalized=finalize_knowledge(root,knowledge_backup,receipt.get('knowledge_backup'))
+                    receipt['knowledge_preserved_manual']=finalized['manual']
+                    receipt['knowledge_after']=finalized['inventory']
+                    write(root/'install.json',receipt)
+                return {'version':manifest['version'],'changed':False,'runtime':str(current),'knowledge':knowledge}
+            quiescent(root/'state/artifacts'); migrate_state(home,root)
+            with tempfile.TemporaryDirectory(prefix='download-',dir=root) as temporary:
+                downloads=Path(temporary);fetch_assets(manifest,downloads,urls,bundle)
+                release=root/'releases'/(manifest['version']+'-'+manifest['source_sha'][:12]+'-'+uuid.uuid4().hex[:8]);release.mkdir(parents=True)
+                unpack(downloads/'flow-code.tar.gz',release);unpack(downloads/'python-wheels.tar.gz',release/'wheels')
+                vendor=release/'v2/vendor/artifacts'
+                for name in ('goose-macos-arm64.gz','goose-macos-arm64.json'):shutil.copyfile(downloads/name,vendor/name)
+                write(release/'release-manifest.json',manifest)
+                preparer(release,root)
+            knowledge=knowledge_runner(release,root,knowledge_mode)
+            finalized=finalize_knowledge(root,knowledge_backup)
+            quiescent(root/'state/artifacts')
+            from . import install as surfaces
+            old_receipt=home/'.flow-v2/install.json'
+            files={**surfaces.content(release/'v2',home),**surfaces.active_files(release/'v2',home,surfaces.content(release/'v2',home))}
+            paths=[*surfaces.selected_targets(home,files),old_receipt]
+            inventory=surfaces.inventory(home);paths.extend(surfaces.selected_targets(home,inventory['remove']));paths.extend(inventory['edits'])
+            backup=root/'backups'/uuid.uuid4().hex;backup.mkdir(parents=True)
+            snapshots={}
+            for i,path in enumerate(surfaces.collapsed(paths)):
+                exists=path.exists() or path.is_symlink();saved=backup/str(i)
+                if exists:surfaces.copy_path(path,saved)
+                snapshots[str(path)]={'exists':exists,'saved':str(saved)}
+            moved=[]
+            try:
+                moved=relocate_clients(home,root)
+                surfaces.install('install',home,source=release/'v2')
+                surfaces.install('activate',home,source=release/'v2',replace_legacy=True)
+                for name in ('flow','flow-v2'):
+                    path=home/'.local/bin'/name;path.write_text(launcher(root));path.chmod(0o755)
+                receipt=json.loads(old_receipt.read_text())
+                for name in ('flow','flow-v2'):
+                    path=home/'.local/bin'/name;receipt['files'][str(path)]=sha(path)
+                write(old_receipt,receipt)
+                switch(root,release)
+                write(root/'install.json',{'version':manifest['version'],'source_sha':manifest['source_sha'],'current':str(release),
+                      'previous':str(current) if current else None,'backup':str(backup),'snapshots':snapshots,
+                      'knowledge_backup':str(knowledge_backup),'knowledge_after':finalized['inventory'],'knowledge_preserved_manual':finalized['manual'],
+                      'after':{str(p):tree_digest(p) for p in surfaces.collapsed(paths)}})
+            except BaseException:
+                for name,entry in snapshots.items():
+                    path=Path(name);surfaces.remove_path(path)
+                    if entry['exists']:surfaces.copy_path(Path(entry['saved']),path)
+                if current:switch(root,current)
+                elif (root/'current').is_symlink():(root/'current').unlink()
+                undo_client_moves(moved)
+                raise
+            return {'version':manifest['version'],'changed':True,'runtime':str(release),'rollback':'flow rollback','knowledge':knowledge}
 
 
 def tree_digest(path):
@@ -302,15 +438,19 @@ def rollback(home):
         quiescent(root/'state/artifacts');receipt=json.loads((root/'install.json').read_text())
         for name,digest in receipt['after'].items():
             if tree_digest(name)!=digest:raise ValueError('User edits prevent rollback; preserve and reconcile: '+name)
-        from .install import remove_path,copy_path
-        for name,entry in receipt['snapshots'].items():
-            path=Path(name);remove_path(path)
-            if entry['exists']:copy_path(Path(entry['saved']),path)
-        if receipt['previous']:switch(root,Path(receipt['previous']))
-        else:(root/'current').unlink(missing_ok=True)
-        write(root/'rollback.json',receipt)
-        (root/'install.json').unlink()
-        return {'restored':receipt['previous'] or 'pre-v2 installation','history_preserved':True}
+        from .knowledge import locked
+        with locked(root/'state/knowledge',True):
+            if 'knowledge_after' in receipt and knowledge_inventory(root)!=receipt['knowledge_after']:raise ValueError('Knowledge edits prevent rollback; export/preserve edits before retry')
+            if receipt.get('knowledge_backup'):restore_knowledge(root,Path(receipt['knowledge_backup']),expected=receipt['knowledge_after'],strict=True,held=True)
+            from .install import remove_path,copy_path
+            for name,entry in receipt['snapshots'].items():
+                path=Path(name);remove_path(path)
+                if entry['exists']:copy_path(Path(entry['saved']),path)
+            if receipt['previous']:switch(root,Path(receipt['previous']))
+            else:(root/'current').unlink(missing_ok=True)
+            write(root/'rollback.json',receipt)
+            (root/'install.json').unlink()
+            return {'restored':receipt['previous'] or 'pre-v2 installation','history_preserved':True}
 
 
 def main(argv=None):
@@ -318,7 +458,10 @@ def main(argv=None):
     parser.add_argument('action',choices=['install','update','rollback'])
     parser.add_argument('--home',type=Path,default=Path.home());parser.add_argument('--bundle',type=Path)
     parser.add_argument('--repository',default=REPOSITORY);parser.add_argument('--version');parser.add_argument('--check',action='store_true');parser.add_argument('--json',action='store_true')
+    parser.add_argument('--knowledge',choices=('ask','download','offline','defer'),default='ask',help='Reuse working knowledge; otherwise ask for download consent. Noninteractive runs must explicitly download, use verified offline assets, or defer.')
+    parser.add_argument('--non-interactive',action='store_true',help='Never prompt; reuse verified knowledge or require an explicit download/defer policy')
     args=parser.parse_args(argv)
+    if (args.non_interactive or args.json) and args.knowledge=='ask':args.knowledge='offline'
     try:
         if args.action=='rollback': result=rollback(args.home)
         else:
@@ -327,9 +470,9 @@ def main(argv=None):
             else:manifest,urls=latest(args.repository,args.version)
             if args.check:
                 validate(manifest);result={'latest':manifest['version'],'source_sha':manifest['source_sha'],'supported_targets':manifest['supported_targets']}
-            else:result=install_release(args.home,manifest,urls=urls,bundle=args.bundle)
+            else:result=install_release(args.home,manifest,urls=urls,bundle=args.bundle,knowledge_mode=args.knowledge)
         print(json.dumps(result,indent=2));return 0
-    except (ValueError,OSError,subprocess.CalledProcessError) as error:
+    except (ValueError,OSError,subprocess.SubprocessError) as error:
         parser.exit(1,str(error)+'\n')
 
 

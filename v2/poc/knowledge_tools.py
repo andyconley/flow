@@ -9,10 +9,12 @@ class KnowledgeUnavailable(RuntimeError):pass
 
 def require_ready():
     root=knowledge.home()
+    uncertain=root.parent.parent/'knowledge-provision-uncertain.json'
+    if uncertain.exists():raise KnowledgeUnavailable('Install/update knowledge execution remains uncertain; inspect '+str(uncertain)+' and reconcile recorded processes before retry. No agent was launched.')
     if not (root/'base.json').exists() and not (root/'settings.json').exists():return
     cfg=knowledge.read(root/'settings.json',{})
     if not cfg.get('python') or not Path(cfg['python']).is_file():
-        raise KnowledgeUnavailable('Knowledge runtime is not provisioned; run flow knowledge doctor for exact setup/configure commands, then flow knowledge process. No agent was launched.')
+        raise KnowledgeUnavailable('Knowledge runtime is not provisioned'+(' (explicitly deferred during install/update)' if knowledge.read(root/'install-status.json',{}).get('state')=='deferred' else '')+'; rerun flow update --knowledge download, or inspect flow knowledge doctor. No agent was launched.')
     try:knowledge.snapshot(root)
     except Exception as error:raise KnowledgeUnavailable(str(error)+'; no agent was launched') from error
     import subprocess

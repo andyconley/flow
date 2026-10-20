@@ -28,7 +28,8 @@ preserved; ambiguous ownership or edited managed surfaces block migration.
 
 ```sh
 flow update --check --json
-flow update
+flow update                       # reuses knowledge assets or asks for consent
+# unattended: flow update --knowledge download (or explicit --knowledge defer)
 flow rollback
 ```
 
