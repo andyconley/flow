@@ -4,6 +4,19 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Fix piped-installer consent, separate local model download approval, report activation clearly, and reject extraction-model drift. Prompt and small-wheel transfer verified; full fresh acquisition remains untested.
+- Fix piped-installer prompts and add separate local model download consent with size/digest checks. Install/update reports the active version. Prompt/small-wheel transfer verified; full fresh acquisition remains untested.
+
+
+## [0.52.2](https://github.com/andyconley/flow/compare/v0.52.1...v0.52.2) (2026-10-20)
+
+### Bug Fixes
+
+* preserve approved extraction model identity through provisioning ([eabf669](https://github.com/andyconley/flow/commit/eabf66944640bae7ef450557b8fa2bc223fef6b9))
+* repair installer consent and explicit local model setup ([c9fc4ab](https://github.com/andyconley/flow/commit/c9fc4ab75813e243cce371f8c61951dcaab3e1e1))
+
+### Highlights
+
 - Candidate-bound recover-review adds fresh checks/review with explicit approval and budget, never implementation. Pauses preserve remaining time; preflight blocks unready providers. Live MacBook qualification remains pending.
 - Install/update asks before acquiring missing knowledge assets and audits a snapshot before activation; explicit offline/defer modes preserve control. v0.52.0 needs corrected bootstrap once; full fresh acquisition remains untested.
 
