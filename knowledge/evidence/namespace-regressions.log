@@ -1,0 +1,17 @@
+test_sse_mapping_and_upstream_error_status (v2.tests.test_local_responses.LocalHttpProtocolTests.test_sse_mapping_and_upstream_error_status) ... ok
+test_rejects_unsupported_tools_unknown_calls_and_duplicates (v2.tests.test_local_responses.NamespaceProtocolTests.test_rejects_unsupported_tools_unknown_calls_and_duplicates) ... ok
+test_roundtrip_keeps_namespace_schema_arguments_and_call_identity (v2.tests.test_local_responses.NamespaceProtocolTests.test_roundtrip_keeps_namespace_schema_arguments_and_call_identity) ... ok
+test_same_leaf_in_distinct_namespaces_has_distinct_reversible_names (v2.tests.test_local_responses.NamespaceProtocolTests.test_same_leaf_in_distinct_namespaces_has_distinct_reversible_names) ... ok
+test_explicit_transport_toggle_is_backed_up_and_does_not_reindex_notes (v2.tests.test_local_responses.TransportConfigurationTests.test_explicit_transport_toggle_is_backed_up_and_does_not_reindex_notes) ... ok
+test_explicit_adapter_refuses_nonlocal_provider_without_launch (v2.tests.test_goose_response_contract.ResponseContractTests.test_explicit_adapter_refuses_nonlocal_provider_without_launch) ... ok
+test_native_route_forwards_task_and_schema_as_user_instructions (v2.tests.test_goose_response_contract.ResponseContractTests.test_native_route_forwards_task_and_schema_as_user_instructions) ... Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "b2b55125a28de648294dae3dd9e59a1e9a6b040546b624693d74178e61763112", "snapshot": null}
+ok
+test_schema_bound_normal_run_uses_recipe_without_conflicting_instructions_flag (v2.tests.test_goose_response_contract.ResponseContractTests.test_schema_bound_normal_run_uses_recipe_without_conflicting_instructions_flag) ... Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "b2b55125a28de648294dae3dd9e59a1e9a6b040546b624693d74178e61763112", "snapshot": null}
+ok
+test_zero_exit_without_valid_final_contract_stays_blocked (v2.tests.test_goose_response_contract.ResponseContractTests.test_zero_exit_without_valid_final_contract_stays_blocked) ... Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "b2b55125a28de648294dae3dd9e59a1e9a6b040546b624693d74178e61763112", "snapshot": null}
+ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 3.011s
+
+OK

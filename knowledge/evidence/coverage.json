@@ -1,0 +1,359 @@
+{
+  "role_count": 13,
+  "roles_with_cards": 6,
+  "total_cards": 21,
+  "coverage": "All existing authoritative JSON-LD cards imported; seven roles have no such corpus. This is not all-role expertise coverage.",
+  "roles": [
+    {
+      "role": "architect",
+      "authoritative_card_source": "scaffolds/default/expertise/architect.jsonld",
+      "source_card_count": 1,
+      "imported_card_count": 1,
+      "card_ids": [
+        "flow:entry/architect/state-alternatives-and-consequences-for-a-boundary-decision"
+      ],
+      "role_instruction_source": "scaffolds/default/agents/architect.md",
+      "referenced_md_paths": [
+        ".flow/PROJECT.md"
+      ],
+      "missing_reason": null
+    },
+    {
+      "role": "business-analyst",
+      "authoritative_card_source": "scaffolds/default/expertise/business-analyst.jsonld",
+      "source_card_count": 5,
+      "imported_card_count": 5,
+      "card_ids": [
+        "flow:entry/business-analyst/elicit-past-behavior-not-stated-intent",
+        "flow:entry/business-analyst/leave-a-requirement-undefined-while-the-evidence-is-thin",
+        "flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement",
+        "flow:entry/business-analyst/premortem-the-definition-before-it-is-approved",
+        "flow:entry/business-analyst/reframe-a-product-request-as-the-job-behind-it"
+      ],
+      "role_instruction_source": "scaffolds/default/agents/business-analyst.md",
+      "referenced_md_paths": [
+        ".flow/PROJECT.md",
+        "standards/research-evidence.md",
+        "templates/research-note.md"
+      ],
+      "missing_reason": null
+    },
+    {
+      "role": "data-engineer",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/data-engineer.md",
+      "referenced_md_paths": [
+        "standards/research-evidence.md"
+      ],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    },
+    {
+      "role": "lead-developer",
+      "authoritative_card_source": "scaffolds/default/expertise/lead-developer.jsonld",
+      "source_card_count": 2,
+      "imported_card_count": 2,
+      "card_ids": [
+        "flow:entry/lead-developer/plan-a-reversible-delivery-path",
+        "flow:entry/lead-developer/plan-in-proportion-to-risk"
+      ],
+      "role_instruction_source": "scaffolds/default/agents/lead-developer.md",
+      "referenced_md_paths": [
+        "standards/git-commits.md"
+      ],
+      "missing_reason": null
+    },
+    {
+      "role": "product-manager",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/product-manager.md",
+      "referenced_md_paths": [
+        "standards/definition.md",
+        "standards/research-evidence.md",
+        "templates/research-note.md"
+      ],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    },
+    {
+      "role": "quality-reviewer",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/quality-reviewer.md",
+      "referenced_md_paths": [
+        "standards/git-commits.md"
+      ],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    },
+    {
+      "role": "security-reviewer",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/security-reviewer.md",
+      "referenced_md_paths": [
+        "standards/research-evidence.md"
+      ],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    },
+    {
+      "role": "solution-architect",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/solution-architect.md",
+      "referenced_md_paths": [
+        "api-governance.md",
+        "architecture.md",
+        "security.md",
+        "solutioning-risks.md",
+        "standards/api-governance.md",
+        "standards/architecture.md",
+        "standards/data-engineering.md",
+        "standards/definition.md",
+        "standards/delivery.md",
+        "standards/event-driven.md",
+        "standards/observability.md",
+        "standards/patterns.md",
+        "standards/research-evidence.md",
+        "standards/security.md",
+        "standards/solutioning-criteria.md",
+        "standards/solutioning-decisions.md",
+        "standards/solutioning-risks.md",
+        "standards/testing.md",
+        "templates/adr-template.md",
+        "templates/definition.md",
+        "templates/implementation-handoff.md",
+        "templates/research-note.md",
+        "templates/spike-template.md",
+        "testing.md"
+      ],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    },
+    {
+      "role": "sre",
+      "authoritative_card_source": "scaffolds/default/expertise/sre.jsonld",
+      "source_card_count": 6,
+      "imported_card_count": 6,
+      "card_ids": [
+        "flow:entry/sre/contributing-conditions-instead-of-a-root-cause",
+        "flow:entry/sre/hold-competing-hypotheses-during-a-live-incident",
+        "flow:entry/sre/postmortem-output-is-a-change-to-conditions",
+        "flow:entry/sre/premortem-a-change-before-it-rolls",
+        "flow:entry/sre/reconstruct-what-was-known-at-the-time",
+        "flow:entry/sre/state-what-a-mitigation-newly-makes-possible"
+      ],
+      "role_instruction_source": "scaffolds/default/agents/sre.md",
+      "referenced_md_paths": [
+        "standards/research-evidence.md",
+        "templates/runbook.md"
+      ],
+      "missing_reason": null
+    },
+    {
+      "role": "support-lead",
+      "authoritative_card_source": "scaffolds/default/expertise/support-lead.jsonld",
+      "source_card_count": 6,
+      "imported_card_count": 6,
+      "card_ids": [
+        "flow:entry/support-lead/act-when-the-distinguishing-observation-is-already-in-hand",
+        "flow:entry/support-lead/ask-for-the-last-occurrence-not-a-description",
+        "flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff",
+        "flow:entry/support-lead/discount-the-failure-mode-you-saw-most-recently",
+        "flow:entry/support-lead/do-not-read-the-user-s-actions-as-obvious-errors",
+        "flow:entry/support-lead/evidence-led-triage"
+      ],
+      "role_instruction_source": "scaffolds/default/agents/support-lead.md",
+      "referenced_md_paths": [
+        "standards/research-evidence.md"
+      ],
+      "missing_reason": null
+    },
+    {
+      "role": "tech-writer",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/tech-writer.md",
+      "referenced_md_paths": [],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    },
+    {
+      "role": "test-engineer",
+      "authoritative_card_source": "scaffolds/default/expertise/test-engineer.jsonld",
+      "source_card_count": 1,
+      "imported_card_count": 1,
+      "card_ids": [
+        "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+      ],
+      "role_instruction_source": "scaffolds/default/agents/test-engineer.md",
+      "referenced_md_paths": [
+        "standards/research-evidence.md"
+      ],
+      "missing_reason": null
+    },
+    {
+      "role": "ux-specialist",
+      "authoritative_card_source": null,
+      "source_card_count": 0,
+      "imported_card_count": 0,
+      "card_ids": [],
+      "role_instruction_source": "scaffolds/default/agents/ux-specialist.md",
+      "referenced_md_paths": [
+        "standards/research-evidence.md"
+      ],
+      "missing_reason": "No authoritative role-specific expertise card corpus exists in the current repository. Existing role instructions and standards are retained; no expertise was invented."
+    }
+  ],
+  "shared_authoritative_standard_documents": [
+    {
+      "path": "scaffolds/default/standards/accessibility-i18n.md",
+      "sha256": "d21ea6ec02afda3d7a41a3f30deeeda3df4117e7b18a29a626fb51556276afd3"
+    },
+    {
+      "path": "scaffolds/default/standards/ai-ml.md",
+      "sha256": "7563a7b83f459b35414cb41e6beaa38799a3a966169044cde12ee2685554dc97"
+    },
+    {
+      "path": "scaffolds/default/standards/api-governance.md",
+      "sha256": "74e1b36a71c5faa7ae6abef360bff19e70fffe0665ce06428767c61945978dc6"
+    },
+    {
+      "path": "scaffolds/default/standards/architecture.md",
+      "sha256": "216e740bbb986a09a62f4097a475fdbb2277eeeef79a89f2bce2548dcb47d051"
+    },
+    {
+      "path": "scaffolds/default/standards/collaboration.md",
+      "sha256": "20272e2d9c4ea1c79cfd63295b622c3e0d10aaa70f3851d8119282a4ee8a3f8d"
+    },
+    {
+      "path": "scaffolds/default/standards/data-engineering.md",
+      "sha256": "ee81527f2df1cf55abd2ed5b08a169703a51ea48d00d8b7c8dc894ccf1b5d1e6"
+    },
+    {
+      "path": "scaffolds/default/standards/definition.md",
+      "sha256": "58e4542ab9b86e97480caea76b3899018e3d7b13df6a92f969e3709fe2ce0924"
+    },
+    {
+      "path": "scaffolds/default/standards/delivery.md",
+      "sha256": "cbb2bf4b66e19482f063eab37badda1d3427eed0656432c4e6b650fc0a11a2be"
+    },
+    {
+      "path": "scaffolds/default/standards/developer-experience.md",
+      "sha256": "1ca2940e3546316d0b27ba564d99e607be653d7ae5b2b412df5d2d9af1f47070"
+    },
+    {
+      "path": "scaffolds/default/standards/documentation.md",
+      "sha256": "e8164293ebdf0626936d95eb7b1a428f93a12d6feb936c091f7948a75cb09119"
+    },
+    {
+      "path": "scaffolds/default/standards/done.md",
+      "sha256": "3a38f122ff8cd0913ead61ede3306048406f596a5e62241ceb71a208f5101210"
+    },
+    {
+      "path": "scaffolds/default/standards/event-driven.md",
+      "sha256": "91f5100061b3809e3f54f9e87de562be83f28afa864d87df825b24b1595abdb8"
+    },
+    {
+      "path": "scaffolds/default/standards/evidence.md",
+      "sha256": "0d73582091df5e755ee0f0af2c44d8273cc535942227480af337d382915b84a1"
+    },
+    {
+      "path": "scaffolds/default/standards/finops.md",
+      "sha256": "dcec8041171e60f8348b37f9cb623c5301af64cb18b0e62510666f14687e74bf"
+    },
+    {
+      "path": "scaffolds/default/standards/git-commits.md",
+      "sha256": "898ad77aeac074c5e38f32d864f7235582c5ee0dfc69047490f0b90cce3a3501"
+    },
+    {
+      "path": "scaffolds/default/standards/incident-management.md",
+      "sha256": "84bc9bdac0ad9d14714d397933d0ec3db8095326a1464adf9dd0a19eb45352b8"
+    },
+    {
+      "path": "scaffolds/default/standards/observability.md",
+      "sha256": "732059446d911637b6cbd4308b6b3d3632f0b3ff392afb7a1ae08d2e933d52c2"
+    },
+    {
+      "path": "scaffolds/default/standards/open-source-governance.md",
+      "sha256": "dca85e608717db0c172de4092efaf21e4acc5de862a99d1543a8e5eccebb67ab"
+    },
+    {
+      "path": "scaffolds/default/standards/orchestration.md",
+      "sha256": "b5c279a0a112c2573cd1e4ca18646bd7caff33bacfc10a79e7d169e6c3a97cfb"
+    },
+    {
+      "path": "scaffolds/default/standards/patterns.md",
+      "sha256": "d2da80cffcb0fa46d6ba45c6c0d1c4ccdb57b8ab2220a216afe431718317a637"
+    },
+    {
+      "path": "scaffolds/default/standards/reference-stack.md",
+      "sha256": "8a17f378be4f0cb7dadfe1e3b43921bdfa96029f82ae9316fa84d30402a3f4ef"
+    },
+    {
+      "path": "scaffolds/default/standards/research-evidence.md",
+      "sha256": "e34c7d27b23d4f1bc84d1c9f7c95b88d1e0b8dd2946b9df2e46ab967db13cfcc"
+    },
+    {
+      "path": "scaffolds/default/standards/security.md",
+      "sha256": "a8def17fa05b7b540d1116df94d2406cffb3571d3b93557073e4d2a2ccf698d9"
+    },
+    {
+      "path": "scaffolds/default/standards/session-model-advice.md",
+      "sha256": "5f75ff1ac64d408022a42f4ecf2695b6809b0de40fab14cdebf7af62c17735de"
+    },
+    {
+      "path": "scaffolds/default/standards/solutioning-criteria.md",
+      "sha256": "fb3ff4d2128447d756345bb7f42ba393b1666f9376fe86c4a3608033b8637dc4"
+    },
+    {
+      "path": "scaffolds/default/standards/solutioning-decisions.md",
+      "sha256": "c2892a399e671e7ff4fd97480864f20deaf60a50bb04fa05a9239366e725b296"
+    },
+    {
+      "path": "scaffolds/default/standards/solutioning-risks.md",
+      "sha256": "8aff5ee4c8f483a63f8824dc9956a6bd7e0c0f3d60c14920aae7394c767e0ba6"
+    },
+    {
+      "path": "scaffolds/default/standards/supply-chain.md",
+      "sha256": "20092e60486ca80b33a08e0ed505f347e9bf1a3dab02e8bd23522c955d824587"
+    },
+    {
+      "path": "scaffolds/default/standards/sustainability.md",
+      "sha256": "9d659a173e0f4146414ebe05ba213a805aefd7b9237e263945e1f5b19b6ed735"
+    },
+    {
+      "path": "scaffolds/default/standards/team-topologies.md",
+      "sha256": "89abb04619002054413dfa3b11ee2ae123349703a463d9f649a0700ea2a75564"
+    },
+    {
+      "path": "scaffolds/default/standards/testing.md",
+      "sha256": "cc266a24a498e1e721e29671f87e61b1a64eb0885ab8a131c00fb82020069d15"
+    },
+    {
+      "path": "scaffolds/default/standards/vendor/conventional-commits-1.0.0.md",
+      "sha256": "3180bb72bd375a983da373885ae14d879b08cad5cd4d048d7764d16ed16d9867"
+    },
+    {
+      "path": "scaffolds/default/standards/workflows.md",
+      "sha256": "e24821b51ad223d3bee512747048ee8c103f57f0d9ef7960bf345ad1b52a6fb1"
+    }
+  ],
+  "excluded_historical_candidates": {
+    "paths": [
+      "docs/evidence/agent-expertise-expansion",
+      "docs/evidence/role-method-differentiation",
+      "tests/fixtures/archive/ranker-corpus.json"
+    ],
+    "reason": "Historical evaluation/candidate and frozen ranking fixtures are evidence, not approved card corpora. Product-manager and quality-reviewer expansion gates explicitly failed; do not promote them as current expertise."
+  }
+}

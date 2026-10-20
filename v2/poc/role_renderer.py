@@ -151,6 +151,10 @@ def bind_bundle(source, destination, task, project_context):
     for path in (destination/'recipes').glob('*.yaml'):
         recipe = yaml.safe_load(path.read_text())
         recipe.setdefault('settings', {})['max_turns'] = WORKER_MAX_TURNS
+        from .knowledge import home as knowledge_home
+        kh=knowledge_home()
+        if (kh/'settings.json').exists() and (kh/'CURRENT.json').exists():
+            recipe['instructions']+='\n\nMaintained knowledge: retrieve current card guidance through search_cards and traverse_cards when relevant. The maintained Markdown corpus is authoritative for card content; inline expertise excerpts are compatibility seed snapshots. Preserve role responsibilities and project instructions. Inferred edges are suggestions, not policy, and do not extend a card beyond its role/applicability. Report unavailable tools explicitly; do not substitute stale excerpts as current retrieved evidence.'
         literals = {}
         for parameter in recipe.get('parameters', []):
             if parameter['key'] in defaults:

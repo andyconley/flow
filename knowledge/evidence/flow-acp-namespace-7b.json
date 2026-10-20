@@ -1,0 +1,367 @@
+{
+  "model": "qwen2.5:7b",
+  "namespace_compat": true,
+  "passed": false,
+  "checks": {
+    "provider_completed": true,
+    "task_completed": false,
+    "actual_search_call": true,
+    "actual_graph_call": true,
+    "authored_quotes_and_ids": false,
+    "no_workspace_writes": true,
+    "credential_free": true
+  },
+  "result": {
+    "output": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792515592842464000/read-1-0.jsonl",
+    "stderr": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792515592842464000/read-1-0.stderr",
+    "status": "completed",
+    "inputs": "0cf67af5038f32ed08e3aefd0849f7e08e511eafbd32d76a1978210af73dd9d9",
+    "workspace": "/Users/andyconley/Documents/Codex/2026-10-20/task/acp-read-namespace-7b",
+    "started": 1792515592.980944,
+    "kind": "read",
+    "native_evidence_directory": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792515592842464000/native-runtime/acp-evidence",
+    "native_client_error_file": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792515592842464000/native-runtime/claude-auth-3d5cafe0763c456e87200c693c39335e.json",
+    "project_python": null,
+    "context_configuration": {
+      "context_tokens": null,
+      "source": "provider_default",
+      "profiles": [],
+      "output_tokens": null,
+      "legacy_condenser_tokens": null,
+      "context_reserve": null,
+      "warnings": [],
+      "native_context_owner": "native client; occupancy/compaction may be unavailable",
+      "enforcement": "provider context configuration only; no token/rate/usage gate",
+      "application_basis": "captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx"
+    },
+    "pid": 58436,
+    "execution_scope": 58436,
+    "processes": {
+      "58436": {
+        "parent": 58416,
+        "birth": "Tue Oct 20 12:59:53 2026"
+      },
+      "58444": {
+        "parent": 58436,
+        "birth": "Tue Oct 20 12:59:53 2026"
+      },
+      "58450": {
+        "parent": 58444,
+        "birth": "Tue Oct 20 12:59:53 2026"
+      },
+      "58452": {
+        "parent": 58450,
+        "birth": "Tue Oct 20 12:59:54 2026"
+      },
+      "58453": {
+        "parent": 58452,
+        "birth": "Tue Oct 20 12:59:54 2026"
+      },
+      "58476": {
+        "parent": 58453,
+        "birth": "Tue Oct 20 12:59:54 2026"
+      },
+      "58529": {
+        "parent": 58476,
+        "birth": "Tue Oct 20 13:00:02 2026"
+      }
+    },
+    "supervisor_pid": 58416,
+    "knowledge_status": {
+      "state": "ready",
+      "fingerprint": "6661f654492cbcc2efeb02d3a44639b47fe9359c18052b9065e0ac59e49a4124",
+      "generation": "1792514008737750000-150c50a4",
+      "finished": 1792514284.346536,
+      "pending": false,
+      "desired": "6661f654492cbcc2efeb02d3a44639b47fe9359c18052b9065e0ac59e49a4124",
+      "snapshot": "1792514008737750000-150c50a4"
+    },
+    "usage": {
+      "source": "goose_sqlite",
+      "available": true,
+      "sessions": [
+        {
+          "session_id": "20261020_10",
+          "parent_session_id": null,
+          "name": "knowledge-acp-read-1792515592842464000-read-1-0",
+          "role": "implementation-coordinator",
+          "role_basis": "recorded job boundary",
+          "updated_at": "2026-10-20 17:00:21",
+          "provider": "codex-acp",
+          "model": "qwen2.5:7b",
+          "model_basis": "session configuration; may be a native alias",
+          "ledger_models": [
+            "qwen2.5:7b"
+          ],
+          "usage": {
+            "input_tokens": 17875,
+            "output_tokens": 652,
+            "total_tokens": 18527,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "reported_cost": null,
+          "cost_sources": [],
+          "actual_billed_cost": null,
+          "ledger_calls": 1,
+          "goose_compactions": 0,
+          "last_request_tokens": {
+            "input_tokens": 17875,
+            "output_tokens": 652,
+            "total_tokens": 18527
+          },
+          "native_context_occupancy": null
+        }
+      ],
+      "totals": {
+        "input_tokens": 17875,
+        "output_tokens": 652,
+        "total_tokens": 18527,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "scope": {
+        "project": "/Users/andyconley/Documents/Codex/2026-10-20/task/acp-read-namespace-7b",
+        "job_id": null,
+        "session_name": "knowledge-acp-read-1792515592842464000-read-1-0"
+      },
+      "actual_billed_cost": null,
+      "notes": [
+        "Provider usage can be absent or partial; null is not zero.",
+        "Model names come from session configuration and may be native aliases; ledger model names are retained separately.",
+        "Reported/estimated costs are not subscription bills.",
+        "Native transcript history can overlap Goose; do not add the two totals blindly."
+      ],
+      "coverage": {
+        "sessions": 1,
+        "missing_input_tokens": 0,
+        "missing_output_tokens": 0,
+        "missing_total_tokens": 0,
+        "missing_cache_read_tokens": 0,
+        "missing_cache_write_tokens": 0
+      },
+      "reported_cost": null,
+      "groups": [
+        {
+          "role": "implementation-coordinator",
+          "provider": "codex-acp",
+          "model": "qwen2.5:7b",
+          "sessions": 1,
+          "usage": {
+            "input_tokens": 17875,
+            "output_tokens": 652,
+            "total_tokens": 18527,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "reported_cost": null,
+          "actual_billed_cost": null,
+          "cost_sources": [],
+          "partial": false
+        }
+      ]
+    },
+    "goose_session_ids": [
+      "20261020_10"
+    ],
+    "context_monitoring": {
+      "configuration": {
+        "context_tokens": null,
+        "source": "provider_default",
+        "profiles": [],
+        "output_tokens": null,
+        "legacy_condenser_tokens": null,
+        "context_reserve": null,
+        "warnings": [],
+        "native_context_owner": "native client; occupancy/compaction may be unavailable",
+        "enforcement": "provider context configuration only; no token/rate/usage gate",
+        "application_basis": "captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx"
+      },
+      "observations": [
+        {
+          "session_id": "20261020_10",
+          "provider": "codex-acp",
+          "model": "qwen2.5:7b",
+          "updated_at": "2026-10-20 17:00:21",
+          "context_window": null,
+          "last_request_tokens": 18527,
+          "last_reported_request_percent": null,
+          "basis": "native/provider occupancy unavailable",
+          "warning": null
+        }
+      ],
+      "informational_only": true
+    },
+    "context_warning_sessions": [],
+    "exit": 0,
+    "quiescent": true,
+    "alive": [],
+    "finished": 1792515623.3592162
+  },
+  "report": {},
+  "expected": [
+    {
+      "card": "business-analyst--mark-the-evidentiary-status-of-every-statement.md",
+      "quoted_eight_authored_words": false,
+      "permalink_present": false
+    },
+    {
+      "card": "support-lead--carry-hypothesis-and-fact-separately-across-a-handoff.md",
+      "quoted_eight_authored_words": false,
+      "permalink_present": false
+    }
+  ],
+  "acp_frames": [
+    {
+      "type": "server_tool_frame",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01a15a41-5769-7cb3-8dc5-e72693c05559",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_31bfqn1s",
+            "kind": "execute",
+            "title": "mcp.python.search_cards",
+            "status": "in_progress",
+            "rawInput": {
+              "server": "python",
+              "tool": "search_cards",
+              "arguments": {
+                "query": "evidentiary",
+                "mode": "text",
+                "role": "business-analyst"
+              }
+            },
+            "_meta": {
+              "is_mcp_tool_call": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server_tool_frame",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01a15a41-5769-7cb3-8dc5-e72693c05559",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_31bfqn1s",
+            "status": "completed",
+            "rawOutput": {
+              "result": {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "{\"results\":[{\"title\":\"Mark the evidentiary status of every statement\",\"type\":\"entity\",\"score\":-0.0,\"entity\":\"cards/business-analyst--mark-the-evidentiary-status-of-every-statement\",\"external_id\":\"722c921b-0137-412d-9577-4e3e74e98951\",\"permalink\":\"cards/business-analyst--mark-the-evidentiary-status-of-every-statement\",\"content\":\"# Mark the evidentiary status of every statement\\n\\n## Principle\\n\\na label attached early travels downstream as established fact. Each handoff inherits it without the qualification it carried when it was written.\\n\\n## Use when\\n\\nwriting any definition, problem statement, or requirement that another role will act on.\\n\\n## Required behavior\\n\\nlabel each statement as observed, inferred, assumed, or decided, and keep the four visibly separate in the artifact. An assumption carries what would confirm or refute it.\\n\\n## Avoid\\n\\nwriting an inference in the declarative voice of an observation, which is how an assumption becomes a constraint nobody remembers agreeing to.\\n\\n## Sources\\n\\n[\\n  {\\n    \\\"citation\\\": {\\n      \\\"@type\\\": \\\"ScholarlyArticle\\\",\\n      \\\"author\\\": \\\"Pat Croskerry\\\",\\n      \\\"name\\\": \\\"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\\\",\\n      \\\"isPartOf\\\": \\\"New England Journal of Medicine\\\",\\n      \\\"datePublished\\\": \\\"2013\\\",\\n      \\\"pagination\\\": \\\"2445-2448\\\",\\n      \\\"sameAs\\\": \\\"https://doi.org/10.1056/NEJMp1303712\\\",\\n      \\\"@id\\\": \\\"flow:work/croskerry-mindless-to-mindful\\\"\\n    },\\n    \\\"flow:locator\\\": \\\"the diagnosis-momentum effect\\\"\\n  }\\n]\\n\\n## Complete authored card (lossless)\\n\\n```json\\n{\\n  \\\"@context\\\": {\\n    \\\"@vocab\\\": \\\"https://schema.org/\\\",\\n    \\\"flow\\\": \\\"https://andyconley.github.io/flow/ns#\\\",\\n    \\\"teaches\\\": {\\n      \\\"@id\\\": \\\"https://schema.org/teaches\\\",\\n      \\\"@type\\\": \\\"@id\\\"\\n    }\\n  },\\n  \\\"card\\\": {\\n    \\\"@id\\\": \\\"flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement\\\",\\n    \\\"@type\\\": \\\"LearningResource\\\",\\n    \\\"name\\\": \\\"Mark the evidentiary status of every statement\\\",\\n    \\\"audience\\\": {\\n      \\\"@type\\\": \\\"Audience\\\",\\n      \\\"audienceType\\\": \\\"business-analyst\\\"\\n    },\\n    \\\"flow:layer\\\": \\\"baseline\\\",\\n    \\\"abstract\\\": \\\"a label attached early travels downstream as established fact. Each handoff inherits it without the qualification it carried when it was written.\\\",\\n    \\\"flow:trigger\\\": \\\"writing any definition, problem statement, or requirement that another role will act on.\\\",\\n    \\\"flow:requiredBehavior\\\": \\\"label each statement as observed, inferred, assumed, or decided, and keep the four visibly separate in the artifact. An assumption carries what would confirm or refute it.\\\",\\n    \\\"flow:failureMode\\\": \\\"writing an inference in the declarative voice of an observation, which is how an assumption becomes a constraint nobody remembers agreeing to.\\\",\\n    \\\"flow:source\\\": [\\n      {\\n        \\\"citation\\\": {\\n          \\\"@type\\\": \\\"ScholarlyArticle\\\",\\n          \\\"author\\\": \\\"Pat Croskerry\\\",\\n          \\\"name\\\": \\\"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\\\",\\n          \\\"isPartOf\\\": \\\"New England Journal of Medicine\\\",\\n          \\\"datePublished\\\": \\\"2013\\\",\\n          \\\"pagination\\\": \\\"2445-2448\\\",\\n          \\\"sameAs\\\": \\\"https://doi.org/10.1056/NEJMp1303712\\\",\\n          \\\"@id\\\": \\\"flow:work/croskerry-mindless-to-mindful\\\"\\n        },\\n        \\\"flow:locator\\\": \\\"the diagnosis-momentum effect\\\"\\n      }\\n    ],\\n    \\\"teaches\\\": [\\n      {\\n        \\\"@type\\\": \\\"DefinedTerm\\\",\\n        \\\"@id\\\": \\\"flow:competency/separate-observation-interpretation-assumption-and-decision\\\",\\n        \\\"name\\\": \\\"Separate observation, interpretation, assumption, and decision\\\"\\n      }\\n    ],\\n    \\\"flow:lifecycle\\\": {\\n      \\\"state\\\": \\\"current\\\",\\n      \\\"owner\\\": \\\"flow:owner/framework-maintainers\\\",\\n      \\\"attestedAt\\\": \\\"2026-09-11T00:00:00Z\\\",\\n      \\\"evidence\\\": [\\n        {\\n          \\\"kind\\\": \\\"review-record\\\",\\n          \\\"ref\\\": \\\"docs/evidence/agent-expertise-expansion/README.md\\\"\\n        }\\n      ],\\n      \\\"supersedes\\\": []\\n    }\\n  }\\n}\\n```\",\"file_path\":\"business-analyst--mark-the-evidentiary-status-of-every-statement.md\",\"updated_at\":\"2019-12-31T19:00:00-05:00\",\"metadata\":{\"note_type\":\"note\"},\"entity_id\":5}],\"current_page\":1,\"page_size\":5,\"total\":1,\"total_is_exact\":true,\"has_more\":false}"
+                  }
+                ],
+                "structuredContent": {
+                  "results": [
+                    {
+                      "title": "Mark the evidentiary status of every statement",
+                      "type": "entity",
+                      "score": 0,
+                      "entity": "cards/business-analyst--mark-the-evidentiary-status-of-every-statement",
+                      "external_id": "722c921b-0137-412d-9577-4e3e74e98951",
+                      "permalink": "cards/business-analyst--mark-the-evidentiary-status-of-every-statement",
+                      "content": "# Mark the evidentiary status of every statement\n\n## Principle\n\na label attached early travels downstream as established fact. Each handoff inherits it without the qualification it carried when it was written.\n\n## Use when\n\nwriting any definition, problem statement, or requirement that another role will act on.\n\n## Required behavior\n\nlabel each statement as observed, inferred, assumed, or decided, and keep the four visibly separate in the artifact. An assumption carries what would confirm or refute it.\n\n## Avoid\n\nwriting an inference in the declarative voice of an observation, which is how an assumption becomes a constraint nobody remembers agreeing to.\n\n## Sources\n\n[\n  {\n    \"citation\": {\n      \"@type\": \"ScholarlyArticle\",\n      \"author\": \"Pat Croskerry\",\n      \"name\": \"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\",\n      \"isPartOf\": \"New England Journal of Medicine\",\n      \"datePublished\": \"2013\",\n      \"pagination\": \"2445-2448\",\n      \"sameAs\": \"https://doi.org/10.1056/NEJMp1303712\",\n      \"@id\": \"flow:work/croskerry-mindless-to-mindful\"\n    },\n    \"flow:locator\": \"the diagnosis-momentum effect\"\n  }\n]\n\n## Complete authored card (lossless)\n\n```json\n{\n  \"@context\": {\n    \"@vocab\": \"https://schema.org/\",\n    \"flow\": \"https://andyconley.github.io/flow/ns#\",\n    \"teaches\": {\n      \"@id\": \"https://schema.org/teaches\",\n      \"@type\": \"@id\"\n    }\n  },\n  \"card\": {\n    \"@id\": \"flow:entry/business-analyst/mark-the-evidentiary-status-of-every-statement\",\n    \"@type\": \"LearningResource\",\n    \"name\": \"Mark the evidentiary status of every statement\",\n    \"audience\": {\n      \"@type\": \"Audience\",\n      \"audienceType\": \"business-analyst\"\n    },\n    \"flow:layer\": \"baseline\",\n    \"abstract\": \"a label attached early travels downstream as established fact. Each handoff inherits it without the qualification it carried when it was written.\",\n    \"flow:trigger\": \"writing any definition, problem statement, or requirement that another role will act on.\",\n    \"flow:requiredBehavior\": \"label each statement as observed, inferred, assumed, or decided, and keep the four visibly separate in the artifact. An assumption carries what would confirm or refute it.\",\n    \"flow:failureMode\": \"writing an inference in the declarative voice of an observation, which is how an assumption becomes a constraint nobody remembers agreeing to.\",\n    \"flow:source\": [\n      {\n        \"citation\": {\n          \"@type\": \"ScholarlyArticle\",\n          \"author\": \"Pat Croskerry\",\n          \"name\": \"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\",\n          \"isPartOf\": \"New England Journal of Medicine\",\n          \"datePublished\": \"2013\",\n          \"pagination\": \"2445-2448\",\n          \"sameAs\": \"https://doi.org/10.1056/NEJMp1303712\",\n          \"@id\": \"flow:work/croskerry-mindless-to-mindful\"\n        },\n        \"flow:locator\": \"the diagnosis-momentum effect\"\n      }\n    ],\n    \"teaches\": [\n      {\n        \"@type\": \"DefinedTerm\",\n        \"@id\": \"flow:competency/separate-observation-interpretation-assumption-and-decision\",\n        \"name\": \"Separate observation, interpretation, assumption, and decision\"\n      }\n    ],\n    \"flow:lifecycle\": {\n      \"state\": \"current\",\n      \"owner\": \"flow:owner/framework-maintainers\",\n      \"attestedAt\": \"2026-09-11T00:00:00Z\",\n      \"evidence\": [\n        {\n          \"kind\": \"review-record\",\n          \"ref\": \"docs/evidence/agent-expertise-expansion/README.md\"\n        }\n      ],\n      \"supersedes\": []\n    }\n  }\n}\n```",
+                      "file_path": "business-analyst--mark-the-evidentiary-status-of-every-statement.md",
+                      "updated_at": "2019-12-31T19:00:00-05:00",
+                      "metadata": {
+                        "note_type": "note"
+                      },
+                      "entity_id": 5
+                    }
+                  ],
+                  "current_page": 1,
+                  "page_size": 5,
+                  "total": 1,
+                  "total_is_exact": true,
+                  "has_more": false
+                },
+                "_meta": null
+              },
+              "error": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server_tool_frame",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01a15a41-5769-7cb3-8dc5-e72693c05559",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_8xr1ehfa",
+            "kind": "execute",
+            "title": "mcp.python.traverse_cards",
+            "status": "in_progress",
+            "rawInput": {
+              "server": "python",
+              "tool": "traverse_cards",
+              "arguments": {
+                "permalink": "cards/business-analyst--mark-the-evidentiary-status-of-every-statement",
+                "relation_type": "complements",
+                "depth": 1
+              }
+            },
+            "_meta": {
+              "is_mcp_tool_call": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server_tool_frame",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01a15a41-5769-7cb3-8dc5-e72693c05559",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_8xr1ehfa",
+            "status": "completed",
+            "rawOutput": {
+              "result": {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "{\"snapshot\":\"1792514008737750000-150c50a4\",\"timeframe\":null,\"edges\":[{\"from_note\":\"cards/business-analyst--mark-the-evidentiary-status-of-every-statement\",\"to_note\":\"cards/support-lead--carry-hypothesis-and-fact-separately-across-a-handoff\",\"relation_type\":\"complements\",\"depth\":1,\"containing_note\":\"business-analyst--mark-the-evidentiary-status-of-every-statement.md\",\"target_note\":\"support-lead--carry-hypothesis-and-fact-separately-across-a-handoff.md\",\"target_content\":\"---\\ntitle: \\\"Carry hypothesis and fact separately across a handoff\\\"\\ntype: \\\"note\\\"\\npermalink: \\\"cards/support-lead--carry-hypothesis-and-fact-separately-across-a-handoff\\\"\\ncard_id: \\\"flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff\\\"\\nrole: \\\"support-lead\\\"\\nlayer: \\\"baseline\\\"\\nsource_file: \\\"support-lead.jsonld\\\"\\ncreated: \\\"2020-01-01T00:00:00Z\\\"\\nmodified: \\\"2020-01-01T00:00:00Z\\\"\\n---\\n\\n# Carry hypothesis and fact separately across a handoff\\n\\n## Principle\\n\\na label survives a handoff better than the doubt attached to it. The next person receives the hypothesis as a finding and investigates from there instead of from the evidence.\\n\\n## Use when\\n\\nescalating, reassigning, or writing up an unresolved case.\\n\\n## Required behavior\\n\\nthe escalation packet states what was observed, what was reproduced and under what conditions, what is currently believed and on what basis, what was ruled out and by which observation, and what is still open. A belief never appears without its basis.\\n\\n## Avoid\\n\\nleading the packet with a suspected cause, or dropping ruled-out leads so the next person repeats them.\\n\\n## Sources\\n\\n[\\n  {\\n    \\\"citation\\\": {\\n      \\\"@type\\\": \\\"ScholarlyArticle\\\",\\n      \\\"author\\\": \\\"Pat Croskerry\\\",\\n      \\\"name\\\": \\\"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\\\",\\n      \\\"isPartOf\\\": \\\"New England Journal of Medicine\\\",\\n      \\\"datePublished\\\": \\\"2013\\\",\\n      \\\"pagination\\\": \\\"2445-2448\\\",\\n      \\\"sameAs\\\": \\\"https://doi.org/10.1056/NEJMp1303712\\\",\\n      \\\"@id\\\": \\\"flow:work/croskerry-mindless-to-mindful\\\"\\n    },\\n    \\\"flow:locator\\\": \\\"diagnosis momentum\\\"\\n  }\\n]\\n\\n## Complete authored card (lossless)\\n\\n```json\\n{\\n  \\\"@context\\\": {\\n    \\\"@vocab\\\": \\\"https://schema.org/\\\",\\n    \\\"flow\\\": \\\"https://andyconley.github.io/flow/ns#\\\",\\n    \\\"teaches\\\": {\\n      \\\"@id\\\": \\\"https://schema.org/teaches\\\",\\n      \\\"@type\\\": \\\"@id\\\"\\n    }\\n  },\\n  \\\"card\\\": {\\n    \\\"@id\\\": \\\"flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff\\\",\\n    \\\"@type\\\": \\\"LearningResource\\\",\\n    \\\"name\\\": \\\"Carry hypothesis and fact separately across a handoff\\\",\\n    \\\"audience\\\": {\\n      \\\"@type\\\": \\\"Audience\\\",\\n      \\\"audienceType\\\": \\\"support-lead\\\"\\n    },\\n    \\\"flow:layer\\\": \\\"baseline\\\",\\n    \\\"abstract\\\": \\\"a label survives a handoff better than the doubt attached to it. The next person receives the hypothesis as a finding and investigates from there instead of from the evidence.\\\",\\n    \\\"flow:trigger\\\": \\\"escalating, reassigning, or writing up an unresolved case.\\\",\\n    \\\"flow:requiredBehavior\\\": \\\"the escalation packet states what was observed, what was reproduced and under what conditions, what is currently believed and on what basis, what was ruled out and by which observation, and what is still open. A belief never appears without its basis.\\\",\\n    \\\"flow:failureMode\\\": \\\"leading the packet with a suspected cause, or dropping ruled-out leads so the next person repeats them.\\\",\\n    \\\"flow:source\\\": [\\n      {\\n        \\\"citation\\\": {\\n          \\\"@type\\\": \\\"ScholarlyArticle\\\",\\n          \\\"author\\\": \\\"Pat Croskerry\\\",\\n          \\\"name\\\": \\\"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\\\",\\n          \\\"isPartOf\\\": \\\"New England Journal of Medicine\\\",\\n          \\\"datePublished\\\": \\\"2013\\\",\\n          \\\"pagination\\\": \\\"2445-2448\\\",\\n          \\\"sameAs\\\": \\\"https://doi.org/10.1056/NEJMp1303712\\\",\\n          \\\"@id\\\": \\\"flow:work/croskerry-mindless-to-mindful\\\"\\n        },\\n        \\\"flow:locator\\\": \\\"diagnosis momentum\\\"\\n      }\\n    ],\\n    \\\"teaches\\\": [\\n      {\\n        \\\"@type\\\": \\\"DefinedTerm\\\",\\n        \\\"@id\\\": \\\"flow:competency/separate-observation-interpretation-assumption-and-decision\\\",\\n        \\\"name\\\": \\\"Separate observation, interpretation, assumption, and decision\\\"\\n      }\\n    ],\\n    \\\"flow:lifecycle\\\": {\\n      \\\"state\\\": \\\"current\\\",\\n      \\\"owner\\\": \\\"flow:owner/framework-maintainers\\\",\\n      \\\"attestedAt\\\": \\\"2026-09-11T00:00:00Z\\\",\\n      \\\"evidence\\\": [\\n        {\\n          \\\"kind\\\": \\\"review-record\\\",\\n          \\\"ref\\\": \\\"docs/evidence/agent-expertise-expansion/README.md\\\"\\n        }\\n      ],\\n      \\\"supersedes\\\": []\\n    }\\n  }\\n}\\n```\\n\"}]}"
+                  }
+                ],
+                "structuredContent": {
+                  "snapshot": "1792514008737750000-150c50a4",
+                  "timeframe": null,
+                  "edges": [
+                    {
+                      "from_note": "cards/business-analyst--mark-the-evidentiary-status-of-every-statement",
+                      "to_note": "cards/support-lead--carry-hypothesis-and-fact-separately-across-a-handoff",
+                      "relation_type": "complements",
+                      "depth": 1,
+                      "containing_note": "business-analyst--mark-the-evidentiary-status-of-every-statement.md",
+                      "target_note": "support-lead--carry-hypothesis-and-fact-separately-across-a-handoff.md",
+                      "target_content": "---\ntitle: \"Carry hypothesis and fact separately across a handoff\"\ntype: \"note\"\npermalink: \"cards/support-lead--carry-hypothesis-and-fact-separately-across-a-handoff\"\ncard_id: \"flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff\"\nrole: \"support-lead\"\nlayer: \"baseline\"\nsource_file: \"support-lead.jsonld\"\ncreated: \"2020-01-01T00:00:00Z\"\nmodified: \"2020-01-01T00:00:00Z\"\n---\n\n# Carry hypothesis and fact separately across a handoff\n\n## Principle\n\na label survives a handoff better than the doubt attached to it. The next person receives the hypothesis as a finding and investigates from there instead of from the evidence.\n\n## Use when\n\nescalating, reassigning, or writing up an unresolved case.\n\n## Required behavior\n\nthe escalation packet states what was observed, what was reproduced and under what conditions, what is currently believed and on what basis, what was ruled out and by which observation, and what is still open. A belief never appears without its basis.\n\n## Avoid\n\nleading the packet with a suspected cause, or dropping ruled-out leads so the next person repeats them.\n\n## Sources\n\n[\n  {\n    \"citation\": {\n      \"@type\": \"ScholarlyArticle\",\n      \"author\": \"Pat Croskerry\",\n      \"name\": \"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\",\n      \"isPartOf\": \"New England Journal of Medicine\",\n      \"datePublished\": \"2013\",\n      \"pagination\": \"2445-2448\",\n      \"sameAs\": \"https://doi.org/10.1056/NEJMp1303712\",\n      \"@id\": \"flow:work/croskerry-mindless-to-mindful\"\n    },\n    \"flow:locator\": \"diagnosis momentum\"\n  }\n]\n\n## Complete authored card (lossless)\n\n```json\n{\n  \"@context\": {\n    \"@vocab\": \"https://schema.org/\",\n    \"flow\": \"https://andyconley.github.io/flow/ns#\",\n    \"teaches\": {\n      \"@id\": \"https://schema.org/teaches\",\n      \"@type\": \"@id\"\n    }\n  },\n  \"card\": {\n    \"@id\": \"flow:entry/support-lead/carry-hypothesis-and-fact-separately-across-a-handoff\",\n    \"@type\": \"LearningResource\",\n    \"name\": \"Carry hypothesis and fact separately across a handoff\",\n    \"audience\": {\n      \"@type\": \"Audience\",\n      \"audienceType\": \"support-lead\"\n    },\n    \"flow:layer\": \"baseline\",\n    \"abstract\": \"a label survives a handoff better than the doubt attached to it. The next person receives the hypothesis as a finding and investigates from there instead of from the evidence.\",\n    \"flow:trigger\": \"escalating, reassigning, or writing up an unresolved case.\",\n    \"flow:requiredBehavior\": \"the escalation packet states what was observed, what was reproduced and under what conditions, what is currently believed and on what basis, what was ruled out and by which observation, and what is still open. A belief never appears without its basis.\",\n    \"flow:failureMode\": \"leading the packet with a suspected cause, or dropping ruled-out leads so the next person repeats them.\",\n    \"flow:source\": [\n      {\n        \"citation\": {\n          \"@type\": \"ScholarlyArticle\",\n          \"author\": \"Pat Croskerry\",\n          \"name\": \"From Mindless to Mindful Practice \u2014 Cognitive Bias and Clinical Decision Making\",\n          \"isPartOf\": \"New England Journal of Medicine\",\n          \"datePublished\": \"2013\",\n          \"pagination\": \"2445-2448\",\n          \"sameAs\": \"https://doi.org/10.1056/NEJMp1303712\",\n          \"@id\": \"flow:work/croskerry-mindless-to-mindful\"\n        },\n        \"flow:locator\": \"diagnosis momentum\"\n      }\n    ],\n    \"teaches\": [\n      {\n        \"@type\": \"DefinedTerm\",\n        \"@id\": \"flow:competency/separate-observation-interpretation-assumption-and-decision\",\n        \"name\": \"Separate observation, interpretation, assumption, and decision\"\n      }\n    ],\n    \"flow:lifecycle\": {\n      \"state\": \"current\",\n      \"owner\": \"flow:owner/framework-maintainers\",\n      \"attestedAt\": \"2026-09-11T00:00:00Z\",\n      \"evidence\": [\n        {\n          \"kind\": \"review-record\",\n          \"ref\": \"docs/evidence/agent-expertise-expansion/README.md\"\n        }\n      ],\n      \"supersedes\": []\n    }\n  }\n}\n```\n"
+                    }
+                  ]
+                },
+                "_meta": null
+              },
+              "error": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 """Real LangGraph/SQLite and existing Goose adapter; no native inference."""
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -31,6 +32,14 @@ class Harness:
 
 
 class RoleWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        # Mock provider tests own their store; installed consumer HOME is seeded
+        # but deliberately unprovisioned. Keep real readiness behavior elsewhere.
+        fixture = tempfile.TemporaryDirectory(prefix='flow-mock-knowledge-')
+        self.addCleanup(fixture.cleanup)
+        env = patch.dict(os.environ, FLOW_KNOWLEDGE_HOME=fixture.name)
+        env.start(); self.addCleanup(env.stop)
+
     def graph(self,tmp,h):
         saver=SqliteSaver.from_conn_string(str(Path(tmp)/'checkpoints.sqlite'));cp=saver.__enter__()
         self.addCleanup(saver.__exit__,None,None,None)

@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "large_models_downloaded": false,
+  "registry": {
+    "requirements_sha256": "ebf206bd17b40856161356787b67bd48f6d9f35bc882bc064dc65f140caf47fa",
+    "files": {
+      "six-1.17.0-py2.py3-none-any.whl": {
+        "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+        "size": 11050,
+        "package": "six",
+        "version": "1.17.0"
+      }
+    }
+  },
+  "small_official_embedding_config_verified": true
+}

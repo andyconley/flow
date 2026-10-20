@@ -1,0 +1,16 @@
+test_agent_extension_and_cli_dispatch (tests.test_knowledge.KnowledgeTests.test_agent_extension_and_cli_dispatch) ... ok
+test_authored_deletion_by_whole_file_writer_refused (tests.test_knowledge.KnowledgeTests.test_authored_deletion_by_whole_file_writer_refused) ... ok
+test_clean_fetch_deletion_and_seed_repeat (tests.test_knowledge.KnowledgeTests.test_clean_fetch_deletion_and_seed_repeat) ... ok
+test_code_and_settings_versions_reconcile (tests.test_knowledge.KnowledgeTests.test_code_and_settings_versions_reconcile) ... ok
+test_export_and_restore_are_runtime_independent (tests.test_knowledge.KnowledgeTests.test_export_and_restore_are_runtime_independent) ... ok
+test_failed_build_keeps_previous_snapshot_and_authored_notes (tests.test_knowledge.KnowledgeTests.test_failed_build_keeps_previous_snapshot_and_authored_notes) ... ok
+test_failed_fingerprint_does_not_spin_or_block_known_good (tests.test_knowledge.KnowledgeTests.test_failed_fingerprint_does_not_spin_or_block_known_good) ... ok
+test_fetch_three_way_preserves_edits_deletions_and_conflicts (tests.test_knowledge.KnowledgeTests.test_fetch_three_way_preserves_edits_deletions_and_conflicts) ... ok
+test_generated_edits_fail_closed_and_no_feedback (tests.test_knowledge.KnowledgeTests.test_generated_edits_fail_closed_and_no_feedback) ... ok
+test_initial_repeat_manual_change_and_remove (tests.test_knowledge.KnowledgeTests.test_initial_repeat_manual_change_and_remove) ... ok
+test_midbuild_edit_and_invalid_inventory_cannot_publish (tests.test_knowledge.KnowledgeTests.test_midbuild_edit_and_invalid_inventory_cannot_publish) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.079s
+
+OK

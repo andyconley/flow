@@ -1,0 +1,6 @@
+test_actual_job_captures_profile_environment_and_warns_without_usage_gate (tests.test_monitoring.MonitoringTests.test_actual_job_captures_profile_environment_and_warns_without_usage_gate) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.192s
+
+OK

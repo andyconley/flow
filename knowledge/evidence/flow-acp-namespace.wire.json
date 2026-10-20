@@ -1,0 +1,371 @@
+{
+  "adapter": "responses-namespace-v1",
+  "upstream": "http://127.0.0.1:11435/v1",
+  "records": [
+    {
+      "model": "qwen3:4b",
+      "tool_identities": [
+        {
+          "wire": "exec_command",
+          "namespace": null,
+          "name": "exec_command"
+        },
+        {
+          "wire": "write_stdin",
+          "namespace": null,
+          "name": "write_stdin"
+        },
+        {
+          "wire": "list_mcp_resources",
+          "namespace": null,
+          "name": "list_mcp_resources"
+        },
+        {
+          "wire": "list_mcp_resource_templates",
+          "namespace": null,
+          "name": "list_mcp_resource_templates"
+        },
+        {
+          "wire": "read_mcp_resource",
+          "namespace": null,
+          "name": "read_mcp_resource"
+        },
+        {
+          "wire": "request_user_input",
+          "namespace": null,
+          "name": "request_user_input"
+        },
+        {
+          "wire": "view_image",
+          "namespace": null,
+          "name": "view_image"
+        },
+        {
+          "wire": "flow_ns_4e4a21c0ae2d_close_agent",
+          "namespace": "multi_agent_v1",
+          "name": "close_agent"
+        },
+        {
+          "wire": "flow_ns_01cc60173560_resume_agent",
+          "namespace": "multi_agent_v1",
+          "name": "resume_agent"
+        },
+        {
+          "wire": "flow_ns_ba78fa14bdd1_send_input",
+          "namespace": "multi_agent_v1",
+          "name": "send_input"
+        },
+        {
+          "wire": "flow_ns_ba58fe271a02_spawn_agent",
+          "namespace": "multi_agent_v1",
+          "name": "spawn_agent"
+        },
+        {
+          "wire": "flow_ns_619dd87b269e_wait_agent",
+          "namespace": "multi_agent_v1",
+          "name": "wait_agent"
+        },
+        {
+          "wire": "flow_ns_186d9f60bbf1_knowledge_status",
+          "namespace": "mcp__python",
+          "name": "knowledge_status"
+        },
+        {
+          "wire": "flow_ns_63b57cfecaf6_search_cards",
+          "namespace": "mcp__python",
+          "name": "search_cards"
+        },
+        {
+          "wire": "flow_ns_333978d0a3c2_traverse_cards",
+          "namespace": "mcp__python",
+          "name": "traverse_cards"
+        },
+        {
+          "wire": "get_goal",
+          "namespace": null,
+          "name": "get_goal"
+        },
+        {
+          "wire": "create_goal",
+          "namespace": null,
+          "name": "create_goal"
+        },
+        {
+          "wire": "update_goal",
+          "namespace": null,
+          "name": "update_goal"
+        }
+      ],
+      "restored_calls": [
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_4h0keugo"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_4h0keugo"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_83a2zr9p"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_83a2zr9p"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_8wgp7oed"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_8wgp7oed"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_4h0keugo"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_83a2zr9p"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "search_cards",
+          "call_id": "call_8wgp7oed"
+        }
+      ]
+    },
+    {
+      "model": "qwen3:4b",
+      "tool_identities": [
+        {
+          "wire": "exec_command",
+          "namespace": null,
+          "name": "exec_command"
+        },
+        {
+          "wire": "write_stdin",
+          "namespace": null,
+          "name": "write_stdin"
+        },
+        {
+          "wire": "list_mcp_resources",
+          "namespace": null,
+          "name": "list_mcp_resources"
+        },
+        {
+          "wire": "list_mcp_resource_templates",
+          "namespace": null,
+          "name": "list_mcp_resource_templates"
+        },
+        {
+          "wire": "read_mcp_resource",
+          "namespace": null,
+          "name": "read_mcp_resource"
+        },
+        {
+          "wire": "request_user_input",
+          "namespace": null,
+          "name": "request_user_input"
+        },
+        {
+          "wire": "view_image",
+          "namespace": null,
+          "name": "view_image"
+        },
+        {
+          "wire": "flow_ns_4e4a21c0ae2d_close_agent",
+          "namespace": "multi_agent_v1",
+          "name": "close_agent"
+        },
+        {
+          "wire": "flow_ns_01cc60173560_resume_agent",
+          "namespace": "multi_agent_v1",
+          "name": "resume_agent"
+        },
+        {
+          "wire": "flow_ns_ba78fa14bdd1_send_input",
+          "namespace": "multi_agent_v1",
+          "name": "send_input"
+        },
+        {
+          "wire": "flow_ns_ba58fe271a02_spawn_agent",
+          "namespace": "multi_agent_v1",
+          "name": "spawn_agent"
+        },
+        {
+          "wire": "flow_ns_619dd87b269e_wait_agent",
+          "namespace": "multi_agent_v1",
+          "name": "wait_agent"
+        },
+        {
+          "wire": "flow_ns_186d9f60bbf1_knowledge_status",
+          "namespace": "mcp__python",
+          "name": "knowledge_status"
+        },
+        {
+          "wire": "flow_ns_63b57cfecaf6_search_cards",
+          "namespace": "mcp__python",
+          "name": "search_cards"
+        },
+        {
+          "wire": "flow_ns_333978d0a3c2_traverse_cards",
+          "namespace": "mcp__python",
+          "name": "traverse_cards"
+        },
+        {
+          "wire": "get_goal",
+          "namespace": null,
+          "name": "get_goal"
+        },
+        {
+          "wire": "create_goal",
+          "namespace": null,
+          "name": "create_goal"
+        },
+        {
+          "wire": "update_goal",
+          "namespace": null,
+          "name": "update_goal"
+        }
+      ],
+      "restored_calls": [
+        {
+          "namespace": "mcp__python",
+          "name": "traverse_cards",
+          "call_id": "call_pz6oovrz"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "traverse_cards",
+          "call_id": "call_pz6oovrz"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "traverse_cards",
+          "call_id": "call_qh4it1lb"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "traverse_cards",
+          "call_id": "call_qh4it1lb"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "traverse_cards",
+          "call_id": "call_pz6oovrz"
+        },
+        {
+          "namespace": "mcp__python",
+          "name": "traverse_cards",
+          "call_id": "call_qh4it1lb"
+        }
+      ]
+    },
+    {
+      "model": "qwen3:4b",
+      "tool_identities": [
+        {
+          "wire": "exec_command",
+          "namespace": null,
+          "name": "exec_command"
+        },
+        {
+          "wire": "write_stdin",
+          "namespace": null,
+          "name": "write_stdin"
+        },
+        {
+          "wire": "list_mcp_resources",
+          "namespace": null,
+          "name": "list_mcp_resources"
+        },
+        {
+          "wire": "list_mcp_resource_templates",
+          "namespace": null,
+          "name": "list_mcp_resource_templates"
+        },
+        {
+          "wire": "read_mcp_resource",
+          "namespace": null,
+          "name": "read_mcp_resource"
+        },
+        {
+          "wire": "request_user_input",
+          "namespace": null,
+          "name": "request_user_input"
+        },
+        {
+          "wire": "view_image",
+          "namespace": null,
+          "name": "view_image"
+        },
+        {
+          "wire": "flow_ns_4e4a21c0ae2d_close_agent",
+          "namespace": "multi_agent_v1",
+          "name": "close_agent"
+        },
+        {
+          "wire": "flow_ns_01cc60173560_resume_agent",
+          "namespace": "multi_agent_v1",
+          "name": "resume_agent"
+        },
+        {
+          "wire": "flow_ns_ba78fa14bdd1_send_input",
+          "namespace": "multi_agent_v1",
+          "name": "send_input"
+        },
+        {
+          "wire": "flow_ns_ba58fe271a02_spawn_agent",
+          "namespace": "multi_agent_v1",
+          "name": "spawn_agent"
+        },
+        {
+          "wire": "flow_ns_619dd87b269e_wait_agent",
+          "namespace": "multi_agent_v1",
+          "name": "wait_agent"
+        },
+        {
+          "wire": "flow_ns_186d9f60bbf1_knowledge_status",
+          "namespace": "mcp__python",
+          "name": "knowledge_status"
+        },
+        {
+          "wire": "flow_ns_63b57cfecaf6_search_cards",
+          "namespace": "mcp__python",
+          "name": "search_cards"
+        },
+        {
+          "wire": "flow_ns_333978d0a3c2_traverse_cards",
+          "namespace": "mcp__python",
+          "name": "traverse_cards"
+        },
+        {
+          "wire": "get_goal",
+          "namespace": null,
+          "name": "get_goal"
+        },
+        {
+          "wire": "create_goal",
+          "namespace": null,
+          "name": "create_goal"
+        },
+        {
+          "wire": "update_goal",
+          "namespace": null,
+          "name": "update_goal"
+        }
+      ],
+      "restored_calls": []
+    }
+  ]
+}

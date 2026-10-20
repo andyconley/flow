@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "version": "2026.10.20.1",
+  "files": {
+    "architect--state-alternatives-and-consequences-for-a-boundary-decision.md": "fd400016bea8e575b327d2490429c64ef42f12effcc6b94de6befd7bc16aebbe",
+    "business-analyst--elicit-past-behavior-not-stated-intent.md": "22dfcaaac666a3a5a6419f71e5715ffe40e84fc9fa5ff69dc393c5fb37c20295",
+    "business-analyst--leave-a-requirement-undefined-while-the-evidence-is-thin.md": "a0719b731b49f9fe857dc92c015e057fb9ebb7dd5a61b9e641f250de92cabe2f",
+    "business-analyst--mark-the-evidentiary-status-of-every-statement.md": "28d300cf7087ddbe671dad1c97ca6c1a210ca7ee31fd5a08728f38a90d54e5b8",
+    "business-analyst--premortem-the-definition-before-it-is-approved.md": "a65d6754b2893a81bf97b565377d7ead0e1e84ec811c0b12736a169aae01e2c5",
+    "business-analyst--reframe-a-product-request-as-the-job-behind-it.md": "80f48834a78571b57b9ad2e94ff587330bac214d92d70f1136a4689dd82f2b7b",
+    "lead-developer--plan-a-reversible-delivery-path.md": "6f1c28d97431692d0c7f669b3dd337b67af33ffd6c67b8d1665181fe1d8b8ce2",
+    "lead-developer--plan-in-proportion-to-risk.md": "d806e81c0da163b3916d261ba734df20fdbf78e01e4fdbc2c7cd8fc26097cd76",
+    "sre--contributing-conditions-instead-of-a-root-cause.md": "328128755edfd07aa31bfc946331c41e22965046ca1694ced1a7481252aced04",
+    "sre--hold-competing-hypotheses-during-a-live-incident.md": "7382ec2921c681bfc47bc4036f4c6cbba50cc182d7a74ba801e133710e09a024",
+    "sre--postmortem-output-is-a-change-to-conditions.md": "640e7513037764300f588f43a8600cac32d27f1b95322d7c0fa18308b5b3c3ee",
+    "sre--premortem-a-change-before-it-rolls.md": "9a237b32c4790b05ac762ded696adc328debe99effad65b8a2d29c7afc5a90d2",
+    "sre--reconstruct-what-was-known-at-the-time.md": "cd075df62111746216ec7b472cb01ea1de4a3ddb6b7a2fc76739e19fa04749b3",
+    "sre--state-what-a-mitigation-newly-makes-possible.md": "ddfa97a30c39ee854b80b3f6d40d9bbf9d4dbd35dd115e81a52a8e1fa8632833",
+    "support-lead--act-when-the-distinguishing-observation-is-already-in-hand.md": "29784f94832651d98f40f9e31d1b8fc5d9eab6da1dbc4a86cb15ddf89af087af",
+    "support-lead--ask-for-the-last-occurrence-not-a-description.md": "3dc87d8f6e90983920f17b3450d41916dba0d4b94edebaad49ee3f2e6063d12c",
+    "support-lead--carry-hypothesis-and-fact-separately-across-a-handoff.md": "a4d53db4d1ca2833062ed997a60d810d2a228e617b386ca6cad36b4bb6ff6744",
+    "support-lead--discount-the-failure-mode-you-saw-most-recently.md": "de5ae826ba3c5e406d053365dbab1aa209278175cbe4f06fea0a9dc829c79c05",
+    "support-lead--do-not-read-the-user-s-actions-as-obvious-errors.md": "fd5cd0bbafd96bb62fed9e269ce4f25d87025ba00c65203c07f73fb79b7b2646",
+    "support-lead--evidence-led-triage.md": "e50b2b47f13e62020b4d13abd7a926cf04250387638e71b9b1ffd880a2c9043d",
+    "test-engineer--define-a-test-oracle-with-a-concrete-example.md": "0c23867e3d959a60ddb04d189425788bdbaa728dc864aa0f4b00662103de5743"
+  }
+}

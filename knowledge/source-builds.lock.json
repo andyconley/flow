@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "sources": {
+    "pybars3": {
+      "version": "0.9.7",
+      "filename": "pybars3-0.9.7.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/ec/1a/2fb847db017f9f89ab8519d96e35fb3dacb6170a0643fddba3b366af0af1/pybars3-0.9.7.tar.gz",
+      "size": 29203,
+      "sha256": "6ac847e905e53b9c5b936af112c910475e27bf767f79f4528c16f9af1ec0e252"
+    },
+    "pymeta3": {
+      "version": "0.5.1",
+      "filename": "PyMeta3-0.5.1.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/ce/af/409edba35fc597f1e386e3860303791ab5a28d6cc9a8aecbc567051b19a9/PyMeta3-0.5.1.tar.gz",
+      "size": 29566,
+      "sha256": "18bda326d9a9bbf587bfc0ee0bc96864964d78b067288bcf55d4d98681d05bcb"
+    }
+  }
+}

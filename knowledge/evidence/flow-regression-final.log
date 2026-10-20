@@ -1,0 +1,14 @@
+........................................................................................Looking in links: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpxgxc91c2/wheels
+ERROR: Could not find a version that satisfies the requirement agent-detector==2.0.0 (from versions: none)
+ERROR: No matching distribution found for agent-detector==2.0.0
+...............................Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "7632127d9eca32fa98b7dcbe0ddf37b52e3be5b59c64d50f0e7b027c56710136", "snapshot": null}
+.Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "7632127d9eca32fa98b7dcbe0ddf37b52e3be5b59c64d50f0e7b027c56710136", "snapshot": null}
+Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "7632127d9eca32fa98b7dcbe0ddf37b52e3be5b59c64d50f0e7b027c56710136", "snapshot": null}
+.............................../opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=56885) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+............Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "7632127d9eca32fa98b7dcbe0ddf37b52e3be5b59c64d50f0e7b027c56710136", "snapshot": null}
+........................
+----------------------------------------------------------------------
+Ran 187 tests in 24.120s
+
+OK

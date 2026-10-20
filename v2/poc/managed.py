@@ -214,6 +214,9 @@ def prepare_release(release, root):
     v2=release/'v2'; state=root/'state'; state.mkdir(exist_ok=True)
     for name in ('artifacts','workspaces'):
         target=state/name; target.mkdir(exist_ok=True); (v2/name).symlink_to(target)
+    if (release/'knowledge/manifest.json').exists():
+        from .knowledge import locked,reconcile_shared
+        with locked(state/'knowledge'):reconcile_shared(state/'knowledge',release/'knowledge')
     runtime=v2/'runtime'; runtime.mkdir()
     for name in ('goose-home','codex-home','home','tmp','claude-home'):
         target=state/name; target.mkdir(exist_ok=True); (runtime/name).symlink_to(target)

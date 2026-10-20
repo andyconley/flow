@@ -11,8 +11,22 @@ def store(path,data):
  tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(data,indent=2));tmp.replace(path)
 
 class GooseJob:
- def __init__(self,model='llama3.1:8b',timeout=1200,provider='ollama',native_boundary=False,role_bundle=None):self.role_bundle=Path(role_bundle).resolve() if role_bundle else ROOT/'role-bundle';self.model=model;self.timeout=timeout;self.provider=provider;self.native_boundary=native_boundary
+ def __init__(self,model='llama3.1:8b',timeout=1200,provider='ollama',native_boundary=False,role_bundle=None,namespace_compat=None):self.role_bundle=Path(role_bundle).resolve() if role_bundle else ROOT/'role-bundle';self.model=model;self.timeout=timeout;self.provider=provider;self.native_boundary=native_boundary;self.namespace_compat=namespace_compat
  def _run(self,s,kind,prompt,provider_override=None):
+  from .knowledge import home as knowledge_home,read
+  enabled=self.namespace_compat if self.namespace_compat is not None else read(knowledge_home()/'native-transport.json',{}).get('namespace_compat',False)
+  if not enabled or (provider_override or self.provider)!='codex-acp':return self._run_impl(s,kind,prompt,provider_override)
+  from .native_runtime import local_codex_provider
+  from .local_responses import LocalResponsesBridge
+  info=local_codex_provider()
+  if not info:return {'status':'blocked','submitted':False,'source':'namespace_compat','reason':'Explicit namespace adapter requires a credential-free loopback Codex provider'}
+  folder=ROOT/'artifacts'/s['job_id'];folder.mkdir(parents=True,exist_ok=True)
+  index=f"{s.get('corrections',0)+1}-{s.get('resume_epoch',0)}" if self.role_bundle else s.get('attempt',0)+1
+  if (folder/f'{kind}-{index}.json').exists():return self._run_impl(s,kind,prompt,provider_override)
+  audit=folder/'wire'/(kind+'-'+str(index)+'-'+str(time.time_ns())+'.json');audit.parent.mkdir(exist_ok=True)
+  with LocalResponsesBridge(info[1],audit) as bridge:
+   return self._run_impl(s,kind,prompt,provider_override,namespace_endpoint=bridge.endpoint,namespace_audit=str(audit))
+ def _run_impl(self,s,kind,prompt,provider_override=None,namespace_endpoint=None,namespace_audit=None):
   provider=provider_override or self.provider
   if s['inputs']!=task_input_digest(s['task'],s['workspace'],s.get('project_context','')):return {'status':'scope_required' if self.role_bundle else 'blocked','reason':'approved task/check inputs changed'}
   budget=min(self.timeout,max(0,s['deadline']-time.time())) if self.role_bundle and s.get('deadline') is not None else self.timeout
@@ -23,10 +37,14 @@ class GooseJob:
    if prior['inputs']!=s['inputs']:return {'status':'blocked','reason':'input identity changed'}
    if prior['status'] in {'completed','permission_required','scope_required'}:return prior
    return self.reconcile_record(p)
+  from .knowledge_tools import require_ready,KnowledgeUnavailable
+  try:require_ready()
+  except KnowledgeUnavailable as error:return {'status':'blocked','reason':str(error),'source':'knowledge_preflight','submitted':False}
   from .project_python import select
   try:python = select(s['workspace'], s.get('check_command'))
   except ValueError as error:return {'status':'scope_required','reason':str(error)}
   record={'output':str(p.with_suffix('.jsonl')),'stderr':str(p.with_suffix('.stderr')),'status':'uncertain','inputs':s['inputs'],'workspace':s['workspace'],'started':time.time(),'kind':kind}
+  if namespace_audit:record['namespace_wire_audit']=namespace_audit
   store(p,record) # Before submit: crash here is explicitly uncertain, never silently resubmitted.
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
   output=p.with_suffix('.jsonl');err=p.with_suffix('.stderr')
@@ -38,7 +56,9 @@ class GooseJob:
    role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles',
                              s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
                              s.get('project_context',''))
-   profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,provider=provider,model=self.model,check_command=s.get('check_command'))
+   options={'provider':provider,'model':self.model,'check_command':s.get('check_command')}
+   if namespace_endpoint:options['namespace_endpoint']=namespace_endpoint
+   profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
    record['native_evidence_directory'] = native_env.get('FLOW_V2_ACP_EVIDENCE_DIR')
    record['native_client_error_file'] = native_env.get('FLOW_V2_CLIENT_ERROR_FILE')
    record['project_python'] = str(python) if python else None
@@ -47,6 +67,18 @@ class GooseJob:
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
    env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
    cmd[cmd.index('--max-turns')+1]='8'
+  if s.get('response_schema'):
+   native_contract='\n\nFINAL response: exactly one JSON document matching this schema; no prose, headings or Markdown fences. '+('Do not call final_output; it is not a native tool. ' if provider.endswith('-acp') else '')+'Schema: '+json.dumps(s['response_schema'],sort_keys=True)
+   contract={'version':'1.0.0','title':'Flow '+kind+' contract','description':'Managed task output contract','instructions':prompt,'prompt':prompt+native_contract,'response':{'json_schema':s['response_schema']}}
+   contract_path=p.parent/'contracts'/(kind+'-'+str(index)+'.json');contract_path.parent.mkdir(parents=True,exist_ok=True);store(contract_path,contract)
+   if provider.endswith('-acp'):
+    # Native ACP consumes the user prompt; Goose-only system/recipe context is insufficient.
+    instructions.write_text(prompt+native_contract)
+   else:
+    at=cmd.index('--instructions');del cmd[at:at+2]
+    cmd+=['--recipe',str(contract_path)]
+  from .knowledge_tools import attach
+  if self.role_bundle:cmd,env=attach(cmd,env)
   from .device_context import settings
   record['context_configuration']=settings(s['workspace'],self.model)
   record['context_configuration']['context_tokens']=int(env['GOOSE_INPUT_LIMIT']) if env.get('GOOSE_INPUT_LIMIT') else None
@@ -54,8 +86,19 @@ class GooseJob:
   store(p,record)
   with output.open('w') as out,err.open('w') as errors:
    child=subprocess.Popen(cmd,cwd=s['workspace'],env=env,stdout=out,stderr=errors,start_new_session=True)
-   scope=ProcessScope(child.pid)
-   record.update(pid=child.pid,execution_scope=child.pid,processes=scope.known,supervisor_pid=os.getpid());store(p,record)
+   record.update(pid=child.pid,execution_scope=child.pid,processes={},supervisor_pid=os.getpid());store(p,record)
+   try:scope=ProcessScope(child.pid)
+   except PermissionError as error:
+    # Record identity before observation, and stop the owned initial process group.
+    # Detached descendants remain uncertain without process visibility; never retry.
+    try:os.killpg(child.pid,signal.SIGTERM)
+    except ProcessLookupError:pass
+    try:child.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+     os.killpg(child.pid,signal.SIGKILL);child.wait(timeout=5)
+    record.update(status='permission_required',reason=str(error),exit=child.returncode,scope_uncertain=True)
+    store(p,record);return record
+   record['processes']=scope.known;store(p,record)
    deadline=time.monotonic()+budget
    next_observation=time.monotonic()
    while child.poll() is None:
@@ -67,11 +110,20 @@ class GooseJob:
      stopped=scope.stop();child.wait(timeout=5)
      record.update(status='blocked',reason='timeout; do not resubmit without reconciliation',stop=stopped);self._observe(record,s,kind,index);store(p,record);return record
     if time.monotonic()>=next_observation:
+     from .knowledge import home as knowledge_home,trigger
+     try:
+      kh=knowledge_home()
+      record['knowledge_status']=trigger(kh) if (kh/'settings.json').exists() else {'state':'unconfigured'}
+     except Exception as error:record['knowledge_status']={'state':'pending','error':str(error)}
      self._observe(record,s,kind,index);store(p,record);next_observation=time.monotonic()+5
     time.sleep(.25)
    code=child.returncode
   deadline=time.monotonic()+2
   while scope.observe() and time.monotonic()<deadline:time.sleep(.1)
+  alive=scope.observe()
+  if alive:
+   record['cleanup_after_provider_exit']=scope.stop()
+   record['outlived_provider_root']=list(alive)
   alive=scope.observe()
   boundary=boundary_error(output.read_text()+'\n'+err.read_text()) if self.role_bundle else None
   if record.get('native_client_error_file') and Path(record['native_client_error_file']).is_file():
@@ -81,6 +133,11 @@ class GooseJob:
    record.update(status=boundary['kind'],native_error=boundary,reason=boundary['error'].get('message','Explicit native permission/scope boundary'),exit=code,quiescent=not scope.observe(),stop=stopped,finished=time.time())
    self._observe(record,s,kind,index);store(p,record);return record
   record.update(status='completed' if code==0 and not alive else 'blocked',exit=code,quiescent=not alive,processes=scope.known,alive=list(alive),output=str(output),stderr=str(err),finished=time.time())
+  if record['status']=='completed' and s.get('response_schema'):
+   import jsonschema
+   try:jsonschema.validate(final_object(output),s['response_schema']);record['response_contract']={'passed':True}
+   except (jsonschema.ValidationError,jsonschema.SchemaError) as error:
+    record.update(status='blocked',reason='Native/task final response violates its JSON contract: '+error.message,response_contract={'passed':False})
   self._observe(record,s,kind,index);store(p,record);return record
  def _observe(self,record,s,kind,index):
   from .monitoring import attach,context_for_usage
@@ -131,7 +188,8 @@ Delegate through converted role source {roles[stage]} and other configured speci
 Assignment: {task}
 Project context: {context}
 Research/planning authority only. No implementation, install, deployment, new login or automatic approval. Preserve existing scope and permission boundaries. Return only JSON with outcome completed|blocked|permission_required|scope_required, content containing substantive findings and limitations. Plan may additionally return brief with goal, scope, acceptance_criteria and check_command argv. Human approval remains mandatory; no stage result grants implementation authority.'''
-  result=self._run(state,'shape-'+stage,prompt)
+  contract={'type':'object','properties':{'outcome':{'type':'string'},'content':{'type':'string'},'brief':{'type':'object'}},'required':['outcome','content'],'additionalProperties':False}
+  result=self._run({**state,'response_schema':contract},'shape-'+stage,prompt)
   if result['status']!='completed':return result
   report=final_object(result['output'])
   status=report.get('outcome')
@@ -151,7 +209,8 @@ Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
 Candidate revision: {s.get('candidate','not yet checked')}
 Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Final acceptance belongs to the task graph. Parent 8 turns, children at most {WORKER_MAX_TURNS} Goose turns within the original approved deadline, no merge or deployment."""
-  try:result=self._run(s,kind,prompt)
+  contract={'type':'object','properties':{'outcome':{'type':'string'},'findings':{'type':'array','items':{'type':'string'}},'test_results':{'type':'object'},'candidate_revision':{'type':'string'}},'required':['outcome','findings','test_results'],'additionalProperties':False}
+  try:result=self._run({**s,'response_schema':contract},kind,prompt)
   except PermissionError as error:result={'status':'permission_required','reason':str(error)}
   if result['status']!='completed':
    return result if kind=='implement' else {'outcome':result['status'],'blocked':True,'passed':False,'candidate':s.get('candidate'),'runtime':result,'reason':result.get('reason','Native review did not complete')}

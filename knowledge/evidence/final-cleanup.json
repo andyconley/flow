@@ -1,0 +1,17 @@
+{
+  "stopped": [
+    {
+      "pid": 51963,
+      "kind": "local-model",
+      "stopped": true,
+      "children": 0
+    },
+    {
+      "pid": 56007,
+      "kind": "diagnostic-proxy",
+      "stopped": true,
+      "children": 0
+    }
+  ],
+  "active_install_processes_targeted": false
+}

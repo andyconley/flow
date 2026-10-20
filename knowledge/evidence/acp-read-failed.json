@@ -1,0 +1,217 @@
+{
+  "passed": false,
+  "checks": {
+    "provider_completed": true,
+    "task_completed": false,
+    "actual_search_call": false,
+    "actual_graph_call": false,
+    "authored_quotes_and_ids": false,
+    "no_workspace_writes": true,
+    "credential_free": true
+  },
+  "result": {
+    "output": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792514379298961000/read-1-0.jsonl",
+    "stderr": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792514379298961000/read-1-0.stderr",
+    "status": "completed",
+    "inputs": "781abee73e2478f4a0cb2155980bd8f42d467d5cd1cba6fc1ed97b158c7bab4e",
+    "workspace": "/Users/andyconley/Documents/Codex/2026-10-20/task/acp-read-work-1",
+    "started": 1792514379.5149581,
+    "kind": "read",
+    "native_evidence_directory": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792514379298961000/native-runtime/acp-evidence",
+    "native_client_error_file": "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/artifacts/knowledge-acp-read-1792514379298961000/native-runtime/claude-auth-c662c1324f244314923775176de9b189.json",
+    "project_python": null,
+    "context_configuration": {
+      "context_tokens": null,
+      "source": "provider_default",
+      "profiles": [],
+      "output_tokens": null,
+      "legacy_condenser_tokens": null,
+      "context_reserve": null,
+      "warnings": [],
+      "native_context_owner": "native client; occupancy/compaction may be unavailable",
+      "enforcement": "provider context configuration only; no token/rate/usage gate",
+      "application_basis": "captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx"
+    },
+    "pid": 55784,
+    "execution_scope": 55784,
+    "processes": {
+      "55784": {
+        "parent": 55772,
+        "birth": "Tue Oct 20 12:39:40 2026"
+      },
+      "55787": {
+        "parent": 55784,
+        "birth": "Tue Oct 20 12:39:40 2026"
+      },
+      "55790": {
+        "parent": 55787,
+        "birth": "Tue Oct 20 12:39:40 2026"
+      },
+      "55791": {
+        "parent": 55790,
+        "birth": "Tue Oct 20 12:39:40 2026"
+      },
+      "55792": {
+        "parent": 55791,
+        "birth": "Tue Oct 20 12:39:40 2026"
+      },
+      "55814": {
+        "parent": 55792,
+        "birth": "Tue Oct 20 12:39:41 2026"
+      },
+      "55879": {
+        "parent": 55792,
+        "birth": "Tue Oct 20 12:39:57 2026"
+      },
+      "55888": {
+        "parent": 55879,
+        "birth": "Tue Oct 20 12:39:57 2026"
+      }
+    },
+    "supervisor_pid": 55772,
+    "knowledge_status": {
+      "state": "ready",
+      "fingerprint": "6661f654492cbcc2efeb02d3a44639b47fe9359c18052b9065e0ac59e49a4124",
+      "generation": "1792514008737750000-150c50a4",
+      "finished": 1792514284.346536,
+      "pending": false,
+      "desired": "6661f654492cbcc2efeb02d3a44639b47fe9359c18052b9065e0ac59e49a4124",
+      "snapshot": "1792514008737750000-150c50a4"
+    },
+    "usage": {
+      "source": "goose_sqlite",
+      "available": true,
+      "sessions": [
+        {
+          "session_id": "20261020_7",
+          "parent_session_id": null,
+          "name": "knowledge-acp-read-1792514379298961000-read-1-0",
+          "role": "implementation-coordinator",
+          "role_basis": "recorded job boundary",
+          "updated_at": "2026-10-20 16:39:57",
+          "provider": "codex-acp",
+          "model": "qwen3:4b",
+          "model_basis": "session configuration; may be a native alias",
+          "ledger_models": [
+            "qwen3:4b"
+          ],
+          "usage": {
+            "input_tokens": 2373,
+            "output_tokens": 1144,
+            "total_tokens": 3517,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "reported_cost": null,
+          "cost_sources": [],
+          "actual_billed_cost": null,
+          "ledger_calls": 1,
+          "goose_compactions": 0,
+          "last_request_tokens": {
+            "input_tokens": 2373,
+            "output_tokens": 1144,
+            "total_tokens": 3517
+          },
+          "native_context_occupancy": null
+        }
+      ],
+      "totals": {
+        "input_tokens": 2373,
+        "output_tokens": 1144,
+        "total_tokens": 3517,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "scope": {
+        "project": "/Users/andyconley/Documents/Codex/2026-10-20/task/acp-read-work-1",
+        "job_id": null,
+        "session_name": "knowledge-acp-read-1792514379298961000-read-1-0"
+      },
+      "actual_billed_cost": null,
+      "notes": [
+        "Provider usage can be absent or partial; null is not zero.",
+        "Model names come from session configuration and may be native aliases; ledger model names are retained separately.",
+        "Reported/estimated costs are not subscription bills.",
+        "Native transcript history can overlap Goose; do not add the two totals blindly."
+      ],
+      "coverage": {
+        "sessions": 1,
+        "missing_input_tokens": 0,
+        "missing_output_tokens": 0,
+        "missing_total_tokens": 0,
+        "missing_cache_read_tokens": 0,
+        "missing_cache_write_tokens": 0
+      },
+      "reported_cost": null,
+      "groups": [
+        {
+          "role": "implementation-coordinator",
+          "provider": "codex-acp",
+          "model": "qwen3:4b",
+          "sessions": 1,
+          "usage": {
+            "input_tokens": 2373,
+            "output_tokens": 1144,
+            "total_tokens": 3517,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "reported_cost": null,
+          "actual_billed_cost": null,
+          "cost_sources": [],
+          "partial": false
+        }
+      ]
+    },
+    "goose_session_ids": [
+      "20261020_7"
+    ],
+    "context_monitoring": {
+      "configuration": {
+        "context_tokens": null,
+        "source": "provider_default",
+        "profiles": [],
+        "output_tokens": null,
+        "legacy_condenser_tokens": null,
+        "context_reserve": null,
+        "warnings": [],
+        "native_context_owner": "native client; occupancy/compaction may be unavailable",
+        "enforcement": "provider context configuration only; no token/rate/usage gate",
+        "application_basis": "captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx"
+      },
+      "observations": [
+        {
+          "session_id": "20261020_7",
+          "provider": "codex-acp",
+          "model": "qwen3:4b",
+          "updated_at": "2026-10-20 16:39:57",
+          "context_window": null,
+          "last_request_tokens": 3517,
+          "last_reported_request_percent": null,
+          "basis": "native/provider occupancy unavailable",
+          "warning": null
+        }
+      ],
+      "informational_only": true
+    },
+    "context_warning_sessions": [],
+    "exit": 0,
+    "quiescent": true,
+    "alive": [],
+    "finished": 1792514399.690562
+  },
+  "report": {},
+  "expected": [
+    {
+      "card": "business-analyst--mark-the-evidentiary-status-of-every-statement.md",
+      "quoted_eight_authored_words": false,
+      "permalink_present": false
+    },
+    {
+      "card": "support-lead--carry-hypothesis-and-fact-separately-across-a-handoff.md",
+      "quoted_eight_authored_words": false,
+      "permalink_present": false
+    }
+  ],
+  "acp_frames": []
+}

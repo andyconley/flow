@@ -1,0 +1,106 @@
+---
+title: "Define a test oracle with a concrete example"
+type: "note"
+permalink: "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+card_id: "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example"
+role: "test-engineer"
+layer: "baseline"
+source_file: "test-engineer.jsonld"
+created: "2020-01-01T00:00:00Z"
+modified: "2020-01-01T00:00:00Z"
+---
+
+# Define a test oracle with a concrete example
+
+## Principle
+
+a test strategy proves behavior only when it states what observable result distinguishes success from failure. Concrete examples turn an expectation into a shared oracle rather than a coverage target.
+
+## Use when
+
+deriving verification from an acceptance criterion, behavior, error path, or state transition.
+
+## Required behavior
+
+name representative input, expected observable result, and the test level that can establish it. Include the failure or recovery path when it is part of the behavior.
+
+## Avoid
+
+listing frameworks, test counts, or implementation internals without an oracle that says what the user or system can observe.
+
+## Sources
+
+[
+  {
+    "citation": {
+      "@type": "Book",
+      "author": "Gojko Adzic",
+      "name": "Specification by Example",
+      "datePublished": "2011",
+      "sameAs": "https://www.manning.com/books/specification-by-example?manning_medium=catalog&manning_source=marketplace",
+      "@id": "flow:work/adzic-specification-by-example"
+    },
+    "flow:locator": "method overview: collaborative examples specify and validate behavior"
+  }
+]
+
+## Complete authored card (lossless)
+
+```json
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "flow": "https://andyconley.github.io/flow/ns#",
+    "teaches": {
+      "@id": "https://schema.org/teaches",
+      "@type": "@id"
+    }
+  },
+  "card": {
+    "@id": "flow:entry/test-engineer/define-a-test-oracle-with-a-concrete-example",
+    "@type": "LearningResource",
+    "name": "Define a test oracle with a concrete example",
+    "audience": {
+      "@type": "Audience",
+      "audienceType": "test-engineer"
+    },
+    "flow:layer": "baseline",
+    "abstract": "a test strategy proves behavior only when it states what observable result distinguishes success from failure. Concrete examples turn an expectation into a shared oracle rather than a coverage target.",
+    "flow:trigger": "deriving verification from an acceptance criterion, behavior, error path, or state transition.",
+    "flow:requiredBehavior": "name representative input, expected observable result, and the test level that can establish it. Include the failure or recovery path when it is part of the behavior.",
+    "flow:failureMode": "listing frameworks, test counts, or implementation internals without an oracle that says what the user or system can observe.",
+    "flow:source": [
+      {
+        "citation": {
+          "@type": "Book",
+          "author": "Gojko Adzic",
+          "name": "Specification by Example",
+          "datePublished": "2011",
+          "sameAs": "https://www.manning.com/books/specification-by-example?manning_medium=catalog&manning_source=marketplace",
+          "@id": "flow:work/adzic-specification-by-example"
+        },
+        "flow:locator": "method overview: collaborative examples specify and validate behavior"
+      }
+    ],
+    "teaches": [
+      {
+        "@type": "DefinedTerm",
+        "@id": "flow:competency/define-a-test-oracle-with-a-concrete-example",
+        "name": "Define a test oracle with a concrete example"
+      }
+    ],
+    "flow:lifecycle": {
+      "state": "current",
+      "owner": "flow:owner/framework-maintainers",
+      "attestedAt": "2026-09-11T00:00:00Z",
+      "evidence": [
+        {
+          "kind": "review-record",
+          "ref": "docs/evidence/three-role-expertise-expansion/README.md"
+        }
+      ],
+      "supersedes": []
+    }
+  }
+}
+```

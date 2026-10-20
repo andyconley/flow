@@ -1,0 +1,17 @@
+...................................................Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+..Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+.Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+...........................................Looking in links: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpydchsyu_/wheels
+ERROR: Could not find a version that satisfies the requirement agent-detector==2.0.0 (from versions: none)
+ERROR: No matching distribution found for agent-detector==2.0.0
+....................................Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+.Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+.............................../opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=61943) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+............Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+........................
+----------------------------------------------------------------------
+Ran 201 tests in 27.372s
+
+OK
