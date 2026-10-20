@@ -57,6 +57,15 @@ restores the previous selection/surfaces; it refuses post-update user edits
 instead of overwriting them. First-install rollback restores the saved prior
 installation as recovery, not a supported legacy execution/update mode.
 
+If GitHub limits release metadata requests, the updater prints the HTTP status,
+remaining quota, reset time and retry decision on stderr. It honors `Retry-After`
+and exhausted-quota `X-RateLimit-Reset` headers, with at most four attempts and
+five minutes of total waiting per metadata request. A later reset fails with its
+time visible; retries never run early to fit the budget. Maintainers can set
+`FLOW_GITHUB_RETRY_WAIT_SECONDS` from `0` to `3900`; hosted release verification
+allows one full hourly reset. Metadata errors never print tokens or response
+bodies. Public consumer checks stay anonymous and still must pass.
+
 No installation/update starts provider inference, account login or a live smoke
 run. Native clients own sign-in; any later worker auth pause is separate from
 release readiness. After updating, open a fresh native host session to refresh

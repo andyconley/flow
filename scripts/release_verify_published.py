@@ -26,6 +26,8 @@ from release_gate import (
     validate_release_commit_shape,
     write_canonical_json,
 )
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'v2'))
+from poc.release_http import github_json, PREFIX as QUOTA_PREFIX
 
 
 def _checked(argv: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
@@ -35,7 +37,7 @@ def _checked(argv: list[str], *, cwd: Path, env: dict[str, str] | None = None) -
     return output.strip()
 
 
-def _release_body(repository: str, tag: str, fixture: Path | None) -> tuple[str, str]:
+def _release_body(repository: str, tag: str, fixture: Path | None, *, evidence=None) -> tuple[str, str]:
     if fixture:
         payload = json.loads(fixture.read_text(encoding="utf-8"))
     else:
@@ -48,9 +50,8 @@ def _release_body(repository: str, tag: str, fixture: Path | None) -> tuple[str,
             headers=headers,
         )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                payload = json.load(response)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            payload = github_json(request, evidence=evidence)
+        except (ValueError, urllib.error.URLError, TimeoutError) as exc:
             raise ContractError(f"cannot read public GitHub release: {exc}") from exc
     if payload.get("tag_name") != tag:
         raise ContractError("GitHub release tag does not match the release plan")
@@ -99,6 +100,7 @@ def verify(
         "plan_digest": file_sha256(plan_path),
         "evidence_digest": file_sha256(evidence_path),
         "checks": [],
+        "quota_responses": [],
         "release_url": "",
         "release_commit": "",
         "overall_result": "failed",
@@ -138,7 +140,7 @@ def verify(
             result["release_commit"] = release_commit
             result["checks"].append({"id": "tag-and-generated-commit", "result": "passed"})
 
-            body, release_url = _release_body(github_repository, predicted["tag"], release_fixture)
+            body, release_url = _release_body(github_repository, predicted["tag"], release_fixture, evidence=result['quota_responses'])
             if hashlib.sha256(body.encode("utf-8")).hexdigest() != predicted["notes_sha256"]:
                 raise ContractError("GitHub release notes digest does not match the plan")
             result["release_url"] = release_url
@@ -147,7 +149,7 @@ def verify(
             sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'v2'))
             from poc import managed
             from v2_release_checks import flow
-            distribution,urls=managed.latest(github_repository,predicted['tag'])
+            distribution,urls=managed.latest(github_repository,predicted['tag'],evidence=result['quota_responses'])
             verify_public_manifest(distribution,urls,os.environ.get('FLOW_RELEASE_MANIFEST_SHA'))
             if distribution['source_sha']!=plan['source_sha']:
                 raise ContractError('Public distribution source differs from published plan')
@@ -162,6 +164,9 @@ def verify(
                 ('public-release-update-check',('update','--check','--json','--repository',github_repository)),
                 ('public-release-update',('update','--repository',github_repository))]:
                 code,text=flow(fresh_home,*arguments)
+                for line in text.splitlines():
+                    if line.startswith(QUOTA_PREFIX):
+                        result['quota_responses'].append({'check_id':check_id,**json.loads(line[len(QUOTA_PREFIX):])})
                 if code:raise ContractError(check_id+' failed: '+text)
                 result['checks'].append({'id':check_id,'result':'passed','output':text})
             managed.rollback(fresh_home)
