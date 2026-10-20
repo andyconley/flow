@@ -29,23 +29,14 @@ GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[-0-9A-Za-z.]+)?(?:\+[-0-9A-Za-z.]+)?$")
 RELEASE_TYPES = frozenset({"major", "minor", "patch"})
 STABLE_CHECK_IDS = (
-    "python-test-suite",
-    "generated-help",
-    "release-staging",
-    "clean-tracked-tree",
-    "candidate-fresh-install",
-    "candidate-upgrade",
-    "setup-machine",
-    "setup-user",
-    "claude-sync-check",
-    "codex-sync-check",
-    "openhands-sync-check",
-    "doctor-check",
-    "runtime-smoke-static",
-    "representative-cli",
+    "release-assets", "clean-tracked-tree", "candidate-fresh-install",
+    "python-test-suite", "release-contract-tests", "candidate-upgrade",
+    "user-surfaces", "stage-coordination", "doctor-check",
+    "runtime-smoke-static", "representative-cli", "candidate-rollback",
 )
 
 POLICY_VERSIONS = {
+    "flow-v2-release-gate": "1",
     "semantic-release": "25.0.9",
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/git": "11.0.1",

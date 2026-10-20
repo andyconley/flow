@@ -16,7 +16,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from release_candidate import _clean_env, _combine, _doctor_check, _flow, _install, _run, _upgrade_previous
+from release_candidate import _clean_env, _run
 from release_gate import (
     ContractError,
     file_sha256,
@@ -61,22 +61,6 @@ def _release_body(repository: str, tag: str, fixture: Path | None) -> tuple[str,
         raise ContractError("GitHub release URL is missing")
     return body, url
 
-
-def _install_previous_from_public(remote: str, tag: str, home: Path, temp_root: Path) -> tuple[int, str]:
-    clone = temp_root / "previous-source"
-    code, output = _run(
-        ["git", "clone", "--depth", "1", "--branch", tag, "--quiet", remote, str(clone)],
-        cwd=temp_root,
-        env=_clean_env(home),
-    )
-    if code:
-        return code, output
-    env = _clean_env(home)
-    env["FLOW_VERSION_OVERRIDE"] = tag
-    install = _run(["bash", str(clone / "install-flow.sh"), "--release"], cwd=clone, env=env)
-    if install[0]:
-        return install
-    return _combine(install, _upgrade_previous(remote, home, tag))
 
 
 def verify(
@@ -150,52 +134,27 @@ def verify(
             result["release_url"] = release_url
             result["checks"].append({"id": "github-release-and-notes", "result": "passed"})
 
-            fresh_home = temp_root / "fresh-home"
-            upgrade_home = temp_root / "upgrade-home"
-            fresh_home.mkdir()
-            upgrade_home.mkdir()
-            fresh = _install(repository_url, fresh_home)
-            if fresh[0]:
-                raise ContractError(f"public fresh install failed:\n{fresh[1]}")
-            result["checks"].append({"id": "public-fresh-install", "result": "passed"})
-
-            upgrade = _install_previous_from_public(
-                repository_url,
-                plan["previous_release"]["tag"],
-                upgrade_home,
-                temp_root,
-            )
-            if upgrade[0]:
-                raise ContractError(f"public upgrade failed:\n{upgrade[1]}")
-            result["checks"].append({"id": "public-upgrade", "result": "passed",
-                "method": "remote-bootstrap-after-verified-legacy-rollback" if 'Recovery method:' in upgrade[1] else 'flow-update',
-                "output": upgrade[1]})
-
-            before_doctor = [
-                ("setup-machine", ("setup", "machine")),
-                ("setup-user", ("setup", "user")),
-                ("claude-sync-check", ("sync", "claude", "--user", "--check")),
-                ("codex-sync-check", ("sync", "codex", "--user", "--check")),
-                ("openhands-sync-check", ("sync", "openhands", "--user", "--check")),
-            ]
-            after_doctor = [
-                ("runtime-smoke-static", ("runtime", "smoke", "--target", "all")),
-                ("representative-cli", ("update", "--check", "--json", "--remote", repository_url)),
-            ]
-            for check_id, arguments in before_doctor:
-                code, output = _flow(fresh_home, *arguments)
-                if code:
-                    raise ContractError(f"{check_id} failed:\n{output}")
-                result["checks"].append({"id": check_id, "result": "passed"})
-            doctor_code, doctor_output = _doctor_check(fresh_home)
-            if doctor_code:
-                raise ContractError(f"doctor-check failed:\n{doctor_output}")
-            result["checks"].append({"id": "doctor-check", "result": "passed"})
-            for check_id, arguments in after_doctor:
-                code, output = _flow(fresh_home, *arguments)
-                if code:
-                    raise ContractError(f"{check_id} failed:\n{output}")
-                result["checks"].append({"id": check_id, "result": "passed"})
+            sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'v2'))
+            from poc import managed
+            from v2_release_checks import flow
+            distribution,urls=managed.latest(github_repository,predicted['tag'])
+            if distribution['source_sha']!=plan['source_sha']:
+                raise ContractError('Public distribution source differs from published plan')
+            assets=temp_root/'assets';managed.fetch_assets(distribution,assets,urls)
+            (assets/'release-manifest.json').write_text(json.dumps(distribution,indent=2)+'\n')
+            result['checks'].append({'id':'public-assets-and-provenance','result':'passed'})
+            fresh_home=temp_root/'fresh-home';fresh_home.mkdir()
+            managed.install_release(fresh_home,distribution,bundle=assets)
+            for check_id,arguments in [
+                ('public-fresh-install',('--version',)),
+                ('doctor-check',('doctor','--json')),
+                ('public-release-update-check',('update','--check','--json','--repository',github_repository)),
+                ('public-release-update',('update','--repository',github_repository))]:
+                code,text=flow(fresh_home,*arguments)
+                if code:raise ContractError(check_id+' failed: '+text)
+                result['checks'].append({'id':check_id,'result':'passed','output':text})
+            managed.rollback(fresh_home)
+            result['checks'].append({'id':'public-rollback','result':'passed'})
 
         result["classification"] = "published-verification-passed"
         result["overall_result"] = "passed"

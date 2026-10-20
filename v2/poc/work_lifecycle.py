@@ -2,7 +2,7 @@
 import json
 import time
 from .artifacts import ArtifactError, atomic_write, validate_brief
-from .contracts import State, task_input_digest
+from .contracts import State, task_input_digest, digest_tree
 from .handoffs import Handoffs
 from .project_context import render
 from .workflow import build as delivery
@@ -31,10 +31,24 @@ def build(artifacts, harness, checker):
                               'brief_ref': brief_ref, 'brief': brief,
                               'context_ref': s['context_ref'], 'shaping_refs': s.get('shaping_refs', {}),
                               'shaping_assignments': s.get('shaping_assignment_refs', {}),
-                              'actions': ['brief', 'assign', 'stage', 'approve-stage', 'approve', 'stop']})
+                              'actions': ['brief', 'assign', 'run-stage', 'stage', 'approve-stage', 'approve', 'stop']})
         if not isinstance(decision, dict):
             raise ArtifactError('A structured host decision is required')
         action = decision.get('action')
+        if action=='run-stage':
+            stage=decision.get('stage');reference=s.get('shaping_assignment_refs',{}).get(stage)
+            if not reference or reference!=decision.get('assignment_ref') or not decision.get('actor'):
+                raise ArtifactError('Stage execution requires actor and exact current assignment approval')
+            assignment=artifacts.read(reference)
+            if assignment['payload']['context_ref']!=s['context_ref'] or assignment['payload'].get('brief_ref')!=s.get('brief_ref'):
+                raise ArtifactError('Stage inputs changed; propose and approve a new assignment')
+            decisions=s.get('decision_refs',[])
+            ref=artifacts.publish('decisions',f'decision-{len(decisions)+1:04d}',{
+                'action':'run-stage','actor':decision['actor'],'target_ref':reference,
+                'candidate_revision':digest_tree(s['workspace']),
+                'authority':'Bounded stage coordination/research only; no implementation or approval authority'})
+            return {'stage_to_run':stage,'stage_authorization_ref':ref,'decision_refs':[*decisions,ref],
+                    'lifecycle_phase':'coordinate-stage'}
         if action == 'brief':
             reference = decision['brief_ref']
             record = artifacts.read(reference)
@@ -66,6 +80,8 @@ def build(artifacts, harness, checker):
                 target = s.get('shaping_refs', {}).get(stage)
                 if not target:
                     raise ArtifactError('There is no stage artifact to approve')
+                if decision.get('stage_ref') is not None and decision['stage_ref']!=target:
+                    raise ArtifactError('Stage approval must name the exact current result')
             if action == 'approve':
                 if not brief:
                     raise ArtifactError('Publish a complete brief before approving implementation')
@@ -77,11 +93,44 @@ def build(artifacts, harness, checker):
                 'action': action, 'actor': actor, 'target_ref': target,
                 'reason': decision.get('reason', ''), 'supersedes_decision': decision.get('supersedes_decision'),
                 'authority': 'implementation' if action == 'approve' else 'stage-only' if action == 'approve-stage' else 'stop'})
-            update = {'decision_refs': [*decisions, ref], 'lifecycle_phase': 'approved' if action == 'approve' else 'stopped' if action == 'stop' else 'shaping'}
+            update = {'decision_refs': [*decisions, ref], 'lifecycle_phase': 'approved' if action == 'approve' else 'stopped' if action == 'stop' else 'awaiting-approval' if s.get('brief_ref') else 'shaping'}
             if action == 'approve':
                 update['approval_ref'] = ref
             return update
         raise ArtifactError('Unknown shaping/approval action')
+
+    def coordinate_stage(s):
+        stage=s['stage_to_run'];authorization=artifacts.read(s['stage_authorization_ref'])['payload']
+        proposal=s['shaping_assignment_refs'][stage]
+        if authorization['action']!='run-stage' or authorization['target_ref']!=proposal:
+            raise ArtifactError('Stage execution approval changed')
+        operation='stage-'+stage+'-'+s['stage_authorization_ref']['revision'][:16]
+        assignment=artifacts.publish('assignments',operation,{
+            **artifacts.read(proposal)['payload'],'kind':stage,'source_assignment_ref':proposal,
+            'approval_ref':s['stage_authorization_ref'],'context_ref':s['context_ref'],'brief_ref':s.get('brief_ref'),
+            'candidate_revision':authorization['candidate_revision']})
+        execution={**s,'assignment_ref':assignment,'approval_ref':s['stage_authorization_ref'],'brief_ref':s.get('brief_ref')}
+        def execute():
+            before=digest_tree(s['workspace'])
+            if before!=authorization['candidate_revision']:
+                return {'status':'scope_required','reason':'Project changed since stage execution approval; inspect and authorize a fresh assignment before dispatch'}
+            result=harness.shape(execution,stage,artifacts.read(proposal)['payload'])
+            if digest_tree(s['workspace'])!=before:
+                return {'status':'scope_required','reason':'Research/planning changed the project candidate without implementation approval; inspect partial effects before continuing','runtime':result.get('runtime',{})}
+            return result
+        result,refs=Handoffs(artifacts).call(execution,stage,execute)
+        update={**refs,'stage_result':result,'lifecycle_phase':'shaping'}
+        if result['status']=='completed':
+            ref=artifacts.publish('shaping',stage,{'stage':stage,'content':result['content'],
+                'assignment_ref':proposal,'context_ref':s['context_ref'],'brief_ref':s.get('brief_ref'),
+                'origin':'goose-langgraph','runtime':result.get('runtime',{}),'authorization_ref':s['stage_authorization_ref']},
+                supersedes=s.get('shaping_refs',{}).get(stage))
+            update['shaping_refs']={**s.get('shaping_refs',{}),stage:ref}
+            if result.get('brief'):
+                brief=validate_brief(result['brief'])
+                update['brief_ref']=artifacts.publish('briefs','brief',brief,supersedes=s.get('brief_ref'))
+                update['lifecycle_phase']='awaiting-approval'
+        return update
 
     def prepare(s):
         brief = validate_brief(artifacts.read(s['brief_ref'])['payload'])
@@ -118,11 +167,13 @@ def build(artifacts, harness, checker):
 
     b = StateGraph(WorkState)
     b.add_node('approval', approval)
+    b.add_node('coordinate-stage',coordinate_stage)
     b.add_node('prepare', prepare)
     b.add_node('delivery', delivery(harness, checker, boundary=Handoffs(artifacts)).compile())
     b.add_node('closure', closure)
     b.add_edge(START, 'approval')
-    b.add_conditional_edges('approval', lambda s: 'prepare' if s['lifecycle_phase'] == 'approved' else END if s['lifecycle_phase'] == 'stopped' else 'approval')
+    b.add_conditional_edges('approval', lambda s: 'prepare' if s['lifecycle_phase'] == 'approved' else 'coordinate-stage' if s['lifecycle_phase']=='coordinate-stage' else END if s['lifecycle_phase'] == 'stopped' else 'approval')
+    b.add_edge('coordinate-stage','approval')
     b.add_edge('prepare', 'delivery')
     b.add_edge('delivery', 'closure')
     b.add_edge('closure', END)

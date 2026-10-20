@@ -1,25 +1,19 @@
 version: 1.0.0
 title: flow-define
-description: Native-host define specialist task; no implementation authority
-instructions: 'You are helping the native host with define. The native host owns synthesis
-  and user decisions; you supply specialist evidence. Research the user problem, sources,
-  uncertainties, non-goals and testable outcomes. Distinguish observed facts, assumptions
-  and decisions. Ask consequential questions; do not fabricate missing evidence.
+description: Goose/LangGraph define coordination; human decisions remain explicit
+instructions: 'Goose coordinates the define stage and dispatches specialists through
+  summon, normally source business-analyst. The native host only handles conversation
+  and human approvals. Research evidence, needs, constraints, uncertainties and testable
+  outcomes.
 
-  Use the existing business-analyst role and its full expertise through summon where
-  useful. Other configured specialists may be summoned when relevant. Goose owns worker/provider
-  choices; do not create another coordinator. All roles retain the normal broad developer/skills
-  tools and existing workspace/credential/external-action boundaries. Research only
-  sources authorized by the assignment; cite evidence and preserve uncertainty.
+  Do not delegate coordination, research, synthesis or planning to the native host.
+  Read the exact approved assignment and project context; preserve uncertainty and
+  scope/permission boundaries. Return a substantive result for a controlled stage
+  artifact; no result authorizes implementation.
 
-  Read the exact versioned assignment and referenced project context, brief and stage
-  artifacts. Keep project facts separate from reusable role expertise. Return substantive
-  findings to the host for a controlled stage artifact. Artifacts do not grant approval.
-  No install, deployment or migration follows from shaping.
+  Assignment: {{{{ assignment_file }}}}
 
-  Assignment file: {{ assignment_file }}
-
-  Project context: {{ project_context | indent(2) }}
+  Project context: {{{{ project_context | indent(2) }}}}
 
   '
 prompt: Return the requested substantive shaping result and limitations.

@@ -272,7 +272,10 @@ class ArtifactTests(unittest.TestCase):
     def test_shipped_artifact_and_lock_identity(self):
         value = artifact.metadata(ROOT)
         archive = ROOT/'vendor/artifacts'/value['archive']
-        self.assertLess(archive.stat().st_size, 50*1024*1024)
+        # The checked-in fixture fits normal Git. Production CI assets use
+        # GitHub release delivery and may exceed Git's warning threshold.
+        limit = 2*1024**3 if value.get('build_kind') == 'pinned-source-CI-release-build' else 50*1024*1024
+        self.assertLess(archive.stat().st_size, limit)
         self.assertEqual(artifact.digest(archive), value['archive_sha256'])
         digest = hashlib.sha256(); size = 0
         with gzip.open(archive, 'rb') as stream:

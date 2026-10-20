@@ -1,5 +1,9 @@
 # Native smoke-run investigation
 
+Historical repair report: the subsequent [managed release design](../docs/v2-managed-release.md)
+supersedes the explicit-install and automatic-cutover scope below. Live delivery
+qualification remains outstanding.
+
 This source change repairs reproducible runtime defects. It is not a successful
 live delivery qualification and does not authorize retrying or accepting an
 existing blocked work item. OpenHands execution is deprecated in the user-facing

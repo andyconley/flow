@@ -117,6 +117,28 @@ class GooseJob:
  def implement(self,s):return self._role_operation(s,'implement')
  def review(self,s):return self._role_operation(s,'review')
 
+ def shape(self,s,stage,assignment):
+  from .project_context import render
+  from .artifacts import Artifacts
+  roles={'define':'business-analyst','solution':'solution-architect','plan':'lead-developer'}
+  context=render(Artifacts(s['workspace'],s['work_id']).read(s['context_ref'])['payload'])
+  task=json.dumps({'stage':stage,'assignment':assignment,'approval':s['stage_authorization_ref']},sort_keys=True)
+  state={**s,'task':task,'project_context':context,'inputs':task_input_digest(task,s['workspace'],context),
+         'job_id':s['job_id']+'-'+stage+'-'+s['stage_authorization_ref']['revision'][:12],
+         'deadline':time.time()+s.get('budget_seconds',600),'corrections':0,'resume_epoch':0}
+  prompt=f'''You are the Goose coordinator for Flow's {stage} stage. LangGraph owns dispatch and durable state; the native host is only the conversational interface and human approval surface.
+Delegate through converted role source {roles[stage]} and other configured specialists as appropriate. You own research coordination, comparison, synthesis and the proposed stage result. Do not ask the host model to do research, delegate specialists or write the plan. Ask consequential questions in findings for the human.
+Assignment: {task}
+Project context: {context}
+Research/planning authority only. No implementation, install, deployment, new login or automatic approval. Preserve existing scope and permission boundaries. Return only JSON with outcome completed|blocked|permission_required|scope_required, content containing substantive findings and limitations. Plan may additionally return brief with goal, scope, acceptance_criteria and check_command argv. Human approval remains mandatory; no stage result grants implementation authority.'''
+  result=self._run(state,'shape-'+stage,prompt)
+  if result['status']!='completed':return result
+  report=final_object(result['output'])
+  status=report.get('outcome')
+  if status not in {'completed','blocked','permission_required','scope_required'} or not isinstance(report.get('content'),str) or not report['content'].strip():
+   return {'status':'blocked','reason':'Stage coordinator did not return the required substantive result','runtime':result}
+  return {'status':status,'content':report['content'],'runtime':result,**({'brief':report['brief']} if 'brief' in report else {})}
+
  def _role_operation(self,s,kind):
   roles=[p.stem for p in (self.role_bundle/'recipes').glob('*.yaml')]
   prompt=f"""You are Goose's implementation coordinator. Use the converted role recipes available through summon; select appropriate roles and configured providers yourself. Available roles: {', '.join(sorted(roles))}.

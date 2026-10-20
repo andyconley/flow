@@ -65,6 +65,9 @@ class NativeHarness:
     def review(self, state):
         return self._job().review(state)
 
+    def shape(self,state,stage,assignment):
+        return self._job().shape(state,stage,assignment)
+
     def reconcile(self, state):
         return self._job().reconcile(state)
 
@@ -159,6 +162,8 @@ def summarize(snapshot, artifacts):
             'usage': report(artifacts.project, job_id=values.get('job_id')),
             'context_monitoring': context_report(artifacts.project, job_id=values.get('job_id')),
             'launch_context': launch_context,
+            'stage_assignments':values.get('shaping_assignment_refs',{}),'stage_results':values.get('shaping_refs',{}),
+            'stage_outcome':values.get('stage_result'),
             'next_action': 'Inspect referenced revision problems' if problems else 'Respond to pending decision' if pending else 'Inspect blocker/closure' if not snapshot.next else 'Resume the checkpoint'}
 
 
@@ -168,7 +173,7 @@ def main(argv=None):
     if utility is not None:
         return utility
     parser = argparse.ArgumentParser(description=__doc__, epilog='Reports/discovery: metrics, cost, harvest, normalize, runs, run, archive, backlog, gaps, projects, model. These also support the --project prefix.')
-    parser.add_argument('--version', action='version', version='Flow 2.0.0-preview (Goose/LangGraph)')
+    parser.add_argument('--version', action='version', version='Flow 2.0.0 (Goose/LangGraph)')
     parser.add_argument('--project', required=True, type=Path)
     parser.add_argument('--work')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -183,12 +188,16 @@ def main(argv=None):
     brief = sub.add_parser('brief'); brief.add_argument('--file', required=True, type=Path)
     assign = sub.add_parser('assign'); assign.add_argument('--stage', required=True, choices=STAGES)
     assign.add_argument('--question', required=True)
+    run_stage=sub.add_parser('run-stage',help='Authorize Goose/LangGraph coordination of an exact stage assignment')
+    run_stage.add_argument('--stage',required=True,choices=STAGES)
+    run_stage.add_argument('--revision',required=True);run_stage.add_argument('--actor',required=True)
     stage = sub.add_parser('stage'); stage.add_argument('--stage', required=True, choices=STAGES)
     stage.add_argument('--file', required=True, type=Path, help='Research/definition/solution/planning narrative')
     approve = sub.add_parser('approve'); approve.add_argument('--actor', required=True)
     approve.add_argument('--revision', required=True, help='Exact brief revision shown by status')
     decision = sub.add_parser('approve-stage'); decision.add_argument('--stage', required=True, choices=STAGES)
     decision.add_argument('--actor', required=True); decision.add_argument('--reason', default='')
+    decision.add_argument('--revision',help='Exact stage-result revision being approved')
     stop = sub.add_parser('stop'); stop.add_argument('--actor', required=True); stop.add_argument('--reason', default='')
     accept = sub.add_parser('accept'); accept.add_argument('--actor', required=True)
     accept.add_argument('--revision', required=True, help='Exact closure revision shown by status')
@@ -238,6 +247,12 @@ def main(argv=None):
                 parser.error('Provide a request/brief and a positive budget')
         elif not (state_dir / 'workflow.sqlite').exists():
             parser.error(missing_checkpoint)
+        # state/artifacts is a symlink in managed installations.
+        imported=(ROOT/'artifacts').resolve().parent/'imported-work.json'
+        if args.command not in {'create','status','context','index'} and imported.is_file():
+            key=str(state_dir.relative_to(ROOT/'artifacts'))
+            if key in json.loads(imported.read_text()).get('work_paths',[]):
+                parser.error('This work item was preserved from the prior installation as read-only history. Create a fresh successor; prior approvals do not authorize new execution.')
         if args.command == 'status':
             with checkpoint_snapshot(state_dir/'workflow.sqlite') as saver:
                 config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
@@ -345,6 +360,11 @@ def main(argv=None):
                                             'context_ref': old['context_ref'], 'brief_ref': old.get('brief_ref')},
                                             supersedes=old.get('shaping_refs', {}).get(args.stage))
                     response = {'action': 'stage', 'shaping_ref': ref}
+                elif args.command=='run-stage':
+                    reference=old.get('shaping_assignment_refs',{}).get(args.stage)
+                    if not reference or reference['revision']!=args.revision:
+                        parser.error('Stage execution requires the exact current assignment revision')
+                    response={'action':'run-stage','stage':args.stage,'actor':args.actor,'assignment_ref':reference}
                 elif args.command == 'approve':
                     if not old.get('brief_ref') or args.revision != old['brief_ref']['revision']:
                         parser.error('Approval revision must match the exact currently proposed brief')
@@ -353,6 +373,10 @@ def main(argv=None):
                     response = {'action': args.command, 'actor': args.actor, 'reason': args.reason}
                     if args.command == 'approve-stage':
                         response['stage'] = args.stage
+                        reference=old.get('shaping_refs',{}).get(args.stage)
+                        if args.revision and (not reference or args.revision!=reference['revision']):
+                            parser.error('Stage approval revision does not match the current stage result')
+                        response['stage_ref']=reference
                 graph.invoke(Command(resume=response), config)
             print(json.dumps(summarize(graph.get_state(config, subgraphs=True), artifacts), indent=2, default=str))
     except (ArtifactError, OSError, ValueError, KeyError, sqlite3.Error) as error:

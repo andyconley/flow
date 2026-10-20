@@ -59,7 +59,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual((self.home/base/'flow-boot/SKILL.md').read_text(), 'legacy boot\n')
             self.assertTrue((self.home/base/'flow-v2/SKILL.md').exists())
         result = subprocess.run([str(self.home/'.local/bin/flow-v2'), '--version'], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0); self.assertIn('Flow 2.0.0-preview', result.stdout)
+        self.assertEqual(result.returncode, 0); self.assertIn('Flow 2.0.0', result.stdout)
 
     def test_explicit_cutover_restore_and_skill_directory_symlink(self):
         install('install', self.home)

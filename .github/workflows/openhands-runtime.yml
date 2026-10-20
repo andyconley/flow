@@ -1,66 +1,14 @@
-name: OpenHands runtime and agent distribution
-
+name: Flow v2 production package and consumer
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   offline-runtime:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.12'
-      - name: Install the pinned SDK and stock tools
-        run: |
-          python -m pip install -r runtime/openhands/requirements.txt
-          echo "FLOW_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
-      - name: Verify generated inventory, discovery, installer ownership and stock factories
-        env:
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-          OPENHANDS_SUPPRESS_BANNER: '1'
-          PYTHONDONTWRITEBYTECODE: '1'
-        run: >-
-          python -m unittest
-          tests.test_defaults_review
-          tests.test_agent_distribution
-          tests.test_acp_permissions
-          tests.test_runtime_wiring
-          tests.test_openhands_policy
-          tests.test_openhands_sdk_construction
-          tests.test_openhands_specialists
-          tests.test_openhands_usage
-          tests.test_openhands_workflow
-          tests.test_verification_evidence
-          tests.test_review_reliability
-          tests.test_openhands_provision
-          tests.test_openhands_lifecycle
-          tests.test_agent_capabilities
-          tests.test_expertise_advisory_render
-          tests.test_flow.FlowCliTests.test_runtime_smoke_checks_generated_surfaces
-          tests.test_flow.FlowCliTests.test_install_verifies_openhands_and_does_not_activate_maf
-      - name: Verify stock task ACP execution, permissions and resume with a disposable peer
-        env:
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-          OPENHANDS_SUPPRESS_BANNER: '1'
-        run: python tests/openhands_specialist_eval.py
-      - name: Verify same-role provider choices and automatic dispatch with disposable peers
-        run: python tests/openhands_provider_choices_eval.py
-      - name: Verify routed model and pending confirmation across fresh Flow processes
-        env:
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-          OPENHANDS_SUPPRESS_BANNER: '1'
-        run: python tests/openhands_routing_resume_eval.py
-      - name: Verify combined usage across fresh parents, delegation, interruption and failure
-        env:
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-          OPENHANDS_SUPPRESS_BANNER: '1'
-        run: python tests/openhands_usage_eval.py
+    uses: ./.github/workflows/goose-build.yml
+    with:
+      source_sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      version: v0.51.0

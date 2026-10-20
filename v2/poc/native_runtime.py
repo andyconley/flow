@@ -5,6 +5,8 @@ import shlex
 import json
 import subprocess
 import uuid
+import re
+import sys
 from pathlib import Path
 from .runtime_env import ROOT, environment, node_binary, goose_binary, WORKER_MAX_TURNS
 from .codex_adapter_guard import build
@@ -37,6 +39,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
             wrapper.chmod(0o755)
     debug = ROOT/'runtime'/f'{run_dir.name}-native-claude.debug'
     profile = (ROOT/'runtime/scope.sb').read_text().replace(' (remote ip "localhost:11434")', '')
+    profile=re.sub(r'# MANAGED_MUTABLE_START.*?# MANAGED_MUTABLE_END\n','',profile,flags=re.S)
     old = f'(allow file-write* (subpath "{ROOT}/runtime") (subpath "{ROOT}/workspaces") (literal "/dev/null"))'
     new = f'(allow file-write* (subpath "{workspace}") (subpath "{ROOT}/runtime/codex-home") (subpath "{ROOT}/runtime/tmp") (literal "{debug}") (literal "/dev/null"))'
     profile = profile.replace(old, new)
@@ -47,7 +50,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     home = tools/'home'; home.mkdir(exist_ok=True)
     temporary = tools/'tmp'; temporary.mkdir(exist_ok=True)
     evidence = tools/'acp-evidence'; evidence.mkdir(mode=0o700, exist_ok=True); evidence.chmod(0o700)
-    claude_config = ROOT/'runtime/claude-home'
+    claude_config = (ROOT/'runtime/claude-home').resolve()
     claude_config.mkdir(mode=0o700, exist_ok=True); claude_config.chmod(0o700)
     client_error = tools/f'claude-auth-{uuid.uuid4().hex}.json'
     shutil.copyfile(Path(__file__).with_name('acp_evidence.mjs'), tools/'acp_evidence.mjs')
@@ -56,6 +59,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     # Its base binary is under /opt, but startup also reads this venv's config
     # and libraries. Grant tool reads only, not writes or credential access.
     profile += f'(allow file-read* (subpath "{ROOT}/.venv"))\n'
+    profile += '(allow file-read* (subpath '+json.dumps(str(Path(sys.base_prefix).resolve()))+') (literal '+json.dumps(str(Path(node_binary()).resolve()))+'))\n'
     if python:
         # External venvs need their own libraries; a standalone executable
         # does not grant reads of its entire parent hierarchy.
@@ -66,6 +70,10 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     profile += f'\n(deny file-read* file-write* (subpath "{ROOT}/runtime/goose-home"))\n(allow file-read* (subpath "{workspace}"))\n(allow file-write* (subpath "{scratch}"))\n'
     profile += f'(allow file-write* (subpath "{home}") (subpath "{temporary}"))\n'
     profile += f'(allow file-write* (subpath "{evidence}"))\n'
+    for name in ('codex-home','tmp'):
+        profile+='(allow file-read* file-write* (subpath '+json.dumps(str((ROOT/'runtime'/name).resolve()))+'))\n'
+    profile+='(deny file-read* file-write* (subpath '+json.dumps(str((ROOT/'runtime/goose-home').resolve()))+'))\n'
+    profile+='(allow file-read* (subpath '+json.dumps(str(claude_config))+'))\n'
     profile += '(allow file-write* (subpath '+json.dumps(str(claude_config))+') (literal '+json.dumps(str(client_error))+') (literal '+json.dumps(str(client_error)+'.tmp')+'))\n'
     for path in git_metadata(workspace):
         profile += '(allow file-read* (subpath '+json.dumps(path)+'))\n'

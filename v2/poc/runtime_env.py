@@ -29,12 +29,12 @@ def goose_binary(source=ROOT):
 
 def environment(project=None, provider=None, model=None):
     env = {key: value for key, value in os.environ.items() if key in ['PATH','USER','LOGNAME','SHELL','LANG','LC_ALL','TERM','SSL_CERT_FILE']}
-    env.update(HOME=str(ROOT/'runtime/home'), GOOSE_PATH_ROOT=str(ROOT/'runtime/goose-home'),
+    env.update(HOME=str((ROOT/'runtime/home').resolve()), GOOSE_PATH_ROOT=str((ROOT/'runtime/goose-home').resolve()),
                GOOSE_DISABLE_KEYRING='1', GOOSE_MODE='auto',
                GOOSE_TELEMETRY_ENABLED='false', LANGSMITH_TRACING='false', LANGGRAPH_STRICT_MSGPACK='true',
-               CODEX_HOME=str(ROOT/'runtime/codex-home'), CODEX_PATH=str(ROOT/'runtime/adapters/node_modules/.bin/codex'),
+               CODEX_HOME=str((ROOT/'runtime/codex-home').resolve()), CODEX_PATH=str(ROOT/'runtime/adapters/node_modules/.bin/codex'),
                PATH=str(Path(node_binary()).parent)+':'+str(ROOT/'runtime/bin')+':'+str(ROOT/'runtime/adapters/node_modules/.bin')+':'+env.get('PATH',''),
-               TMPDIR=str(ROOT/'runtime/tmp'))
+               TMPDIR=str((ROOT/'runtime/tmp').resolve()))
     from .device_context import ollama_environment
     env.update(ollama_environment(project, model, provider))
     return env
@@ -60,6 +60,11 @@ def setup():
 (allow network-outbound (remote tcp "*:443"))
 (allow network-outbound (remote unix-socket))
 '''.replace('ROOT',str(ROOT)).replace('HOME',str(Path.home()))
+    # Managed releases keep mutable state behind symlinks. Sandbox paths must
+    # name the canonical targets, not a replaceable release's logical aliases.
+    import json
+    mutable=[str((ROOT/'runtime'/name).resolve()) for name in ('goose-home','codex-home','home','tmp','claude-home')]
+    profile+='\n# MANAGED_MUTABLE_START\n(allow file-read* file-write* '+''.join('(subpath '+json.dumps(path)+') ' for path in mutable)+')\n# MANAGED_MUTABLE_END\n'
     (ROOT/'runtime/scope.sb').write_text(profile)
     return ROOT/'runtime/scope.sb'
 

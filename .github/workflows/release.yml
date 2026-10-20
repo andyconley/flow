@@ -119,8 +119,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  validate-candidate:
+  build-runtime:
     needs: analyze
+    if: needs.analyze.outputs.release_required == 'true'
+    uses: ./.github/workflows/goose-build.yml
+    with:
+      source_sha: ${{ needs.analyze.outputs.source_sha }}
+      version: ${{ needs.analyze.outputs.tag }}
+
+  validate-candidate:
+    needs: [analyze, build-runtime]
     if: needs.analyze.outputs.release_required == 'true'
     runs-on: macos-15
     outputs:
@@ -137,33 +145,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pinned OpenHands for current runtime verification
-        run: python3 -m pip install -r runtime/openhands/requirements.txt
-
-      # Historical MAF wheels remain necessary for archived contract tests and
-      # the exact previous-release upgrade fixture. Current runtime smoke uses
-      # the separately pinned OpenHands environment above.
-      - name: Fetch locked managed MAF wheels
-        env:
-          PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}
-        run: |
-          test "$(uname -s)/$(uname -m)" = Darwin/arm64
-          python3 -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
-          wheelhouse="$RUNNER_TEMP/flow-maf-wheelhouse"
-          python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
-            -r runtime/maf_runner/requirements.lock -d "$wheelhouse"
-          # Upgrade verification installs the exact previous release first.
-          # Cache both hashed closures so that step remains offline and pinned.
-          previous_lock="$RUNNER_TEMP/flow-maf-previous.lock"
-          git show "$PREVIOUS_RELEASE_SHA:runtime/maf_runner/requirements.lock" > "$previous_lock"
-          python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
-            -r "$previous_lock" -d "$wheelhouse"
-          echo "FLOW_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
-          echo "FLOW_TEST_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
-          # install-flow.sh prefers the newest Python it finds, and the runner
-          # ships 3.13; pin Flow to this 3.12 for both current SDK verification
-          # and the isolated previous-release MAF compatibility fixture.
-          echo "FLOW_PYTHON=$(python3 -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
 
       - name: Name candidate-evidence artifact
         id: names
@@ -184,8 +168,15 @@ jobs:
           --expected-digest "${{ needs.analyze.outputs.plan_digest }}"
           --expected-source-sha "${{ needs.analyze.outputs.source_sha }}"
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build-runtime.outputs.artifact_name }}
+          path: .release
+
       - name: Run deterministic candidate gate
         id: candidate
+        env:
+          FLOW_RELEASE_MANIFEST_SHA: ${{ needs.build-runtime.outputs.manifest_sha256 }}
         run: >-
           python3 scripts/release_candidate.py
           --plan .release/release-plan.json
@@ -212,7 +203,7 @@ jobs:
           --expected-digest "${{ steps.candidate.outputs.evidence_digest }}"
 
   publish:
-    needs: [analyze, validate-candidate]
+    needs: [analyze, build-runtime, validate-candidate]
     if: >-
       needs.analyze.outputs.release_required == 'true' &&
       needs.validate-candidate.result == 'success'
@@ -264,6 +255,16 @@ jobs:
             --evidence .release/release-evidence.json \
             --logs-root .release \
             --expected-digest "${{ needs.validate-candidate.outputs.evidence_digest }}"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build-runtime.outputs.artifact_name }}
+          path: .release
+
+      - name: Verify publication assets against build identity
+        env:
+          FLOW_RELEASE_MANIFEST_SHA: ${{ needs.build-runtime.outputs.manifest_sha256 }}
+        run: python3 scripts/v2_release_checks.py --plan .release/release-plan.json --bundle .release/dist
 
       - name: Refresh live baseline before repeated analysis
         run: >-
@@ -410,31 +411,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pinned OpenHands for current runtime verification
-        run: python3 -m pip install -r runtime/openhands/requirements.txt
-
-      # Historical MAF wheels remain necessary for archived contract tests and
-      # the exact previous-release upgrade fixture. Current runtime smoke uses
-      # the separately pinned OpenHands environment above.
-      - name: Fetch locked managed MAF wheels
-        env:
-          PREVIOUS_RELEASE_SHA: ${{ needs.analyze.outputs.previous_sha }}
-        run: |
-          test "$(uname -s)/$(uname -m)" = Darwin/arm64
-          python3 -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
-          wheelhouse="$RUNNER_TEMP/flow-maf-wheelhouse"
-          python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
-            -r runtime/maf_runner/requirements.lock -d "$wheelhouse"
-          previous_lock="$RUNNER_TEMP/flow-maf-previous.lock"
-          git show "$PREVIOUS_RELEASE_SHA:runtime/maf_runner/requirements.lock" > "$previous_lock"
-          python3 -m pip download --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: \
-            -r "$previous_lock" -d "$wheelhouse"
-          echo "FLOW_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
-          echo "FLOW_TEST_MAF_WHEELHOUSE=$wheelhouse" >> "$GITHUB_ENV"
-          # install-flow.sh prefers the newest Python it finds, and the runner
-          # ships 3.13; pin Flow to this 3.12 for both current SDK verification
-          # and the isolated previous-release MAF compatibility fixture.
-          echo "FLOW_PYTHON=$(python3 -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:

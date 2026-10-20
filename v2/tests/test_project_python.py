@@ -51,6 +51,8 @@ class ProjectPythonTests(unittest.TestCase):
                                         env=env, text=True, capture_output=True, check=True)
                 self.assertEqual(result.stdout, 'project-python:probe')
             for shell in ('/bin/zsh','/bin/bash'):
+                if not Path(shell).exists():
+                    continue
                 result = subprocess.run([shell,'-lc','python3 probe'],env=env,
                                         text=True,capture_output=True,check=True)
                 self.assertEqual(result.stdout,'project-python:probe')
