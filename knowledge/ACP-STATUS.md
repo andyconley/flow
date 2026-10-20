@@ -1,3 +1,5 @@
+> Update: the read-only production ACP task now passes with the explicit local GPT-OSS configuration. See [NATIVE-ACP-RESULTS.md](NATIVE-ACP-RESULTS.md) for evidence and limits. The historical failures below are retained.
+
 # Native ACP verification: not ready for release
 
 The continued test found and repaired actual wiring defects. However, **a complete

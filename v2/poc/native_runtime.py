@@ -26,8 +26,7 @@ def git_metadata(workspace):
     return sorted({str(Path(path).resolve()) for path in result.stdout.splitlines()})
 
 
-def local_codex_endpoint():
-    """Grant loopback only for an explicitly configured credential-free provider."""
+def local_codex_provider():
     import tomllib
     from urllib.parse import urlparse
     path=ROOT/'runtime/codex-home/config.toml'
@@ -37,9 +36,16 @@ def local_codex_endpoint():
     if row.get('requires_openai_auth') is not False:return None
     url=urlparse(row.get('base_url',''))
     if url.scheme!='http' or url.hostname not in ('127.0.0.1','localhost','::1') or url.username or url.password:return None
-    return url.port or 80
+    if not name or not re.fullmatch(r'[A-Za-z0-9_-]+',name):raise ValueError('Local provider ID must be a simple TOML key')
+    return name,row['base_url'].rstrip('/')
 
-def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_command=None):
+def local_codex_endpoint():
+    from urllib.parse import urlparse
+    info=local_codex_provider()
+    return (urlparse(info[1]).port or 80) if info else None
+
+
+def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_command=None,namespace_endpoint=None):
     workspace, run_dir = Path(workspace).resolve(), Path(run_dir).resolve()
     tools = run_dir/'native-runtime'; tools.mkdir(exist_ok=True)
     bindir = tools/'bin'; bindir.mkdir(exist_ok=True)
@@ -54,6 +60,9 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     profile = (ROOT/'runtime/scope.sb').read_text().replace(' (remote ip "localhost:11434")', '')
     profile=re.sub(r'# MANAGED_MUTABLE_START.*?# MANAGED_MUTABLE_END\n','',profile,flags=re.S)
     local_port=local_codex_endpoint()
+    if namespace_endpoint:
+        from urllib.parse import urlparse
+        local_port=urlparse(namespace_endpoint).port
     old = f'(allow file-write* (subpath "{ROOT}/runtime") (subpath "{ROOT}/workspaces") (literal "/dev/null"))'
     new = f'(allow file-write* (subpath "{workspace}") (subpath "{ROOT}/runtime/codex-home") (subpath "{ROOT}/runtime/tmp") (literal "{debug}") (literal "/dev/null"))'
     profile = profile.replace(old, new)
@@ -137,6 +146,14 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
                GIT_CONFIG_GLOBAL='/dev/null',GIT_CONFIG_NOSYSTEM='1',GIT_OPTIONAL_LOCKS='0',GOOSE_SUBAGENT_MAX_TURNS=str(WORKER_MAX_TURNS))
     if local_port and provider in ('codex-acp','chatgpt_codex'):
         env.update(HTTP_PROXY='http://127.0.0.1:9',HTTPS_PROXY='http://127.0.0.1:9',ALL_PROXY='http://127.0.0.1:9',NO_PROXY='localhost,127.0.0.1,::1')
+    if namespace_endpoint:
+        info=local_codex_provider()
+        if not info:raise ValueError('Namespace compatibility requires an explicit credential-free local Codex provider')
+        actual=ROOT/'runtime/adapters/node_modules/.bin/codex'
+        wrapper=tools/'local-codex';override='model_providers.'+info[0]+'.base_url='+json.dumps(namespace_endpoint)
+        wrapper.write_text('#!/bin/sh\nexec '+shlex.join([str(actual),'-c',override,'-c','web_search="disabled"'])+' "$@"\n');wrapper.chmod(0o755)
+        env['CODEX_PATH']=str(wrapper)
+        env['FLOW_LOCAL_RESPONSES_COMPAT']='namespace-v1'
     if python:
         env['FLOW_V2_PROJECT_PYTHON'] = str(python)
     # macOS login-shell path_helper otherwise moves /usr/bin ahead of the

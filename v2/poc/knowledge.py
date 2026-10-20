@@ -48,7 +48,7 @@ def backup(root,label):
     name=str(time.time_ns())+'-'+label+'.zip';p=root/'backups'/name;p.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(p,'w',zipfile.ZIP_DEFLATED) as z:
         for n,b in inventory(root/'notes').items():z.writestr('notes/'+n,b)
-        for n in ('base.json','settings.json','status.json','CURRENT.json'):
+        for n in ('base.json','settings.json','native-transport.json','status.json','CURRENT.json'):
             if (root/n).exists():z.write(root/n,n)
     return p
 
@@ -244,6 +244,7 @@ def main(argv=None):
     for name in ('seed','status','process','watch','export'):sub.add_parser(name)
     setup=sub.add_parser('setup');setup.add_argument('--python',required=True);setup.add_argument('--wheelhouse',type=Path,required=True)
     c=sub.add_parser('configure');c.add_argument('--python',required=True);c.add_argument('--cache',required=True);c.add_argument('--model',default='qwen3:4b');c.add_argument('--ollama',default='http://127.0.0.1:11434')
+    transport=sub.add_parser('namespace-compat');transport.add_argument('mode',choices=('on','off'))
     f=sub.add_parser('fetch');f.add_argument('--from-directory',type=Path);f.add_argument('--ref',default='main')
     w=sub.add_parser('write');w.add_argument('name');w.add_argument('--from-file',type=Path,required=True)
     d=sub.add_parser('delete');d.add_argument('name')
@@ -269,6 +270,12 @@ def main(argv=None):
                 write(root/'settings.json',{'python':str(Path(a.python).absolute()),'cache':str(Path(a.cache).absolute()),'model':a.model,'ollama':a.ollama.rstrip('/'),'model_digest':local_model_digest(a.ollama.rstrip('/'),a.model)})
                 result=reconcile_shared(root)
             trigger(root)
+        elif a.action=='namespace-compat':
+            with locked(root):
+                if not (root/'settings.json').exists():raise ValueError('Configure the local knowledge runtime first')
+                backup(root,'before-transport-change')
+                result={'namespace_compat':a.mode=='on','scope':'explicit credential-free local Codex provider only'}
+                write(root/'native-transport.json',result)
         elif a.action in ('seed','fetch'):
             with locked(root):result=reconcile_shared(root,(a.from_directory or fetch_shared(root,a.ref)) if a.action=='fetch' else SHARED)
             trigger(root)

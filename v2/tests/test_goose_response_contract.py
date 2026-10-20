@@ -1,0 +1,34 @@
+import json,os,tempfile,unittest
+from pathlib import Path
+from unittest.mock import patch
+from poc import goose_job
+from poc.contracts import task_input_digest
+class ResponseContractTests(unittest.TestCase):
+ def exercise(self,provider='ollama',text='{"outcome":"completed"}'):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);(root/'runtime').mkdir();work=root/'work';work.mkdir();bundle=root/'bundle';(bundle/'recipes').mkdir(parents=True)
+   (bundle/'recipes/fixture.yaml').write_text('version: 1.0.0\ntitle: fixture\ndescription: fixture\ninstructions: preserve role text\n')
+   binary=root/'goose';argv_file=root/'argv.json'
+   event={'type':'message','message':{'role':'assistant','content':[{'type':'text','text':text}]}}
+   binary.write_text('#!/usr/bin/env python3\nimport sys,json\nfrom pathlib import Path\nPath('+repr(str(argv_file))+').write_text(json.dumps(sys.argv[1:]))\nprint('+repr(json.dumps(event))+')\nprint(json.dumps({"type":"complete"}))\n');binary.chmod(0o755)
+   schema={'type':'object','properties':{'outcome':{'type':'string'}},'required':['outcome']}
+   state={'task':'Approved fixture','workspace':str(work),'project_context':'','job_id':'contract-fixture','response_schema':schema};state['inputs']=task_input_digest(state['task'],work,'')
+   def prepare(workspace,run_dir,roles,**kw):return run_dir/'worker.sb',{'PATH':os.environ['PATH'],'HOME':str(root/'home')}
+   with patch.dict(os.environ,HOME=str(root/'home')),patch.object(goose_job,'ROOT',root),patch.object(goose_job,'goose_binary',return_value=binary),patch('poc.native_runtime.prepare',side_effect=prepare):result=goose_job.GooseJob(provider=provider,role_bundle=bundle)._run(state,'read','Exact approved instructions')
+   args=json.loads(argv_file.read_text());contract=json.loads((root/'artifacts/contract-fixture/contracts/read-1-0.json').read_text())
+   instructions=Path(args[args.index('--instructions')+1]).read_text() if '--instructions' in args else None
+   return result,args,contract,instructions
+ def test_schema_bound_normal_run_uses_recipe_without_conflicting_instructions_flag(self):
+  result,args,contract,instructions=self.exercise();self.assertEqual('completed',result['status']);self.assertIn('--recipe',args);self.assertNotIn('--instructions',args);self.assertIn('Exact approved instructions',contract['prompt']);self.assertIn('FINAL response:',contract['prompt'])
+ def test_native_route_forwards_task_and_schema_as_user_instructions(self):
+  result,args,contract,instructions=self.exercise('codex-acp');self.assertEqual('completed',result['status']);self.assertNotIn('--recipe',args);self.assertIn('Exact approved instructions',instructions);self.assertIn('Schema:',instructions);self.assertTrue(result['response_contract']['passed'])
+ def test_zero_exit_without_valid_final_contract_stays_blocked(self):
+  result,*_=self.exercise('codex-acp','Prose is not the required result');self.assertEqual('blocked',result['status']);self.assertFalse(result['response_contract']['passed'])
+ def test_opt_in_leaves_ordinary_coordinator_transport_unchanged(self):
+  job=goose_job.GooseJob(provider='ollama',namespace_compat=True)
+  with patch.object(job,'_run_impl',return_value={'status':'fixture'}) as run,patch('poc.native_runtime.local_codex_provider') as lookup:
+   self.assertEqual({'status':'fixture'},job._run({'job_id':'fixture'},'read','task'));run.assert_called_once_with({'job_id':'fixture'},'read','task',None);lookup.assert_not_called()
+ def test_explicit_adapter_refuses_nonlocal_provider_without_launch(self):
+  with patch('poc.native_runtime.local_codex_provider',return_value=None),patch.object(goose_job.subprocess,'Popen') as launch:result=goose_job.GooseJob(provider='codex-acp',namespace_compat=True)._run({'job_id':'none'},'read','task')
+  self.assertEqual('blocked',result['status']);self.assertFalse(result['submitted']);launch.assert_not_called()
+if __name__=='__main__':unittest.main()

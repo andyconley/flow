@@ -135,6 +135,6 @@ in `INTEGRATION-RESULTS.md`. A passing lifecycle unit test is not a live model r
 
 Coverage of all 13 roles is recorded in `COVERAGE.md`; the 21-card seed covers six roles, not every agent. Missing authoritative cards were not found or invented.
 
-Native ACP/provider readiness is explicitly **blocked**; see `ACP-STATUS.md`. The native sandbox and direct MCP probe pass, but no complete native provider knowledge-use task has passed with the retained local models. Do not treat provisioning or unit success as release qualification.
+The read-only production ACP knowledge-use task passes with Codex ACP, local Ollama `gpt-oss:20b`, and the explicit namespace compatibility adapter. Enable it with `flow knowledge namespace-compat on` (disable with `off`); it requires an explicitly configured credential-free loopback Codex provider. See `NATIVE-ACP-RESULTS.md` for exact versions, evidence and reproduction. Qwen final-contract failures remain in `ACP-STATUS.md`. A complete code-changing implementation/review workflow and other provider/model combinations are not qualified. Merge/release still requires parent review.
 
 If offline setup fails, its partial `runtime/` is retained and replacement is refused. Inspect/remove only that failed virtual environment, or provision another isolated environment and configure its Python. Notes, backups and exports must remain intact.
