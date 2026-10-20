@@ -71,7 +71,7 @@ def current_runs(project, state_root=None):
     rows = []
     for database in sorted(root.glob('*/workflow.sqlite')):
         try:
-            with closing(sqlite3.connect(database.resolve().as_uri()+'?mode=ro', timeout=.1)) as connection:
+            with closing(sqlite3.connect(database.resolve().as_uri()+'?mode=ro', uri=True, timeout=.1)) as connection:
                 row = connection.execute("SELECT type,checkpoint FROM checkpoints WHERE thread_id=? AND checkpoint_ns='' ORDER BY checkpoint_id DESC LIMIT 1", (database.parent.name,)).fetchone()
                 if row:
                     value = JsonPlusSerializer().loads_typed(row)['channel_values']

@@ -95,7 +95,7 @@ def locked(path):
 @contextmanager
 def checkpoint_snapshot(path):
     """Copy a consistent committed SQLite view; graph setup writes only to memory."""
-    with closing(sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro', timeout=.25)) as source:
+    with closing(sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro', uri=True, timeout=.25)) as source:
         with closing(sqlite3.connect(':memory:', check_same_thread=False)) as memory:
             source.backup(memory)
             yield SqliteSaver(memory)

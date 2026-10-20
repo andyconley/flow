@@ -26,7 +26,7 @@ def report(project=None, job_id=None, database=None, session_name=None):
         return result
     connection = None
     try:
-        connection = sqlite3.connect(database.resolve().as_uri()+'?mode=ro', timeout=.1)
+        connection = sqlite3.connect(database.resolve().as_uri()+'?mode=ro', uri=True, timeout=.1)
         connection.row_factory = sqlite3.Row
         connection.execute('PRAGMA query_only=ON')
         connection.execute('BEGIN')
