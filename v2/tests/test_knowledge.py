@@ -63,6 +63,16 @@ class KnowledgeTests(unittest.TestCase):
    k.write(self.root/'settings.json',{'python':'/safe path/python'});self.run_build();
    with patch('poc.knowledge_tools.require_ready'):cmd,env=attach(['goose','run'],{})
   self.assertIn('--with-extension',cmd);self.assertIn("'/safe path/python'",cmd[-1]);self.assertEqual(str(self.root),env['FLOW_KNOWLEDGE_HOME'])
+ def test_unchanged_shared_fetch_leaves_local_edits_and_deletions_unconflicted(self):
+  (self.root/'notes/a.md').write_text('Local edit.\n');(self.root/'notes/b.md').unlink()
+  with k.locked(self.root):result=k.reconcile_shared(self.root,self.shared)
+  self.assertEqual([],result['conflicts']);self.assertEqual('Local edit.\n',(self.root/'notes/a.md').read_text());self.assertFalse((self.root/'notes/b.md').exists())
+ def test_current_publication_recovers_status_after_crash_before_ready_write(self):
+  self.run_build();current=k.read(self.root/'CURRENT.json');k.write(self.root/'status.json',{'state':'running',**current})
+  self.assertEqual('ready',k.status(self.root)['state']);self.assertFalse(k.status(self.root)['pending'])
+  with patch.dict(os.environ,FLOW_KNOWLEDGE_READONLY='1'):
+   self.assertEqual('ready',k.status(self.root)['state']);self.assertFalse(k.status(self.root)['pending'])
+  with patch.object(k.subprocess,'Popen') as launch:k.trigger(self.root);launch.assert_not_called()
  def test_export_and_restore_are_runtime_independent(self):
   import contextlib,io
   with patch.object(k,'trigger',return_value={'pending':True}),contextlib.redirect_stdout(io.StringIO()) as out:

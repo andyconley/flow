@@ -21,9 +21,12 @@ class GooseJob:
   info=local_codex_provider()
   if not info:return {'status':'blocked','submitted':False,'source':'namespace_compat','reason':'Explicit namespace adapter requires a credential-free loopback Codex provider'}
   folder=ROOT/'artifacts'/s['job_id'];folder.mkdir(parents=True,exist_ok=True)
-  with LocalResponsesBridge(info[1],folder/(kind+'-namespace-wire.json')) as bridge:
-   return self._run_impl(s,kind,prompt,provider_override,namespace_endpoint=bridge.endpoint)
- def _run_impl(self,s,kind,prompt,provider_override=None,namespace_endpoint=None):
+  index=f"{s.get('corrections',0)+1}-{s.get('resume_epoch',0)}" if self.role_bundle else s.get('attempt',0)+1
+  if (folder/f'{kind}-{index}.json').exists():return self._run_impl(s,kind,prompt,provider_override)
+  audit=folder/'wire'/(kind+'-'+str(index)+'-'+str(time.time_ns())+'.json');audit.parent.mkdir(exist_ok=True)
+  with LocalResponsesBridge(info[1],audit) as bridge:
+   return self._run_impl(s,kind,prompt,provider_override,namespace_endpoint=bridge.endpoint,namespace_audit=str(audit))
+ def _run_impl(self,s,kind,prompt,provider_override=None,namespace_endpoint=None,namespace_audit=None):
   provider=provider_override or self.provider
   if s['inputs']!=task_input_digest(s['task'],s['workspace'],s.get('project_context','')):return {'status':'scope_required' if self.role_bundle else 'blocked','reason':'approved task/check inputs changed'}
   budget=min(self.timeout,max(0,s['deadline']-time.time())) if self.role_bundle and s.get('deadline') is not None else self.timeout
@@ -41,6 +44,7 @@ class GooseJob:
   try:python = select(s['workspace'], s.get('check_command'))
   except ValueError as error:return {'status':'scope_required','reason':str(error)}
   record={'output':str(p.with_suffix('.jsonl')),'stderr':str(p.with_suffix('.stderr')),'status':'uncertain','inputs':s['inputs'],'workspace':s['workspace'],'started':time.time(),'kind':kind}
+  if namespace_audit:record['namespace_wire_audit']=namespace_audit
   store(p,record) # Before submit: crash here is explicitly uncertain, never silently resubmitted.
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
   output=p.with_suffix('.jsonl');err=p.with_suffix('.stderr')

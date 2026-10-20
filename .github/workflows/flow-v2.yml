@@ -1,10 +1,10 @@
 name: Flow v2 offline workflow and installer
 on:
   pull_request:
-    paths: ['v2/**', 'scripts/**', 'install*.sh', '.github/workflows/**']
+    paths: ['knowledge/**', 'v2/**', 'scripts/**', 'install*.sh', '.github/workflows/**']
   push:
     branches: [main]
-    paths: ['v2/**', 'scripts/**', 'install*.sh', '.github/workflows/**']
+    paths: ['knowledge/**', 'v2/**', 'scripts/**', 'install*.sh', '.github/workflows/**']
 permissions:
   contents: read
 jobs:

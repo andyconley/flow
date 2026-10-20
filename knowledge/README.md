@@ -78,9 +78,9 @@ conflicts in `base.json`, and saves incoming versions under `incoming/`. Resolve
 conflicts by reviewing/copying the desired file, then fetch again. Local-only files
 are preserved. Shared removals delete only locally unchanged cards.
 
-Each Flow startup and each agent tool read reconciles fingerprints. The Flow supervisor also checks every five seconds during a running job. Native ACP tool servers are read-only and delegate reconciliation to that supervisor; standalone non-native server runs may poll every two seconds. For editing outside a running
+Ordinary Flow workflow startup reconciles fingerprints; version, doctor and knowledge status commands are read-only inspections. Managed write/edit/delete/fetch/restore commands enqueue processing immediately. Standalone non-native query/graph reads reconcile too. The Flow supervisor checks every five seconds during a running job. Native ACP tool reads are read-only and delegate reconciliation to that supervisor; a standalone non-native MCP server polls every two seconds. For editing outside a running
 Flow session, `flow knowledge watch` provides the same foreground reconciliation
-loop; otherwise the next Flow command/read catches edits. There is no launchd,
+loop; otherwise the next ordinary workflow startup or non-native query/graph read catches edits. There is no launchd,
 watcher package, filesystem hook, database server or paid API. Pipeline code,
 dependency lock, configuration, model digest and exact authored files participate
 in the fingerprint. Generated snapshots and databases are outside its input tree,

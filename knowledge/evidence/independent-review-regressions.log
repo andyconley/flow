@@ -1,0 +1,291 @@
+EEE...EEEEEEEEEEEEEEEE.................Flow knowledge unavailable/pending: {"state": "pending", "reason": "not processed", "pending": true, "desired": "6a71f893dc2beab37f2c7458dac0651efe752392a0e2da9aef1e212064f94011", "snapshot": null}
+........................
+======================================================================
+ERROR: test_acp_evidence (unittest.loader._FailedTest.test_acp_evidence)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_acp_evidence
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_acp_evidence.py", line 8, in <module>
+    from poc.runtime_env import node_binary
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_claude_config (unittest.loader._FailedTest.test_claude_config)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_claude_config
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_claude_config.py", line 10, in <module>
+    from poc import native_runtime, runtime_env
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_command_classification (unittest.loader._FailedTest.test_command_classification)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_command_classification
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_command_classification.py", line 8, in <module>
+    from poc.codex_adapter_guard import guarded_source
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_evidence (unittest.loader._FailedTest.test_evidence)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_evidence
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_evidence.py", line 3, in <module>
+    from poc.evidence import final_object,delegations
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_glg_lifecycle (unittest.loader._FailedTest.test_glg_lifecycle)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_glg_lifecycle
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_glg_lifecycle.py", line 12, in <module>
+    from poc.artifacts import Artifacts, ArtifactError, validate_brief
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_goose_artifact (unittest.loader._FailedTest.test_goose_artifact)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_goose_artifact
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_goose_artifact.py", line 16, in <module>
+    from poc import goose_artifact as artifact
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_goose_response_contract (unittest.loader._FailedTest.test_goose_response_contract)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_goose_response_contract
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_goose_response_contract.py", line 4, in <module>
+    from poc import goose_job
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_history_access (unittest.loader._FailedTest.test_history_access)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_history_access
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_history_access.py", line 12, in <module>
+    from poc import history
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_install (unittest.loader._FailedTest.test_install)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_install
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_install.py", line 14, in <module>
+    from poc.install import ROOT, install
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_knowledge (unittest.loader._FailedTest.test_knowledge)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_knowledge
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_knowledge.py", line 4, in <module>
+    from poc import knowledge as k
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_knowledge_distribution (unittest.loader._FailedTest.test_knowledge_distribution)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_knowledge_distribution
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_knowledge_distribution.py", line 5, in <module>
+    from poc import knowledge as k
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_lifecycle (unittest.loader._FailedTest.test_lifecycle)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_lifecycle
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_lifecycle.py", line 2, in <module>
+    from poc.lifecycle import ProcessScope
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_local_responses (unittest.loader._FailedTest.test_local_responses)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_local_responses
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_local_responses.py", line 2, in <module>
+    from poc.local_responses import flatten,restore,ProtocolError
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_managed_release (unittest.loader._FailedTest.test_managed_release)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_managed_release
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_managed_release.py", line 16, in <module>
+    from poc import managed,goose_artifact
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_monitoring (unittest.loader._FailedTest.test_monitoring)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_monitoring
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_monitoring.py", line 15, in <module>
+    from poc import device_context, monitoring
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_native_permissions (unittest.loader._FailedTest.test_native_permissions)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_native_permissions
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_native_permissions.py", line 11, in <module>
+    from poc.artifacts import Artifacts
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_prerequisites (unittest.loader._FailedTest.test_prerequisites)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_prerequisites
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_prerequisites.py", line 11, in <module>
+    from poc import managed
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_project_python (unittest.loader._FailedTest.test_project_python)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_project_python
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_project_python.py", line 10, in <module>
+    from poc import native_runtime, runtime_env
+ModuleNotFoundError: No module named 'poc'
+
+
+======================================================================
+ERROR: test_release_http (unittest.loader._FailedTest.test_release_http)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_release_http
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/unittest/loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "/Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/v2/tests/test_release_http.py", line 15, in <module>
+    from poc import managed, release_http
+ModuleNotFoundError: No module named 'poc'
+
+
+----------------------------------------------------------------------
+Ran 63 tests in 3.578s
+
+FAILED (errors=19)

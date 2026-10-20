@@ -67,6 +67,7 @@ def reconcile_shared(root,shared=SHARED):
         # Shared corpus contains authored text only. Preserve local edits and deletions.
         new=digest(incoming[n]) if n in incoming else None
         if actual==new:newbase[n]=new;continue
+        if new==old:continue # No upstream change: local edits/deletions are not conflicts.
         if actual==old:
             if n in incoming:(root/'notes'/n).write_bytes(incoming[n]);newbase[n]=new
             else:(root/'notes'/n).unlink(missing_ok=True);newbase.pop(n,None)
@@ -116,6 +117,11 @@ def fingerprint(root):
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())
 def status(root):
     state=read(root/'status.json',{'state':'pending','reason':'not processed'})
+    current=read(root/'CURRENT.json',{})
+    if current and state.get('fingerprint')==current.get('fingerprint') and state.get('state')!='ready':
+        receipt=read(root/'generations'/current['generation']/'receipt.json',{})
+        if receipt.get('fingerprint')==current['fingerprint'] and receipt.get('audit',{}).get('passed'):
+            state={**state,'state':'ready','generation':current['generation'],'recovered_publication':True}
     if os.environ.get('FLOW_KNOWLEDGE_READONLY')=='1':
         current=read(root/'CURRENT.json',{})
         return {**state,'pending':state.get('state')!='ready' or state.get('fingerprint')!=current.get('fingerprint'),'snapshot':current.get('generation'),'reconciliation_owner':'Flow supervisor'}

@@ -6,6 +6,11 @@ from poc import knowledge as k
 from poc.knowledge_tools import require_ready,KnowledgeUnavailable
 
 class DistributionTests(unittest.TestCase):
+ def test_corpus_only_changes_run_offline_workflow(self):
+  import yaml
+  workflow=yaml.safe_load((k.REPO/'.github/workflows/flow-v2.yml').read_text());events=workflow.get('on',workflow.get(True))
+  for event in ('pull_request','push'):self.assertIn('knowledge/**',events[event]['paths'])
+
  def test_unprovisioned_installed_store_blocks_before_provider(self):
   from poc.goose_job import GooseJob
   from poc.contracts import task_input_digest

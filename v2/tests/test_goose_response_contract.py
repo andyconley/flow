@@ -28,6 +28,12 @@ class ResponseContractTests(unittest.TestCase):
   job=goose_job.GooseJob(provider='ollama',namespace_compat=True)
   with patch.object(job,'_run_impl',return_value={'status':'fixture'}) as run,patch('poc.native_runtime.local_codex_provider') as lookup:
    self.assertEqual({'status':'fixture'},job._run({'job_id':'fixture'},'read','task'));run.assert_called_once_with({'job_id':'fixture'},'read','task',None);lookup.assert_not_called()
+ def test_cached_operation_does_not_replace_native_wire_audit(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);folder=root/'artifacts/cached';folder.mkdir(parents=True);(folder/'read-1-0.json').write_text('{}');audit=folder/'read-namespace-wire.json';audit.write_text('actual retained evidence')
+   job=goose_job.GooseJob(provider='codex-acp',namespace_compat=True)
+   with patch.object(goose_job,'ROOT',root),patch('poc.native_runtime.local_codex_provider',return_value=('local','http://127.0.0.1:1/v1')),patch('poc.local_responses.LocalResponsesBridge') as bridge,patch.object(job,'_run_impl',return_value={'status':'completed'}) as run:
+    self.assertEqual('completed',job._run({'job_id':'cached'},'read','task')['status']);bridge.assert_not_called();self.assertEqual('actual retained evidence',audit.read_text())
  def test_explicit_adapter_refuses_nonlocal_provider_without_launch(self):
   with patch('poc.native_runtime.local_codex_provider',return_value=None),patch.object(goose_job.subprocess,'Popen') as launch:result=goose_job.GooseJob(provider='codex-acp',namespace_compat=True)._run({'job_id':'none'},'read','task')
   self.assertEqual('blocked',result['status']);self.assertFalse(result['submitted']);launch.assert_not_called()
