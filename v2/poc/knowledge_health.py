@@ -5,12 +5,12 @@ from urllib.parse import urlparse
 from . import knowledge as k
 
 def hint(root,cfg=None):
-    cfg=k.read(root/'settings.json',{}) if cfg is None else cfg
+    cfg={**k.read(root/'provisioned-runtime.json',{}),**k.read(root/'settings.json',{})} if cfg is None else cfg
     prefix='flow knowledge'+(' --home '+shlex.quote(str(root)) if root!=k.home() else '')
-    return {'configured':bool(cfg),'python_present':bool(cfg.get('python') and Path(cfg['python']).is_file()),'diagnostics':prefix+' doctor','setup':prefix+' setup --python /path/to/python3.12 --wheelhouse /path/to/knowledge-wheels','configure':prefix+' configure --python '+shlex.quote(cfg.get('python',str(root/'runtime/bin/python')))+' --cache '+shlex.quote(cfg.get('cache','/path/to/preprovisioned/fastembed_cache'))+' --model '+shlex.quote(cfg.get('model','qwen3:4b'))+' --ollama '+shlex.quote(cfg.get('ollama','http://127.0.0.1:11434'))}
+    return {'configured':bool(k.read(root/'settings.json',{})),'acquisition':k.read(root/'provisioning-status.json',{'state':'not_requested'}),'python_present':bool(cfg.get('python') and Path(cfg['python']).is_file()),'diagnostics':prefix+' doctor','setup':prefix+' setup --download','offline_setup':prefix+' setup --python /path/to/python3.12 --wheelhouse /path/to/knowledge-wheels','configure':prefix+' configure --python '+shlex.quote(cfg.get('python',str(root/'runtime/bin/python')))+' --cache '+shlex.quote(cfg.get('cache','/path/to/preprovisioned/fastembed_cache'))+' --model '+shlex.quote(cfg.get('model','qwen3:4b'))+' --ollama '+shlex.quote(cfg.get('ollama','http://127.0.0.1:11434'))}
 
 def doctor(root,**overrides):
-    cfg={**k.read(root/'settings.json',{}),**{key:value for key,value in overrides.items() if value is not None}}
+    cfg={**k.read(root/'provisioned-runtime.json',{}),**k.read(root/'settings.json',{}),**{key:value for key,value in overrides.items() if value is not None}}
     checks={};python=cfg.get('python') or str(root/'runtime/bin/python')
     checks['python']={'ok':Path(python).is_file(),'path':python}
     if checks['python']['ok']:
@@ -31,5 +31,6 @@ def doctor(root,**overrides):
     try:checks['local_model']={'ok':True,'model':model,'digest':k.local_model_digest(endpoint.rstrip('/'),model)}
     except Exception as e:checks['local_model']={'ok':False,'model':model,'detail':str(e),'action':'Start your local Ollama server and explicitly provision this model; no download was attempted'}
     commands=hint(root,cfg)
-    commands['prepare_wheelhouse']=shlex.join(['python3.12','-m','pip','download','--index-url','https://pypi.org/simple','--only-binary=:all:','--no-deps','-r',str(k.SHARED/'requirements.lock'),'-d','/path/to/knowledge-wheels'])
-    return {'ok':all(row['ok'] for row in checks.values()),'checks':checks,'commands':commands,'next':'After passing diagnostics: flow knowledge configure with these explicit paths, then flow knowledge process and flow knowledge status','downloads_attempted':False}
+    commands['dependency_lock']=str(k.SHARED/'requirements.lock')
+    commands['offline_transfer']='Transfer the verified wheels folder including verified.json and the embedding-cache folder from an explicit flow knowledge setup --download run.'
+    return {'ok':all(row['ok'] for row in checks.values()),'checks':checks,'commands':commands,'next':'Use commands.setup for supported acquisition and automatic configuration/indexing. Manual configure remains available for transferred offline assets; status reports readiness.','downloads_attempted':False}

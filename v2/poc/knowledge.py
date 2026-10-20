@@ -48,7 +48,7 @@ def backup(root,label):
     name=str(time.time_ns())+'-'+label+'.zip';p=root/'backups'/name;p.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(p,'w',zipfile.ZIP_DEFLATED) as z:
         for n,b in inventory(root/'notes').items():z.writestr('notes/'+n,b)
-        for n in ('base.json','settings.json','native-transport.json','status.json','CURRENT.json'):
+        for n in ('base.json','settings.json','native-transport.json','provisioned-runtime.json','provisioning-status.json','status.json','CURRENT.json'):
             if (root/n).exists():z.write(root/n,n)
     return p
 
@@ -102,7 +102,10 @@ def fetch_shared(root,ref):
 
 def local_model_digest(endpoint,model):
     import urllib.request
-    with urllib.request.urlopen(endpoint+'/api/tags',timeout=2) as response:models=json.load(response)['models']
+    from urllib.parse import urlparse
+    u=urlparse(endpoint)
+    if u.scheme!='http' or u.hostname not in ('127.0.0.1','localhost','::1') or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):raise ValueError('Only unauthenticated loopback Ollama is supported')
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(endpoint+'/api/tags',timeout=2) as response:models=json.load(response)['models']
     found=[m['digest'] for m in models if m.get('name')==model or m.get('model')==model]
     if len(found)!=1:raise ValueError('Configured local model not installed; no automatic model download: '+model)
     return found[0]
@@ -113,7 +116,7 @@ def fingerprint(root):
     if cfg.get('model_digest'):
         cfg={**cfg,'observed_model_digest':local_model_digest(cfg['ollama'],cfg['model'])}
     # Include all pipeline code and pins, not just a manually bumped number.
-    code=[Path(__file__),*sorted(Path(__file__).with_name('knowledge_runtime').glob('*.py')),Path(__file__).with_name('knowledge_runtime')/'compatibility.json',SHARED/'requirements.lock']
+    code=[Path(__file__),*sorted(Path(__file__).with_name('knowledge_runtime').glob('*.py')),Path(__file__).with_name('knowledge_runtime')/'compatibility.json',SHARED/'requirements.lock',SHARED/'embedding.lock.json']
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())
 def status(root):
     from .knowledge_health import hint
@@ -251,7 +254,7 @@ def main(argv=None):
     for name in ('seed','status','process','watch','export'):sub.add_parser(name)
     health=sub.add_parser('doctor')
     for option in ('python','cache','model','ollama'):health.add_argument('--'+option)
-    setup=sub.add_parser('setup');setup.add_argument('--python',required=True);setup.add_argument('--wheelhouse',type=Path,required=True)
+    setup=sub.add_parser('setup');setup.add_argument('--python',default=sys.executable);modes=setup.add_mutually_exclusive_group();modes.add_argument('--wheelhouse',type=Path);modes.add_argument('--download',action='store_true');setup.add_argument('--rebuild-runtime',action='store_true');setup.add_argument('--model');setup.add_argument('--ollama')
     c=sub.add_parser('configure');c.add_argument('--python',required=True);c.add_argument('--cache',required=True);c.add_argument('--model',default='qwen3:4b');c.add_argument('--ollama',default='http://127.0.0.1:11434')
     transport=sub.add_parser('namespace-compat');transport.add_argument('mode',choices=('on','off'))
     f=sub.add_parser('fetch');f.add_argument('--from-directory',type=Path);f.add_argument('--ref',default='main')
@@ -267,13 +270,30 @@ def main(argv=None):
             from .knowledge_health import doctor
             result=doctor(root,python=a.python,cache=a.cache,model=a.model,ollama=a.ollama)
             print(json.dumps(result,indent=2));return 0 if result['ok'] else 1
+        elif a.action=='setup' and not a.wheelhouse:
+            from .knowledge_provision import plan,online
+            if not a.download:print(json.dumps(plan(),indent=2));return 0
+            with locked(root):
+                previous={**read(root/'provisioned-runtime.json',{}),**read(root/'settings.json',{})}
+                write(root/'provisioning-status.json',{'state':'running','consent':'explicit --download'})
+                try:
+                    result=online(root,a.python,a.model or previous.get('model','qwen3:4b'),a.ollama or previous.get('ollama','http://127.0.0.1:11434'),rebuild=a.rebuild_runtime)
+                except Exception as error:
+                    write(root/'provisioning-status.json',{'state':'failed','error':str(error),'retry':'Repeat setup --download after fixing the reported cause; verified files are retained'})
+                    raise
+                write(root/'provisioning-status.json',{'state':'ready' if result['configured'] else 'awaiting_model','assets_ready':True,'required_model_setup':result.get('required_model_setup')})
+            if result['configured']:trigger(root)
+            print(json.dumps(result,indent=2));return 0 if result['configured'] else 1
         elif a.action=='setup':
             with locked(root):
                 target=root/'runtime'
                 if target.exists():raise ValueError('Knowledge runtime exists; stage a new runtime and configure explicitly')
-                subprocess.run([a.python,'-m','venv',str(target)],check=True)
-                subprocess.run([str(target/'bin/python'),'-m','pip','install','--no-index','--find-links',str(a.wheelhouse),'--no-deps','-r',str(SHARED/'requirements.lock')],check=True)
-                subprocess.run([str(target/'bin/python'),'-m','pip','check'],check=True)
+                from .knowledge_provision import wheels
+                hashed=wheels(a.wheelhouse,SHARED/'requirements.lock',offline=True)
+                env=clean_env(root);env.update(PIP_CONFIG_FILE=os.devnull,PIP_DISABLE_PIP_VERSION_CHECK='1',PIP_NO_INPUT='1')
+                subprocess.run([a.python,'-m','venv',str(target)],check=True,env=env)
+                subprocess.run([str(target/'bin/python'),'-m','pip','--isolated','install','--no-index','--find-links',str(a.wheelhouse),'--require-hashes','--no-deps','-r',str(hashed)],check=True,env=env)
+                subprocess.run([str(target/'bin/python'),'-m','pip','check'],check=True,env=env)
                 result={'python':str(target/'bin/python'),'next':'flow knowledge configure --python this-path --cache local-embedding-cache --model local-model'}
         elif a.action=='configure':
             from urllib.parse import urlparse

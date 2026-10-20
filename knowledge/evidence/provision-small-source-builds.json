@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "source_builds": {
+    "pybars3-0.9.7-py3-none-any.whl": {
+      "sha256": "598bb46583bd39eeacf3f21c9da508c5e20ac955bf662cdd9e9c046b9da4825f",
+      "size": 14164,
+      "source": {
+        "version": "0.9.7",
+        "filename": "pybars3-0.9.7.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/ec/1a/2fb847db017f9f89ab8519d96e35fb3dacb6170a0643fddba3b366af0af1/pybars3-0.9.7.tar.gz",
+        "size": 29203,
+        "sha256": "6ac847e905e53b9c5b936af112c910475e27bf767f79f4528c16f9af1ec0e252"
+      }
+    },
+    "pymeta3-0.5.1-py3-none-any.whl": {
+      "sha256": "e0692ad3152dadaf0808de59e49112ef9656a530bd0b591600378d19f71d8c22",
+      "size": 16519,
+      "source": {
+        "version": "0.5.1",
+        "filename": "PyMeta3-0.5.1.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/ce/af/409edba35fc597f1e386e3860303791ab5a28d6cc9a8aecbc567051b19a9/PyMeta3-0.5.1.tar.gz",
+        "size": 29566,
+        "sha256": "18bda326d9a9bbf587bfc0ee0bc96864964d78b067288bcf55d4d98681d05bcb"
+      }
+    }
+  },
+  "large_models_downloaded": false,
+  "build_network_denied": true,
+  "build_tools": {
+    "requirements_sha256": "8dced2fa04db210c4acbf58f0af22648c0c9a55711edb4fa83b6c55b000a3488",
+    "files": {
+      "packaging-26.3-py3-none-any.whl": {
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+        "size": 129956,
+        "package": "packaging",
+        "version": "26.3"
+      },
+      "pip-25.1.1-py3-none-any.whl": {
+        "sha256": "2913a38a2abf4ea6b64ab507bd9e967f3b53dc1ede74b01b0931e1ce548751af",
+        "size": 1825227,
+        "package": "pip",
+        "version": "25.1.1"
+      },
+      "setuptools-80.9.0-py3-none-any.whl": {
+        "sha256": "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922",
+        "size": 1201486,
+        "package": "setuptools",
+        "version": "80.9.0"
+      },
+      "wheel-0.45.1-py3-none-any.whl": {
+        "sha256": "708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248",
+        "size": 72494,
+        "package": "wheel",
+        "version": "0.45.1"
+      }
+    }
+  }
+}

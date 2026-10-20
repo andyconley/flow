@@ -7,11 +7,11 @@ class KnowledgeHealthTests(unittest.TestCase):
  def test_seeded_status_shows_supported_setup_and_diagnostics(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);k.write(root/'base.json',{'files':{}})
-   result=k.status(root)['provisioning'];self.assertFalse(result['configured']);self.assertFalse(result['python_present']);self.assertTrue(result['diagnostics'].endswith(' doctor'));self.assertIn(str(root),result['diagnostics']);self.assertIn('--wheelhouse',result['setup'])
+   result=k.status(root)['provisioning'];self.assertFalse(result['configured']);self.assertFalse(result['python_present']);self.assertTrue(result['diagnostics'].endswith(' doctor'));self.assertIn(str(root),result['diagnostics']);self.assertIn('--download',result['setup']);self.assertIn('--wheelhouse',result['offline_setup'])
  def test_missing_dependencies_and_model_are_independent_visible_failures(self):
   with tempfile.TemporaryDirectory() as t,patch('poc.knowledge_health.subprocess.run',return_value=subprocess.CompletedProcess([],1,stdout='',stderr='No module named basic_memory')),patch.object(k,'local_model_digest',side_effect=ValueError('Configured local model not installed')):
    data=doctor(Path(t),python=sys.executable,cache='/absent/cache',model='missing:fixture')
-   self.assertFalse(data['ok']);self.assertFalse(data['checks']['dependencies']['ok']);self.assertIn('basic_memory',data['checks']['dependencies']['detail']);self.assertFalse(data['checks']['local_model']['ok']);self.assertFalse(data['downloads_attempted']);self.assertIn(str(k.SHARED/'requirements.lock'),data['commands']['prepare_wheelhouse'])
+   self.assertFalse(data['ok']);self.assertFalse(data['checks']['dependencies']['ok']);self.assertIn('basic_memory',data['checks']['dependencies']['detail']);self.assertFalse(data['checks']['local_model']['ok']);self.assertFalse(data['downloads_attempted']);self.assertIn(str(k.SHARED/'requirements.lock'),data['commands']['dependency_lock'])
  def test_local_cache_probe_cannot_download_and_cli_preserves_notes(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);(root/'notes').mkdir();(root/'notes/a.md').write_text('Authored.\n');before=k.inventory(root/'notes')

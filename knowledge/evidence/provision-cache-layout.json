@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "checks": {
+    "python": {
+      "ok": true,
+      "path": "/Users/andyconley/Documents/Codex/2026-10-20/task/.venv/bin/python"
+    },
+    "dependencies": {
+      "ok": true,
+      "detail": "Audited Basic Memory 0.23.2 and CocoIndex 1.0.25"
+    },
+    "embedding_cache": {
+      "ok": true,
+      "detail": "BAAI/bge-small-en-v1.5 found offline"
+    },
+    "local_model": {
+      "ok": true,
+      "model": "fixture:copied",
+      "digest": "fixture-no-server-request"
+    }
+  },
+  "commands": {
+    "configured": true,
+    "python_present": true,
+    "diagnostics": "flow knowledge --home /Users/andyconley/Documents/Codex/2026-10-20/task/provision-cache-fixture doctor",
+    "setup": "flow knowledge --home /Users/andyconley/Documents/Codex/2026-10-20/task/provision-cache-fixture setup --download",
+    "offline_setup": "flow knowledge --home /Users/andyconley/Documents/Codex/2026-10-20/task/provision-cache-fixture setup --python /path/to/python3.12 --wheelhouse /path/to/knowledge-wheels",
+    "configure": "flow knowledge --home /Users/andyconley/Documents/Codex/2026-10-20/task/provision-cache-fixture configure --python /Users/andyconley/Documents/Codex/2026-10-20/task/.venv/bin/python --cache /Users/andyconley/Documents/Codex/2026-10-20/task/provision-cache-fixture/cache --model fixture:copied --ollama http://127.0.0.1:11434",
+    "prepare_wheelhouse": "python3.12 -m pip download --index-url https://pypi.org/simple --only-binary=:all: --no-deps -r /Users/andyconley/Documents/Codex/2026-10-20/task/flow-integration/knowledge/requirements.lock -d /path/to/knowledge-wheels"
+  },
+  "next": "After passing diagnostics: flow knowledge configure with these explicit paths, then flow knowledge process and flow knowledge status",
+  "downloads_attempted": false,
+  "local_model_probe_mocked": true,
+  "embedding_files_copied_not_downloaded": true
+}

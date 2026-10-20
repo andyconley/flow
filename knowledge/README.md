@@ -27,37 +27,91 @@ Do not independently edit the lossless embedded original without reconciling its
 whole directory or its backup ZIPs does not require the Flow runtime. Models and
 embedding caches must also be provisioned locally; they are not in Git.
 
-## Isolated dependency setup
+## Supported local provisioning
 
-Knowledge has a separate Python 3.12 environment, not the Flow runtime environment.
-Exact resolved pins are in `requirements.lock`; BM 0.23.2 source hashes are checked
-before any BM operation. The private search projection shim requires re-audit
-before changing that version or source distribution. CocoIndex is 1.0.25, using
-local file targets and LMDB state, with no Neo4j or PostgreSQL service.
-
-Start with `flow knowledge doctor`: it exits nonzero when the local Python, audited dependencies, offline embedding cache or local model is missing, and prints exact setup commands with the installed requirements path. Use `doctor --python ... --cache ... --model ... --ollama ...` to diagnose proposed paths before configuring them. `flow knowledge status` also shows provisioning state and points to this command. Diagnostics do not install packages or download models.
-
-Prepare a wheelhouse explicitly from the official registry (or transfer an already
-verified wheelhouse for an offline machine):
+A normal install seeds authored notes without downloading models/dependencies. Run:
 
 ```sh
-python3.12 -m pip download --index-url https://pypi.org/simple --only-binary=:all: --no-deps -r "$HOME/.flow/v2/current/knowledge/requirements.lock" -d /path/to/knowledge-wheels
-flow knowledge setup --python /path/to/python3.12 --wheelhouse /path/to/knowledge-wheels
-flow knowledge configure --python "$HOME/.flow/v2/state/knowledge/runtime/bin/python" --cache /path/to/preprovisioned/fastembed_cache --model qwen3:4b --ollama http://127.0.0.1:11434
+flow knowledge setup                 # show sources, disk/network plan; no downloads
+flow knowledge setup --download      # explicit consent to acquire pinned local assets
 flow knowledge doctor
-flow knowledge process
 flow knowledge status
 ```
 
-The embedding cache must contain BAAI/bge-small-en-v1.5 (384 dimensions). The
-Ollama model must already be installed locally. Configure records its digest and
-reconciliation detects changes to that tag. Only unauthenticated loopback Ollama
-is accepted; inference workers strip credential variables, disable telemetry,
-and force Hugging Face offline. No dependency or model downloads occur during
-agent launch. Wheel pins are exact but this lock has no wheel hashes; verify a
-transferred wheelhouse's provenance yourself. The POC's observed pre-disable
-telemetry uncertainty is not evidence that every third-party library is universally
-air-gapped: use an OS network sandbox for a strict offline deployment/test.
+`--download` is the explicit user invocation/consent boundary. It acquires all
+187 exact Python dependency pins from the official PyPI release APIs,
+validates registry SHA-256/size, then installs offline with
+`--require-hashes`. It acquires the FastEmbed-maintained Qdrant conversion of
+BAAI/bge-small-en-v1.5 from the immutable Hugging Face revision in
+`embedding.lock.json`, verifies every file's committed SHA-256/size, and eagerly
+loads it with networking disabled. It never uses another registry or an unapproved source build.
+Two exact legacy dependencies (pybars3 and PyMeta3) only publish source archives.
+Only these sources, pinned by committed SHA-256, are built into wheels using four
+pinned build-tool wheels inside a disposable macOS environment with all networking
+denied. All other dependencies require compatible official binary wheels.
+Source/build-tool pins are in `source-builds.lock.json` and
+`build-requirements.lock`; resulting wheel/source receipts retain provenance. Progress includes each artifact name/size and validation
+stage. HTTPS downloads use no user credentials or authenticated proxies.
+
+Reserve at least **6 GiB free initially**, plus space for notes/backups/generations
+and separately supplied Ollama weights. The reference macOS arm64 metadata resolution totals about 112 MB of main
+dependency artifacts plus 3.2 MB of build tools; metadata adds some traffic.
+Other platform/build selections can vary. Embedding files add 67,179,163 bytes
+(about 67 MB). Verified completed profiles can be reused with 128 MiB free.
+Python 3.12 is required; the managed Flow interpreter is selected by default.
+`--python /path/to/python3.12` can select a matching architecture explicitly.
+No Ollama chat weights are downloaded by Flow. Existing setup selections are
+preserved unless `--model` or `--ollama` is explicitly supplied.
+
+Flow reuses an already running unauthenticated loopback Ollama server when the
+requested extraction model is installed. The initial extraction default is
+`qwen3:4b`. If unavailable, setup exits nonzero with `assets_ready: true`, retains
+all verified assets and the prior configuration, and prints exact `ollama serve`
+and `ollama pull` commands for the selected endpoint/model. Provision that model
+explicitly, then rerun the same Flow setup command. Flow never starts Ollama,
+changes its model store, expands credentials, or changes the agent provider/model.
+The extraction model and the qualified ACP agent model (`gpt-oss:20b`) serve
+different roles. Choosing extraction does not select the agent provider.
+
+Once dependency/cache/model checks pass, setup backs up notes, configures a
+versioned runtime/cache under `~/.flow/v2/state/knowledge/provisioning/<id>/`,
+reconciles the shared corpus and automatically queues initial indexing. Wait for
+`flow knowledge status` to show `ready`. No manual wheel/cache assembly or
+`configure` command is needed for this normal path. Published snapshots and
+existing notes survive failed/interrupted acquisition. Partial downloads are
+private and removed on failure; verified files are reused on explicit retry.
+`--rebuild-runtime` creates a new isolated environment while retaining the old
+one, for a failed or manually modified managed environment. Retention/pruning is
+not automatic. Ordinary Flow commands never invoke acquisition.
+
+### Offline transfer mode
+
+On a connected machine, run the explicit online setup and transfer its verified
+`provisioning/<id>/wheels/` and `embedding-cache/` folders. The wheel folder must
+include `verified.json`; tampered/missing files or mismatched pins fail before
+installation, without network fallback. A complete local Ollama model/server is
+also required. On the offline machine:
+
+```sh
+flow knowledge setup --python /path/to/python3.12 --wheelhouse /media/flow/wheels
+flow knowledge configure --python "$HOME/.flow/v2/state/knowledge/runtime/bin/python" --cache /media/flow/embedding-cache --model qwen3:4b --ollama http://127.0.0.1:11434
+flow knowledge doctor
+flow knowledge status
+```
+
+The offline environment is separate from Flow's runtime. Existing offline
+`runtime/` directories are not overwritten; use a fresh isolated environment or
+inspect/remove only a failed environment before retrying. Notes, backups and
+exports remain intact. `doctor` accepts proposed `--python`, `--cache`, `--model`
+and `--ollama` paths before configuration, reports failures separately and never
+downloads. Status exposes the supported setup/diagnostics commands.
+
+Basic Memory is 0.23.2 with audited Python source hashes; CocoIndex is 1.0.25
+with local file targets and LMDB state. Inference workers strip credentials,
+disable telemetry and force Hugging Face offline. Use an OS network sandbox for
+a strict air gap: third-party telemetry configuration alone is not a universal
+network-isolation guarantee. Online acquisition is intentionally separate from
+subsequent local inference and retrieval.
 
 ## Updates and local edits
 
@@ -142,4 +196,4 @@ The read-only production ACP knowledge-use task passes with Codex ACP, local Oll
 
 If offline setup fails, its partial `runtime/` is retained and replacement is refused. Inspect/remove only that failed virtual environment, or provision another isolated environment and configure its Python. Notes, backups and exports must remain intact.
 
-The extraction model (`qwen3:4b` in these setup examples) and the ACP task model (`gpt-oss:20b` in the qualified test) have different roles. Configuring extraction does not select the agent provider/model. The native transport remains explicit, as described in NATIVE-ACP-RESULTS.md.
+The native ACP transport remains explicit, as described in NATIVE-ACP-RESULTS.md.

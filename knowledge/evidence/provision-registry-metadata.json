@@ -1,0 +1,1502 @@
+{
+  "passed": true,
+  "metadata_only": true,
+  "large_artifacts_downloaded": false,
+  "rows": [
+    {
+      "package": "agent-detector",
+      "version": "2.0.0",
+      "filename": "agent_detector-2.0.0-py3-none-any.whl",
+      "size": 9352,
+      "sha256": "22c6a1c9c23894a12f55aea625f060b8d3330fba774de72d02d5442bb580417f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "aiofile",
+      "version": "3.12.3",
+      "filename": "aiofile-3.12.3-py3-none-any.whl",
+      "size": 22122,
+      "sha256": "5c1bcc9e929c50834608e8cc1a4cc1d7503eb60c15a535b779fd39e2f372c017",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "aiofiles",
+      "version": "25.1.0",
+      "filename": "aiofiles-25.1.0-py3-none-any.whl",
+      "size": 14668,
+      "sha256": "abe311e527c862958650f9438e859c1fa7568a141b22abcd015e120e86a85695",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "aiohappyeyeballs",
+      "version": "2.7.1",
+      "filename": "aiohappyeyeballs-2.7.1-py3-none-any.whl",
+      "size": 15038,
+      "sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "aiohttp",
+      "version": "3.14.5",
+      "filename": "aiohttp-3.14.5-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 548067,
+      "sha256": "d079c0a0135c36e7beb6f1c88087c8f108dc5891cdd0b5eafa778421bda70ed2",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "aiosignal",
+      "version": "1.4.0",
+      "filename": "aiosignal-1.4.0-py3-none-any.whl",
+      "size": 7490,
+      "sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "aiosqlite",
+      "version": "0.22.1",
+      "filename": "aiosqlite-0.22.1-py3-none-any.whl",
+      "size": 17405,
+      "sha256": "21c002eb13823fad740196c5a2e9d8e62f6243bd9e7e4a1f87fb5e44ecb4fceb",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "alembic",
+      "version": "1.20.0",
+      "filename": "alembic-1.20.0-py3-none-any.whl",
+      "size": 268719,
+      "sha256": "77eb101048d95f982c0353e9233404889dcd7a6fc244c107836c0e2fc9cf7d9d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "annotated-doc",
+      "version": "0.0.5",
+      "filename": "annotated_doc-0.0.5-py3-none-any.whl",
+      "size": 5302,
+      "sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "annotated-types",
+      "version": "0.8.0",
+      "filename": "annotated_types-0.8.0-py3-none-any.whl",
+      "size": 13427,
+      "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "anyio",
+      "version": "4.15.1",
+      "filename": "anyio-4.15.1-py3-none-any.whl",
+      "size": 132079,
+      "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "asyncpg",
+      "version": "0.32.0",
+      "filename": "asyncpg-0.32.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 681566,
+      "sha256": "7cb31f7a8472ddc6b6f5c9da1290e901d5c77c8441c7213bd13b13ef6fe6359c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "attrs",
+      "version": "26.1.0",
+      "filename": "attrs-26.1.0-py3-none-any.whl",
+      "size": 67548,
+      "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "authlib",
+      "version": "1.9.1",
+      "filename": "authlib-1.9.1-py2.py3-none-any.whl",
+      "size": 266042,
+      "sha256": "8b9be8b1e5174dcbf5520e984f1a22dc2edae5b6e40a61d4cedbf86b97e9e69b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "basic-memory",
+      "version": "0.23.2",
+      "filename": "basic_memory-0.23.2-py3-none-any.whl",
+      "size": 1401216,
+      "sha256": "a1679a16319d8a7fb9c0486033551a47dedc0fbae7f5da81444eb3c4bf0ccecb",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "beartype",
+      "version": "0.23.1",
+      "filename": "beartype-0.23.1-py3-none-any.whl",
+      "size": 1582101,
+      "sha256": "4461b4dc57e3fdd6c8a8464b22cf118002eea107c33e9fef651c69068ab3cce3",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "cachetools",
+      "version": "7.2.4",
+      "filename": "cachetools-7.2.4-py3-none-any.whl",
+      "size": 18571,
+      "sha256": "4cfbebf3eec4040d2073b19c460511ad47eef7b852dbf9a0d385099b4dafa31e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "caio",
+      "version": "0.12.9",
+      "filename": "caio-0.12.9-cp312-cp312-macosx_10_13_universal2.whl",
+      "size": 49041,
+      "sha256": "554c6ee883a0f1e95236d85b8e7d8187b212668855ac3a858acb80f5e2e82e82",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "certifi",
+      "version": "2026.10.19",
+      "filename": "certifi-2026.10.19-py3-none-any.whl",
+      "size": 136464,
+      "sha256": "42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "cffi",
+      "version": "2.1.1",
+      "filename": "cffi-2.1.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 184719,
+      "sha256": "f81b3b8f3d4e343550fa4baa0e479bba9f2d29ce9c2e9b51d1ce1718d7442fcf",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "charset-normalizer",
+      "version": "3.5.2",
+      "filename": "charset_normalizer-3.5.2-cp312-cp312-macosx_10_13_universal2.whl",
+      "size": 367780,
+      "sha256": "ed2a239c0ea213acc1908150a3037257083c7c083128f1a4cec2ec4b97dca491",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "click",
+      "version": "8.5.0",
+      "filename": "click-8.5.0-py3-none-any.whl",
+      "size": 125251,
+      "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "cocoindex",
+      "version": "1.0.25",
+      "filename": "cocoindex-1.0.25-cp311-abi3-macosx_11_0_arm64.whl",
+      "size": 9735888,
+      "sha256": "33670ad08f16fa13b17758467d28ef27197c5c3afccc8e4713ade32bda192b1c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "cryptography",
+      "version": "50.0.2",
+      "filename": "cryptography-50.0.2-cp311-abi3-macosx_11_0_arm64.whl",
+      "size": 3914904,
+      "sha256": "fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "cyclopts",
+      "version": "5.2.0",
+      "filename": "cyclopts-5.2.0-py3-none-any.whl",
+      "size": 289196,
+      "sha256": "5da2a5d65164e03008621fc4795946b88a722b881398b5dfa58afa6218342cff",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "dateparser",
+      "version": "1.4.3",
+      "filename": "dateparser-1.4.3-py3-none-any.whl",
+      "size": 322384,
+      "sha256": "cbce86c64e0cea5c54c84c015d34c903d46c51bfad50632bf2f05a6141d10c05",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "detect-installer",
+      "version": "0.2.1",
+      "filename": "detect_installer-0.2.1-py3-none-any.whl",
+      "size": 5371,
+      "sha256": "87e2ce7d05cb108b178f8e45bb80d3d88c0cb4b397983345c18ad6562e02e620",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "distro",
+      "version": "1.9.0",
+      "filename": "distro-1.9.0-py3-none-any.whl",
+      "size": 20277,
+      "sha256": "7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "dnspython",
+      "version": "2.9.0",
+      "filename": "dnspython-2.9.0-py3-none-any.whl",
+      "size": 354822,
+      "sha256": "9a4aedb833c3c1b49214d04d44d3032ab7a9135f7c1d29a549b4ff78fd82fda9",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "docstring-parser",
+      "version": "0.18.0",
+      "filename": "docstring_parser-0.18.0-py3-none-any.whl",
+      "size": 22484,
+      "sha256": "b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "email-validator",
+      "version": "2.3.0",
+      "filename": "email_validator-2.3.0-py3-none-any.whl",
+      "size": 35604,
+      "sha256": "80f13f623413e6b197ae73bb10bf4eb0908faf509ad8362c5edeb0be7fd450b4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "exceptiongroup",
+      "version": "1.3.1",
+      "filename": "exceptiongroup-1.3.1-py3-none-any.whl",
+      "size": 16740,
+      "sha256": "a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "executing",
+      "version": "2.3.0",
+      "filename": "executing-2.3.0-py3-none-any.whl",
+      "size": 29393,
+      "sha256": "736e859c9f8701f11fcf516856f26f562e04776387824b43a35a1dfe21c84122",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastapi",
+      "version": "0.150.0",
+      "filename": "fastapi-0.150.0-py3-none-any.whl",
+      "size": 145281,
+      "sha256": "e566bc3f1347cfacf61f2f9ea1d7ab4576fbcff02eb9747c2807b8ced16d9e9a",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastapi-cli",
+      "version": "0.0.32",
+      "filename": "fastapi_cli-0.0.32-py3-none-any.whl",
+      "size": 14670,
+      "sha256": "8dcc286fa32f01bbd3f65dd09cfd5a2540ed5f2230b77db7fd30978d6165f3c4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastapi-cloud-cli",
+      "version": "0.26.0",
+      "filename": "fastapi_cloud_cli-0.26.0-py3-none-any.whl",
+      "size": 108653,
+      "sha256": "94029f92f3dc4289b376e1213f0d6cc7c30d4f32de7e47b5effc6dc754ab9ce9",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastar",
+      "version": "0.12.0",
+      "filename": "fastar-0.12.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 624788,
+      "sha256": "787e3c8018848b56b7e47918f9a9ec0e13a68e39af6e4d386cf083b2973d254b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastembed",
+      "version": "0.9.0",
+      "filename": "fastembed-0.9.0-py3-none-any.whl",
+      "size": 142280,
+      "sha256": "273d408edec8c0f161711d8f6e44e4a5b559d18e8edf6bf805415d55dc772846",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastmcp",
+      "version": "4.0.0b1",
+      "filename": "fastmcp-4.0.0b1-py3-none-any.whl",
+      "size": 8064,
+      "sha256": "d66eb7b0763ffff2ae0fc573778ea25604dcb7e59769e5afaf9851a806eb1129",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastmcp-slim",
+      "version": "4.0.0b1",
+      "filename": "fastmcp_slim-4.0.0b1-py3-none-any.whl",
+      "size": 827975,
+      "sha256": "dd907a3db5a2f479ca958c30157e227b4f7b340a56d333eb91de95719254597a",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fastuuid",
+      "version": "0.14.0",
+      "filename": "fastuuid-0.14.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl",
+      "size": 510164,
+      "sha256": "77e94728324b63660ebf8adb27055e92d2e4611645bf12ed9d88d30486471d0a",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "filelock",
+      "version": "4.2.4",
+      "filename": "filelock-4.2.4-py3-none-any.whl",
+      "size": 162475,
+      "sha256": "301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "flatbuffers",
+      "version": "25.12.19",
+      "filename": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "size": 26661,
+      "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "frozenlist",
+      "version": "1.8.0",
+      "filename": "frozenlist-1.8.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 50448,
+      "sha256": "f833670942247a14eafbb675458b4e61c82e002a148f49e68257b79296e865c4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "fsspec",
+      "version": "2026.9.0",
+      "filename": "fsspec-2026.9.0-py3-none-any.whl",
+      "size": 221738,
+      "sha256": "8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "googleapis-common-protos",
+      "version": "1.75.5",
+      "filename": "googleapis_common_protos-1.75.5-py3-none-any.whl",
+      "size": 307737,
+      "sha256": "d7285525c23039db98f2463e6d5a4f9b958b94d497f03a844ece3259c4e72d5d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "greenlet",
+      "version": "3.5.6",
+      "filename": "greenlet-3.5.6-cp312-cp312-macosx_11_0_universal2.whl",
+      "size": 295668,
+      "sha256": "a5876d0a60355af98d535c47f6cd6eb0f8a432396dab26845d380b92f8412422",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "griffelib",
+      "version": "2.4.0",
+      "filename": "griffelib-2.4.0-py3-none-any.whl",
+      "size": 172791,
+      "sha256": "0a7db47b0bdf5123a6ceca2f71aa996742a4f04d9048046778f4a9006772d27f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "h11",
+      "version": "0.16.0",
+      "filename": "h11-0.16.0-py3-none-any.whl",
+      "size": 37515,
+      "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "hf-xet",
+      "version": "1.7.0",
+      "filename": "hf_xet-1.7.0-cp38-abi3-macosx_11_0_arm64.whl",
+      "size": 3560352,
+      "sha256": "59fba37039233c7fcbe196817d6cdcf1b40dfb17b410f229d85b0cf0a1848da4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "httpcore",
+      "version": "1.0.9",
+      "filename": "httpcore-1.0.9-py3-none-any.whl",
+      "size": 78784,
+      "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "httpcore2",
+      "version": "2.15.1",
+      "filename": "httpcore2-2.15.1-py3-none-any.whl",
+      "size": 85055,
+      "sha256": "730f603058c260a3288378217b464713350c23e3b8fe8bba753701054032d98a",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "httptools",
+      "version": "0.9.0",
+      "filename": "httptools-0.9.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 119039,
+      "sha256": "f9ccc9884241efceb4547a92955d128574c864681f11b7ea3ecbde295fafbe8b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "httpx",
+      "version": "0.28.1",
+      "filename": "httpx-0.28.1-py3-none-any.whl",
+      "size": 73517,
+      "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "httpx2",
+      "version": "2.15.1",
+      "filename": "httpx2-2.15.1-py3-none-any.whl",
+      "size": 96411,
+      "sha256": "75841cd83d16b417f7d6da8f2089ce8120806efdbf96af37d46c5129c49015be",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "huggingface-hub",
+      "version": "1.33.0",
+      "filename": "huggingface_hub-1.33.0-py3-none-any.whl",
+      "size": 846435,
+      "sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "idna",
+      "version": "3.20",
+      "filename": "idna-3.20-py3-none-any.whl",
+      "size": 69583,
+      "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "importlib-metadata",
+      "version": "8.9.0",
+      "filename": "importlib_metadata-8.9.0-py3-none-any.whl",
+      "size": 27220,
+      "sha256": "e0f761b6ea91ced3b0844c14c9d955224d538105921f8e6754c00f6ca79fba7f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "iniconfig",
+      "version": "2.3.1",
+      "filename": "iniconfig-2.3.1-py3-none-any.whl",
+      "size": 7552,
+      "sha256": "9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jaraco-classes",
+      "version": "3.4.0",
+      "filename": "jaraco.classes-3.4.0-py3-none-any.whl",
+      "size": 6777,
+      "sha256": "f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jaraco-context",
+      "version": "6.1.2",
+      "filename": "jaraco_context-6.1.2-py3-none-any.whl",
+      "size": 7871,
+      "sha256": "bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jaraco-functools",
+      "version": "4.6.0",
+      "filename": "jaraco_functools-4.6.0-py3-none-any.whl",
+      "size": 11677,
+      "sha256": "99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jinja2",
+      "version": "3.1.6",
+      "filename": "jinja2-3.1.6-py3-none-any.whl",
+      "size": 134899,
+      "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jiter",
+      "version": "0.17.0",
+      "filename": "jiter-0.17.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 321695,
+      "sha256": "61aed66ee042b3b49ef85fdf75714234d055d89d8496ac1c6e47f89e7a30d5e4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "joserfc",
+      "version": "1.7.7",
+      "filename": "joserfc-1.7.7-py3-none-any.whl",
+      "size": 71758,
+      "sha256": "06979cfbab78bc802f14c0358f32969826cc26720e13cb38926ffdc86bc0cb2c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jsonpatch",
+      "version": "1.36",
+      "filename": "jsonpatch-1.36-py3-none-any.whl",
+      "size": 17094,
+      "sha256": "aa3ffbc15816644ffcc6b13712dacbc99f6f6dde302abc66983f9831d35630a5",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jsonpointer",
+      "version": "3.4",
+      "filename": "jsonpointer-3.4-py3-none-any.whl",
+      "size": 9047,
+      "sha256": "136e2e3273fd82a1502274f56ec172f331b6a1703d86a1824d503af4d9a96142",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jsonref",
+      "version": "1.1.0",
+      "filename": "jsonref-1.1.0-py3-none-any.whl",
+      "size": 9425,
+      "sha256": "590dc7773df6c21cbf948b5dac07a72a251db28b0238ceecce0a2abfa8ec30a9",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jsonschema",
+      "version": "4.26.0",
+      "filename": "jsonschema-4.26.0-py3-none-any.whl",
+      "size": 90630,
+      "sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jsonschema-path",
+      "version": "0.5.0",
+      "filename": "jsonschema_path-0.5.0-py3-none-any.whl",
+      "size": 24077,
+      "sha256": "2790a070bc7abb08ea3dbe4d340ece4efadf639223001f020c7503229ba068e2",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "filename": "jsonschema_specifications-2025.9.1-py3-none-any.whl",
+      "size": 18437,
+      "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "keyring",
+      "version": "25.7.0",
+      "filename": "keyring-25.7.0-py3-none-any.whl",
+      "size": 39160,
+      "sha256": "be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langchain-core",
+      "version": "1.6.12",
+      "filename": "langchain_core-1.6.12-py3-none-any.whl",
+      "size": 573838,
+      "sha256": "39b07aed976baac14c47b7a21e3c7d4073362bccf06cf8799c585dcc9548547d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langchain-protocol",
+      "version": "0.0.19",
+      "filename": "langchain_protocol-0.0.19-py3-none-any.whl",
+      "size": 7327,
+      "sha256": "4cdf879a492a35980fd859ae792d3c65458ccaae504e183c9a10d7eac1f0720f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langgraph",
+      "version": "1.2.16",
+      "filename": "langgraph-1.2.16-py3-none-any.whl",
+      "size": 260357,
+      "sha256": "aeceb1bc49488409f12b02f1e51881099391d9e85bcfd78e1dbead71831c41b5",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langgraph-checkpoint",
+      "version": "4.3.0",
+      "filename": "langgraph_checkpoint-4.3.0-py3-none-any.whl",
+      "size": 58063,
+      "sha256": "bedfafe2f997ded60e4fa593e79f56f436a6e45586392dc382aa810d0c751c64",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langgraph-checkpoint-sqlite",
+      "version": "3.1.2",
+      "filename": "langgraph_checkpoint_sqlite-3.1.2-py3-none-any.whl",
+      "size": 41844,
+      "sha256": "249640b84efd4872585a9ce596a63c2593e543f748341791591aeaf4c878329c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langgraph-prebuilt",
+      "version": "1.1.1",
+      "filename": "langgraph_prebuilt-1.1.1-py3-none-any.whl",
+      "size": 42254,
+      "sha256": "fae17c22562e501940eb7aa052a15c58a431febbabf33f8ad172e1b44354a7e4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langgraph-sdk",
+      "version": "0.4.8",
+      "filename": "langgraph_sdk-0.4.8-py3-none-any.whl",
+      "size": 164560,
+      "sha256": "bef8ac54bdfe3ac2f7eba5be2f322dde296701b39e1c1aa403302f08d273fab5",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "langsmith",
+      "version": "0.14.11",
+      "filename": "langsmith-0.14.11-py3-none-any.whl",
+      "size": 869018,
+      "sha256": "9ecca7633df228ef2c44563f7187e426b8a79e7c5c2351c5dd8c9074c61512e7",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "litellm",
+      "version": "1.91.5",
+      "filename": "litellm-1.91.5-py3-none-any.whl",
+      "size": 16675846,
+      "sha256": "db09c6ea0b7c7de034b6c8b628208b000b54e02ef557468f84c2e63fbd7c8560",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "logfire",
+      "version": "5.2.0",
+      "filename": "logfire-5.2.0-py3-none-any.whl",
+      "size": 495128,
+      "sha256": "c73dd02cfe048f2254e803962aa992d7f53217d121f3488e797926c30442342c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "loguru",
+      "version": "0.7.3",
+      "filename": "loguru-0.7.3-py3-none-any.whl",
+      "size": 61595,
+      "sha256": "31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mako",
+      "version": "1.4.3",
+      "filename": "mako-1.4.3-py3-none-any.whl",
+      "size": 80164,
+      "sha256": "723296007c870bfd6b3f0c3230dba7198096e5269297ebf5e4eff9e7ffa39d4f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "markdown-it-py",
+      "version": "4.2.0",
+      "filename": "markdown_it_py-4.2.0-py3-none-any.whl",
+      "size": 91687,
+      "sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "markupsafe",
+      "version": "3.0.4",
+      "filename": "markupsafe-3.0.4-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 12050,
+      "sha256": "0930db9bdc62d22944e10b066448bb65dc9abe9112880c7cab8da54db4284d5f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mcp",
+      "version": "2.3.0",
+      "filename": "mcp-2.3.0-py3-none-any.whl",
+      "size": 368664,
+      "sha256": "dd0c44c089d16453e8ae31a3877a0054d7a2314caaa81f5e0541b9b1734b2377",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mcp-types",
+      "version": "2.3.0",
+      "filename": "mcp_types-2.3.0-py3-none-any.whl",
+      "size": 69108,
+      "sha256": "968efdbdaedfab06adae40d378a34395f1090c5921d4be3c9cde283aaf76d91d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mdformat",
+      "version": "1.0.0",
+      "filename": "mdformat-1.0.0-py3-none-any.whl",
+      "size": 53288,
+      "sha256": "bca015d65a1d063a02e885a91daee303057bc7829c2cd37b2075a50dbb65944b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mdformat-gfm",
+      "version": "1.0.0",
+      "filename": "mdformat_gfm-1.0.0-py3-none-any.whl",
+      "size": 10970,
+      "sha256": "7305a50efd2a140d7c83505b58e3ac5df2b09e293f9bbe72f6c7bee8c678b005",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mdformat-frontmatter",
+      "version": "2.1.2",
+      "filename": "mdformat_frontmatter-2.1.2-py3-none-any.whl",
+      "size": 4927,
+      "sha256": "bcbb1dd7e35ce4387603acd32f2c092dd4518bbfaa2a4b801a0f29a4e69bf2ca",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mdit-py-plugins",
+      "version": "0.6.1",
+      "filename": "mdit_py_plugins-0.6.1-py3-none-any.whl",
+      "size": 66663,
+      "sha256": "214c82fb2ac524472ab6a5bcab1de80f73b50443e187f401bfd77efbc7c6481d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mdurl",
+      "version": "0.1.2",
+      "filename": "mdurl-0.1.2-py3-none-any.whl",
+      "size": 9979,
+      "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "mmh3",
+      "version": "5.3.1",
+      "filename": "mmh3-5.3.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 39563,
+      "sha256": "bd928feed4a6f28ea8d2b48c1a41eb5a35fb62cfd1e0f06c3335378cc59b6c4d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "more-itertools",
+      "version": "11.2.1",
+      "filename": "more_itertools-11.2.1-py3-none-any.whl",
+      "size": 74405,
+      "sha256": "35a7377edd1dd6608dcb2cdf534ded55ea32d49448875ad042cd3f879fb1ded0",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "msgspec",
+      "version": "0.22.0",
+      "filename": "msgspec-0.22.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 193044,
+      "sha256": "b60b43425a47eb9cfe987f6874e354ca7c760e58e295b4e2273ff03574df28a1",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "multidict",
+      "version": "7.1.0",
+      "filename": "multidict-7.1.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 98294,
+      "sha256": "f8e95c95039eab6a2dad8c83c38ab87fc5431d28849e0c8a7e2a4e70ba38710d",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "nest-asyncio",
+      "version": "1.6.0",
+      "filename": "nest_asyncio-1.6.0-py3-none-any.whl",
+      "size": 5195,
+      "sha256": "87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "nodeenv",
+      "version": "1.11.0",
+      "filename": "nodeenv-1.11.0-py2.py3-none-any.whl",
+      "size": 34277,
+      "sha256": "edaa16e6c14d7cf395d75d4bbd5a26390f4dc06501a33b4e76282b02cc688a25",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "numpy",
+      "version": "2.5.4",
+      "filename": "numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl",
+      "size": 5451717,
+      "sha256": "9cb18a327b49c5c337f972b03682f6a49855525faaf3c0d3e9c96cd0fd8880a8",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "onnxruntime",
+      "version": "1.31.0",
+      "filename": "onnxruntime-1.31.0-cp312-cp312-macosx_14_0_arm64.whl",
+      "size": 20882054,
+      "sha256": "aaab9b3af536b06ca27ab5e35e3d429c97457ce76cf298af103f687e8b9975c0",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "openai",
+      "version": "2.54.0",
+      "filename": "openai-2.54.0-py3-none-any.whl",
+      "size": 1660351,
+      "sha256": "89089789197ccdb87f173a03145ed1598d00795220c93e96cf712b1cbf5e5f2b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "openapi-pydantic",
+      "version": "0.6.0",
+      "filename": "openapi_pydantic-0.6.0-py3-none-any.whl",
+      "size": 96931,
+      "sha256": "8bd6d548a250da37db96f461bcd52b3468e8834ad7d6db14b00a6b2ebbd163a3",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-api",
+      "version": "1.45.1",
+      "filename": "opentelemetry_api-1.45.1-py3-none-any.whl",
+      "size": 60256,
+      "sha256": "b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-exporter-http-transport",
+      "version": "0.66b1",
+      "filename": "opentelemetry_exporter_http_transport-0.66b1-py3-none-any.whl",
+      "size": 12155,
+      "sha256": "2f95404bdee7f9d2d529c7de56c7bd86d014d774d8fbf137810e0167f8a492bf",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-exporter-otlp-common",
+      "version": "0.66b1",
+      "filename": "opentelemetry_exporter_otlp_common-0.66b1-py3-none-any.whl",
+      "size": 12385,
+      "sha256": "00ff8592c3a7cb729ff3fdc7ffa12372c243bdf2163e80c180994d0c7bd83ee9",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-exporter-otlp-proto-common",
+      "version": "1.45.1",
+      "filename": "opentelemetry_exporter_otlp_proto_common-1.45.1-py3-none-any.whl",
+      "size": 15393,
+      "sha256": "2f446183ae7047b036226f1d846c41a834b0e8755ad13b51a51dd38952eb466c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-exporter-otlp-proto-http",
+      "version": "1.45.1",
+      "filename": "opentelemetry_exporter_otlp_proto_http-1.45.1-py3-none-any.whl",
+      "size": 22180,
+      "sha256": "24a97cf3753c7fb52fad44a696e452ff371686339e2acf3309e2eda3d0230700",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-instrumentation",
+      "version": "0.66b1",
+      "filename": "opentelemetry_instrumentation-0.66b1-py3-none-any.whl",
+      "size": 36904,
+      "sha256": "4c4aa14dc9a24a02325a9d4c42c4d0208dbb1374c2b1b8fe6c9392d59f3e1008",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-proto",
+      "version": "1.45.1",
+      "filename": "opentelemetry_proto-1.45.1-py3-none-any.whl",
+      "size": 72488,
+      "sha256": "f38e2a8413053c180cd3d2637fbb279673ec2f6a6e09c995aafa2f452c52b46e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-sdk",
+      "version": "1.45.1",
+      "filename": "opentelemetry_sdk-1.45.1-py3-none-any.whl",
+      "size": 140063,
+      "sha256": "c604c11dc429810812348989115fa44bd558772a3d7442afc43d024f2c250ca4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "opentelemetry-semantic-conventions",
+      "version": "0.66b1",
+      "filename": "opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl",
+      "size": 206279,
+      "sha256": "d4cddeb4315490b35213f55e2bdc9ac54bb1e4d318927475bed62b35545e581b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "orjson",
+      "version": "3.13.0",
+      "filename": "orjson-3.13.0-cp312-cp312-macosx_15_0_arm64.whl",
+      "size": 123364,
+      "sha256": "6ff2a2c67f35202f7d823753d38ad371a9b7fc297567cdfff4420e763cb9f6f8",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "ormsgpack",
+      "version": "1.13.0",
+      "filename": "ormsgpack-1.13.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl",
+      "size": 442511,
+      "sha256": "0036b68293a526b852fad7e490e30f4646fc360a76b4d587800c96bece9df657",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "packaging",
+      "version": "26.3",
+      "filename": "packaging-26.3-py3-none-any.whl",
+      "size": 129956,
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pathable",
+      "version": "0.6.0",
+      "filename": "pathable-0.6.0-py3-none-any.whl",
+      "size": 18983,
+      "sha256": "82c4ca6c98c502ad12e0d4e9779b6210afee93c38990988c8c5d1b49bdcdf566",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pillow",
+      "version": "12.3.0",
+      "filename": "pillow-12.3.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 4780323,
+      "sha256": "ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "platformdirs",
+      "version": "4.13.5",
+      "filename": "platformdirs-4.13.5-py3-none-any.whl",
+      "size": 32779,
+      "sha256": "53d3ec4280b815c1e0b02edad7f9ee8fda1ba9c0865dd9c2e6e63849ce82fc1e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pluggy",
+      "version": "1.7.0",
+      "filename": "pluggy-1.7.0-py3-none-any.whl",
+      "size": 27082,
+      "sha256": "7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "propcache",
+      "version": "0.5.4",
+      "filename": "propcache-0.5.4-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 52460,
+      "sha256": "87a3caecf8095e48dc72f84bfa42e23a848cf410cc9cc13031fba4869b706a21",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "protobuf",
+      "version": "7.36.2",
+      "filename": "protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl",
+      "size": 456039,
+      "sha256": "cbc70b17ee27e28894c7fee8bb04be1abead49e936bc70eb60052531eee2079e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "psutil",
+      "version": "7.2.2",
+      "filename": "psutil-7.2.2-cp36-abi3-macosx_11_0_arm64.whl",
+      "size": 129859,
+      "sha256": "1a7b04c10f32cc88ab39cbf606e117fd74721c831c98a27dc04578deb0c16979",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "psycopg",
+      "version": "3.3.1",
+      "filename": "psycopg-3.3.1-py3-none-any.whl",
+      "size": 212760,
+      "sha256": "e44d8eae209752efe46318f36dd0fdf5863e928009338d736843bb1084f6435c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "py-key-value-aio",
+      "version": "0.4.6",
+      "filename": "py_key_value_aio-0.4.6-py3-none-any.whl",
+      "size": 171289,
+      "sha256": "820b30c7959fc738ea3d00160cdb10cd258f51e38737b2add530defeea1ded77",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "py-rust-stemmers",
+      "version": "0.1.8",
+      "filename": "py_rust_stemmers-0.1.8-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 275449,
+      "sha256": "51d0042d2a92ef0f7048bfc06b6c2a02306af31ea47f09d24b34e4b7e63c4e80",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pybars3",
+      "version": "0.9.7",
+      "kind": "allowlisted-source",
+      "size": 29203,
+      "sha256": "6ac847e905e53b9c5b936af112c910475e27bf767f79f4528c16f9af1ec0e252"
+    },
+    {
+      "package": "pycparser",
+      "version": "3.11",
+      "filename": "pycparser-3.11-py3-none-any.whl",
+      "size": 51178,
+      "sha256": "51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pydantic",
+      "version": "2.14.1",
+      "filename": "pydantic-2.14.1-py3-none-any.whl",
+      "size": 488106,
+      "sha256": "9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pydantic-extra-types",
+      "version": "2.11.1",
+      "filename": "pydantic_extra_types-2.11.1-py3-none-any.whl",
+      "size": 79526,
+      "sha256": "1722ea2bddae5628ace25f2aa685b69978ef533123e5638cfbddb999e0100ec1",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pydantic-settings",
+      "version": "2.16.0",
+      "filename": "pydantic_settings-2.16.0-py3-none-any.whl",
+      "size": 80364,
+      "sha256": "7e73acf7f61936a15e5a3b6eedaea29f133357faf7272f2607ba479b049dd7f2",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pydantic-core",
+      "version": "2.50.1",
+      "filename": "pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 2025779,
+      "sha256": "e8e1d6ce820aa23317e8209a86bd65a540973c12dc7552b48a4f6c8e9926815e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pygments",
+      "version": "2.21.0",
+      "filename": "pygments-2.21.0-py3-none-any.whl",
+      "size": 1250147,
+      "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pyjwt",
+      "version": "2.15.1",
+      "filename": "pyjwt-2.15.1-py3-none-any.whl",
+      "size": 33860,
+      "sha256": "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pymeta3",
+      "version": "0.5.1",
+      "kind": "allowlisted-source",
+      "size": 29566,
+      "sha256": "18bda326d9a9bbf587bfc0ee0bc96864964d78b067288bcf55d4d98681d05bcb"
+    },
+    {
+      "package": "pyperclip",
+      "version": "1.11.0",
+      "filename": "pyperclip-1.11.0-py3-none-any.whl",
+      "size": 11063,
+      "sha256": "299403e9ff44581cb9ba2ffeed69c7aa96a008622ad0c46cb575ca75b5b84273",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pyright",
+      "version": "1.1.414",
+      "filename": "pyright-1.1.414-py3-none-any.whl",
+      "size": 6225049,
+      "sha256": "2a6b4b3298c9eec174c5ed83bd338de6eee82df2992f3e1930e6199d381be36f",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pytest",
+      "version": "9.1.1",
+      "filename": "pytest-9.1.1-py3-none-any.whl",
+      "size": 386536,
+      "sha256": "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pytest-aio",
+      "version": "2.1.7",
+      "filename": "pytest_aio-2.1.7-py3-none-any.whl",
+      "size": 6577,
+      "sha256": "72eca30834d254d3f36336295a19119b42900c84bdd8155a0c242467987d0e73",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pytest-asyncio",
+      "version": "1.4.0",
+      "filename": "pytest_asyncio-1.4.0-py3-none-any.whl",
+      "size": 16930,
+      "sha256": "933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "python-dateutil",
+      "version": "2.9.0.post0",
+      "filename": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "size": 229892,
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "python-dotenv",
+      "version": "1.2.4",
+      "filename": "python_dotenv-1.2.4-py3-none-any.whl",
+      "size": 23266,
+      "sha256": "42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "python-frontmatter",
+      "version": "1.3.0",
+      "filename": "python_frontmatter-1.3.0-py3-none-any.whl",
+      "size": 10562,
+      "sha256": "9f7dd9260bec99044219159a329f64f039087f9d1a2124c9442556f2fe6f82ec",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "python-multipart",
+      "version": "0.0.32",
+      "filename": "python_multipart-0.0.32-py3-none-any.whl",
+      "size": 30042,
+      "sha256": "ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pytz",
+      "version": "2026.5",
+      "filename": "pytz-2026.5-py2.py3-none-any.whl",
+      "size": 506342,
+      "sha256": "e658af3757f9e26a9d25dd2aff38335acd92bc9104f890a894b2c1ba28311b03",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "pyyaml",
+      "version": "6.0.3",
+      "filename": "pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 173973,
+      "sha256": "fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "referencing",
+      "version": "0.37.0",
+      "filename": "referencing-0.37.0-py3-none-any.whl",
+      "size": 26766,
+      "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "regex",
+      "version": "2026.9.29",
+      "filename": "regex-2026.9.29-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 293633,
+      "sha256": "f57dc6b8fef170f105d2cf5cdce254f47b137d7755086cf7050f47e16582abba",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "requests",
+      "version": "2.34.2",
+      "filename": "requests-2.34.2-py3-none-any.whl",
+      "size": 73075,
+      "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "requests-toolbelt",
+      "version": "1.0.0",
+      "filename": "requests_toolbelt-1.0.0-py2.py3-none-any.whl",
+      "size": 54481,
+      "sha256": "cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "rich",
+      "version": "15.0.0",
+      "filename": "rich-15.0.0-py3-none-any.whl",
+      "size": 310654,
+      "sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "rich-rst",
+      "version": "2.2.0",
+      "filename": "rich_rst-2.2.0-py3-none-any.whl",
+      "size": 279274,
+      "sha256": "1ea1c43813dc4a8d86475fce27ffb74e0ada3d4656c9f8130ba2a59868055fe9",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "rich-toolkit",
+      "version": "0.20.6",
+      "filename": "rich_toolkit-0.20.6-py3-none-any.whl",
+      "size": 39466,
+      "sha256": "465453ba6f94f99401f59f79fb562827ba5f6b4d4759015d40019f5c67750262",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "rignore",
+      "version": "0.8.1",
+      "filename": "rignore-0.8.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 815871,
+      "sha256": "b9e7ba47a5bb25ad45d39983047ecfbcba01ecda0145458c548cd3f390b73bb7",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "rpds-py",
+      "version": "2026.9.1",
+      "filename": "rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 341380,
+      "sha256": "e21c1429e205828ea886a2293a4a2c8e01f4c25d9893ca330e97a6cf73f52e7b",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "ruamel-yaml",
+      "version": "0.19.1",
+      "filename": "ruamel_yaml-0.19.1-py3-none-any.whl",
+      "size": 118102,
+      "sha256": "27592957fedf6e0b62f281e96effd28043345e0e66001f97683aa9a40c667c93",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "sentry-sdk",
+      "version": "2.72.0",
+      "filename": "sentry_sdk-2.72.0-py3-none-any.whl",
+      "size": 544754,
+      "sha256": "3e13ace4ffd0b3cc78288236edfc4e4bd90eb12a396cc5845fa10a58ff289f50",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "shellingham",
+      "version": "1.5.4",
+      "filename": "shellingham-1.5.4-py2.py3-none-any.whl",
+      "size": 9755,
+      "sha256": "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "six",
+      "version": "1.17.0",
+      "filename": "six-1.17.0-py2.py3-none-any.whl",
+      "size": 11050,
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "sniffio",
+      "version": "1.3.1",
+      "filename": "sniffio-1.3.1-py3-none-any.whl",
+      "size": 10235,
+      "sha256": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "sqlalchemy",
+      "version": "2.1.5",
+      "filename": "sqlalchemy-2.1.5-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 2471746,
+      "sha256": "3eb1907fc67aacc160276e7f61c1f71a7a38c10e84ff87b74d90cae0abd137bb",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "sqlite-vec",
+      "version": "0.1.9",
+      "filename": "sqlite_vec-0.1.9-py3-none-macosx_11_0_arm64.whl",
+      "size": 165434,
+      "sha256": "1d52e30513bae4cc9778ddbf6145610434081be4c3afe57cd877893bad9f6b6c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "sse-starlette",
+      "version": "3.5.0",
+      "filename": "sse_starlette-3.5.0-py3-none-any.whl",
+      "size": 17407,
+      "sha256": "3e6e1070df3f0f5d9cea81496de92dbb72f6721871d99748ece67441dd8b7997",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "starlette",
+      "version": "1.9.0",
+      "filename": "starlette-1.9.0-py3-none-any.whl",
+      "size": 80335,
+      "sha256": "fd3f159936e882d06c1108f84688f7cda2cf85fc6a592a50edbd175e882c2ddc",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "tenacity",
+      "version": "9.2.1",
+      "filename": "tenacity-9.2.1-py3-none-any.whl",
+      "size": 32310,
+      "sha256": "9e56f17539296baab7beabb08b92f6ee3d7be92d8be72d763360677c2ad6580e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "tiktoken",
+      "version": "0.14.0",
+      "filename": "tiktoken-0.14.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 1038499,
+      "sha256": "d6cebe67765569df3dafac8474e4eccf5c19d24140492567a5e58a11445732a4",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "tokenizers",
+      "version": "0.23.3",
+      "filename": "tokenizers-0.23.3-cp310-abi3-macosx_11_0_arm64.whl",
+      "size": 3101381,
+      "sha256": "68649e97d5b43c44c031d8d848874a6eecae8f8fe40ea989aa777a5a83aca716",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "tqdm",
+      "version": "4.70.1",
+      "filename": "tqdm-4.70.1-py3-none-any.whl",
+      "size": 80199,
+      "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "truststore",
+      "version": "0.10.5",
+      "filename": "truststore-0.10.5-py3-none-any.whl",
+      "size": 19017,
+      "sha256": "9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "typer",
+      "version": "0.27.3",
+      "filename": "typer-0.27.3-py3-none-any.whl",
+      "size": 123312,
+      "sha256": "e50022f28b82a86313e54501317a1db64bf8f8d036ff8cfe5ca7e47675454aff",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "typing-inspection",
+      "version": "0.4.4",
+      "filename": "typing_inspection-0.4.4-py3-none-any.whl",
+      "size": 14750,
+      "sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "typing-extensions",
+      "version": "4.16.0",
+      "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+      "size": 45571,
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "tzlocal",
+      "version": "5.4.4",
+      "filename": "tzlocal-5.4.4-py3-none-any.whl",
+      "size": 18115,
+      "sha256": "aae09f0126a8a86fa736be266eb4a471380d26a0de3bc14844e7821fee3e2a15",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "uncalled-for",
+      "version": "0.4.1",
+      "filename": "uncalled_for-0.4.1-py3-none-any.whl",
+      "size": 14889,
+      "sha256": "b611b38879d9fe5088297e7bb28f2ddd12d2d73dad933d93da107fb63eb4058e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "unidecode",
+      "version": "1.4.0",
+      "filename": "Unidecode-1.4.0-py3-none-any.whl",
+      "size": 235837,
+      "sha256": "c3c7606c27503ad8d501270406e345ddb480a7b5f38827eafe4fa82a137f0021",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "urllib3",
+      "version": "2.8.0",
+      "filename": "urllib3-2.8.0-py3-none-any.whl",
+      "size": 135717,
+      "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "uuid-utils",
+      "version": "0.18.0",
+      "filename": "uuid_utils-0.18.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl",
+      "size": 557260,
+      "sha256": "986d932c8a54729e8de19d0b7698b416f01045f8b58dc4979ef066dedfc78285",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "uvicorn",
+      "version": "0.54.0",
+      "filename": "uvicorn-0.54.0-py3-none-any.whl",
+      "size": 87427,
+      "sha256": "505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "uvloop",
+      "version": "0.23.0",
+      "filename": "uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl",
+      "size": 1393055,
+      "sha256": "93935ab27b6eaef4c3e5489aebc84284f0644592f7ab516df60ee1b27eaf5eb3",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "watchdog",
+      "version": "6.0.0",
+      "filename": "watchdog-6.0.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 89054,
+      "sha256": "6f10cb2d5902447c7d0da897e2c6768bca89174d0c6e1e30abec5421af97a5b0",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "watchfiles",
+      "version": "1.3.0",
+      "filename": "watchfiles-1.3.0-cp310-abi3-macosx_11_0_arm64.whl",
+      "size": 397647,
+      "sha256": "bbc1198edfdc90fda0600f825aa94150f428dfcbf8138746f55998e0e660d64c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "wcwidth",
+      "version": "0.9.2",
+      "filename": "wcwidth-0.9.2-cp310-abi3-macosx_11_0_arm64.whl",
+      "size": 609960,
+      "sha256": "ae0800c5339423cc53d33a266ad264b42ba8aaa16d4464f6e6b1bee607f50b17",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "websockets",
+      "version": "16.1.1",
+      "filename": "websockets-16.1.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 177542,
+      "sha256": "01fbdcbac298efe19360b94bc0039c8f746f0220ba570f327577bfee81059175",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "wrapt",
+      "version": "2.5.1",
+      "filename": "wrapt-2.5.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 106087,
+      "sha256": "c44dd9881626da7d621c23805f26726f6b023cf3e9755f48d092bc9cbef4a8e7",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "xxhash",
+      "version": "4.0.2",
+      "filename": "xxhash-4.0.2-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 36174,
+      "sha256": "aeda53dfb6bcae94adb1f5df4246fe13b9c4202f531dd9d39e0d55b36ba8db0e",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "yarl",
+      "version": "1.25.1",
+      "filename": "yarl-1.25.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 104325,
+      "sha256": "e029648f9c951db30e98a7d7ec90835db88ec4b32820efe2a9bdc2287e032eb6",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "zipp",
+      "version": "4.1.1",
+      "filename": "zipp-4.1.1-py3-none-any.whl",
+      "size": 10582,
+      "sha256": "8979f52d874162f485ff2981e3891f3a3317b7a3dd43ff1e1775b9304f307a9c",
+      "kind": "official-wheel"
+    },
+    {
+      "package": "zstandard",
+      "version": "0.25.0",
+      "filename": "zstandard-0.25.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "size": 640436,
+      "sha256": "913cbd31a400febff93b564a23e17c3ed2d56c064006f54efec210d586171c00",
+      "kind": "official-wheel"
+    }
+  ],
+  "resolved_transfer_bytes": 112469077
+}
