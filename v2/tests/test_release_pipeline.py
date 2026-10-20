@@ -100,3 +100,27 @@ class ReleasePipelineTests(unittest.TestCase):
                 self.assertEqual(evidence['overall_result'],'failed')
                 self.assertEqual(seen,list(release_gate.STABLE_CHECK_IDS[:index]))
                 self.assertTrue(all(row['result']=='not_run' for row in evidence['checks'][index+1:]))
+
+
+class ConsumerKnowledgePolicyTests(unittest.TestCase):
+    def test_actual_consumer_harness_explicitly_defers_without_skipping_checks(self):
+        import verify_v2_consumer as consumer
+        with tempfile.TemporaryDirectory() as raw:
+            bundle=Path(raw);(bundle/'release-manifest.json').write_text(json.dumps({'version':'v0.52.1','source_sha':'a'*40}))
+            calls=[];events=[]
+            def install(home,manifest,**kwargs):
+                calls.append(kwargs);events.append('install')
+                release=home/'release';(release/'v2').mkdir(parents=True,exist_ok=True)
+                current=home/'.flow/v2/current';current.parent.mkdir(parents=True,exist_ok=True)
+                if not current.exists():current.symlink_to(release)
+                return {'changed':len(calls)!=2,'knowledge':{'state':'deferred','ready':False}}
+            with patch.object(consumer.managed,'supported'),patch.object(consumer.managed,'validate'),patch.object(consumer.managed,'install_release',side_effect=install),patch.object(consumer.managed,'rollback',side_effect=lambda home:events.append('rollback')) as rollback,patch.object(consumer.subprocess,'run',side_effect=lambda args,**kwargs:events.append('context' if 'context' in args else 'command')) as run:
+                result=consumer.verify(bundle)
+            self.assertEqual('passed',result['result']);self.assertEqual(3,len(calls))
+            self.assertTrue(all(call['knowledge_mode']=='defer' for call in calls))
+            commands=[list(map(str,call.args[0])) for call in run.call_args_list]
+            self.assertTrue(any('--version' in cmd for cmd in commands));self.assertTrue(any('doctor' in cmd for cmd in commands))
+            self.assertTrue(any('context' in cmd for cmd in commands));self.assertTrue(any('unittest' in cmd for cmd in commands))
+            rollback.assert_called_once()
+            self.assertLess(events.index('rollback'),events.index('context'))
+            self.assertEqual(3,events[:events.index('context')].count('install'))

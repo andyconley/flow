@@ -18,16 +18,24 @@ def verify(bundle,full_tests=True):
         home=Path(temporary);env={**os.environ,'HOME':str(home),'PYTHONDONTWRITEBYTECODE':'1'}
         for key in ('GITHUB_TOKEN','GH_TOKEN','FLOW_RELEASE_READ_TOKEN','FLOW_V2_GOOSE_BINARY'):
             env.pop(key,None)
-        managed.install_release(home,manifest,bundle=bundle)
+        # No model acquisition/provider calls in this package-consumer gate.
+        initial=managed.install_release(home,manifest,bundle=bundle,knowledge_mode='defer')
+        if initial.get('knowledge',{}).get('state')!='deferred':raise ValueError('Consumer gate requires an explicit visible deferred knowledge policy')
         release=(home/'.flow/v2/current').resolve()
         def run(args,cwd=home):subprocess.run([str(x) for x in args],cwd=cwd,env=env,check=True)
         launcher=home/'.local/bin/flow'
         run([launcher,'--version']);run([launcher,'doctor','--json'])
+        # Exercise clean rollback before ordinary commands can publish runtime
+        # knowledge status. Later writes are deliberately protected by its guard.
+        if managed.install_release(home,manifest,bundle=bundle,knowledge_mode='defer')['changed']:raise ValueError('Repeated install is not idempotent')
+        managed.rollback(home)
+        restored=managed.install_release(home,manifest,bundle=bundle,knowledge_mode='defer')
+        if not restored['changed']:raise ValueError('Consumer reinstall did not activate the package')
+        if restored.get('knowledge',{}).get('state')!='deferred':raise ValueError('Consumer reinstall requires visible deferred knowledge')
+        release=(home/'.flow/v2/current').resolve()
         project=home/'project';project.mkdir();run([launcher,'--project',project,'context'])
         if full_tests:run([release/'v2/.venv/bin/python','-m','unittest','discover','-s','tests','-v'],cwd=release/'v2')
-        if managed.install_release(home,manifest,bundle=bundle)['changed']:raise ValueError('Repeated install is not idempotent')
-        managed.rollback(home)
-    return {'result':'passed','version':manifest['version'],'source_sha':manifest['source_sha'],'live_provider_calls':0}
+    return {'result':'passed','version':manifest['version'],'source_sha':manifest['source_sha'],'live_provider_calls':0,'clean_rollback':'passed','workload_verification':'passed'}
 
 
 if __name__=='__main__':

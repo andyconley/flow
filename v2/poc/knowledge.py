@@ -15,10 +15,21 @@ END='<!-- /cocoindex:relationships:v1 -->'
 def home():return Path(os.environ.get('FLOW_KNOWLEDGE_HOME',str(Path.home()/'.flow/v2/state/knowledge'))).absolute()
 def read(p,default=None):return json.loads(p.read_text()) if p.exists() else default
 def write(p,value):
-    p.parent.mkdir(parents=True,exist_ok=True)
-    t=p.with_name(p.name+'.'+uuid.uuid4().hex+'.tmp')
-    with t.open('w') as f:json.dump(value,f,indent=2);f.write('\n');f.flush();os.fsync(f.fileno())
+    p.parent.mkdir(parents=True,exist_ok=True);t=p.with_suffix(p.suffix+'.tmp')
+    payload=(json.dumps(value,indent=2)+'\n').encode()
+    with t.open('wb') as f:f.write(payload);f.flush();os.fsync(f.fileno())
+    record_install_write(p,payload)
     t.replace(p)
+def record_install_write(path,intended):
+    """Audit intended bytes, never a reread that could claim concurrent edits."""
+    root=os.environ.get("FLOW_INSTALL_KNOWLEDGE_ROOT");receipt=os.environ.get("FLOW_INSTALL_WRITE_RECEIPT")
+    if not root or not receipt:return
+    path=Path(path);root=Path(root)
+    if not path.is_relative_to(root):return
+    rel=path.relative_to(root)
+    if not (len(rel.parts)==1 and path.suffix==".json" or rel.parts[0] in ("notes","incoming")):return
+    values=read(Path(receipt),{});values[str(rel)]=digest(intended) if intended is not None else None
+    temp=Path(receipt+".tmp");temp.write_text(json.dumps(values));temp.replace(receipt)
 def digest(data):return hashlib.sha256(data).hexdigest()
 def source(text):
     # Retain frontmatter and every authored byte; exclude only the managed block.
@@ -41,8 +52,17 @@ def inventory(folder):
 def locked(root,nonblocking=False):
     root.mkdir(parents=True,exist_ok=True)
     if root.is_symlink():raise ValueError('Symlink knowledge home refused')
+    delegated=os.environ.get('FLOW_INSTALL_KNOWLEDGE_FD')
+    valid=False
+    if delegated:
+        try:
+            fd=int(delegated);info=os.fstat(fd);target=(root/'lock').stat()
+            valid=(info.st_dev,info.st_ino)==(target.st_dev,target.st_ino)
+        except (ValueError,OSError):pass
+    if valid:
+        yield fd;return
     with (root/'lock').open('a') as f:
-        fcntl.flock(f,fcntl.LOCK_EX|(fcntl.LOCK_NB if nonblocking else 0));yield
+        fcntl.flock(f,fcntl.LOCK_EX|(fcntl.LOCK_NB if nonblocking else 0));yield f.fileno()
 
 def backup(root,label):
     name=str(time.time_ns())+'-'+label+'.zip';p=root/'backups'/name;p.parent.mkdir(exist_ok=True)
@@ -69,14 +89,17 @@ def reconcile_shared(root,shared=SHARED):
         if actual==new:newbase[n]=new;continue
         if new==old:continue # No upstream change: local edits/deletions are not conflicts.
         if actual==old:
+            record_install_write(root/'notes'/n,incoming.get(n))
             if n in incoming:(root/'notes'/n).write_bytes(incoming[n]);newbase[n]=new
             else:(root/'notes'/n).unlink(missing_ok=True);newbase.pop(n,None)
         elif old is None and n not in local:
+            record_install_write(root/'notes'/n,incoming[n])
             (root/'notes'/n).write_bytes(incoming[n]);newbase[n]=new
         else:
             conflicts.append(n)
             folder=root/'incoming'/manifest['version'];folder.mkdir(parents=True,exist_ok=True)
-            if n in incoming:(folder/n).write_bytes(incoming[n])
+            if n in incoming:
+                record_install_write(folder/n,incoming[n]);(folder/n).write_bytes(incoming[n])
     write(root/'base.json',{'version':manifest['version'],'files':newbase,'conflicts':conflicts})
     return {'version':manifest['version'],'conflicts':conflicts}
 
@@ -120,7 +143,7 @@ def fingerprint(root):
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())
 def status(root):
     from .knowledge_health import hint
-    state={**read(root/'status.json',{'state':'pending','reason':'not processed'}),'provisioning':hint(root)}
+    state={**read(root/'status.json',{'state':'pending','reason':'not processed'}),'provisioning':hint(root),'installation':read(root/'install-status.json',{}),'last_install_failure':read(root/'last-install-failure.json',{})}
     current=read(root/'CURRENT.json',{})
     if current and state.get('fingerprint')==current.get('fingerprint') and state.get('state')!='ready':
         receipt=read(root/'generations'/current['generation']/'receipt.json',{})

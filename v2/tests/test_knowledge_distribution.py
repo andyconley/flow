@@ -83,7 +83,7 @@ class FreshInstallKnowledgeTests(unittest.TestCase):
    if 'poc.goose_artifact' in args:
     goose_artifact.extract(Path(kwargs['cwd']));return subprocess.CompletedProcess(args,0)
    return real_run(args,**kwargs)
-  with patch.object(managed.subprocess,'run',side_effect=provision):result=managed.install_release(fixture.home,fixture.manifest,bundle=fixture.bundle)
+  with patch.object(managed.subprocess,'run',side_effect=provision):result=managed.install_release(fixture.home,fixture.manifest,bundle=fixture.bundle,knowledge_mode='defer')
   local=fixture.home/'.flow/v2/state/knowledge';self.assertEqual(21,len(k.inventory(local/'notes')));self.assertTrue((local/'base.json').exists());self.assertFalse((local/'settings.json').exists())
   launcher=fixture.home/'.local/bin/flow';version=real_run([str(launcher),'--version'],capture_output=True,text=True,env={**os.environ,'HOME':str(fixture.home)},check=True).stdout
   with patch.dict(os.environ,FLOW_KNOWLEDGE_HOME=str(local)):

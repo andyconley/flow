@@ -1,0 +1,733 @@
+offline-runtime / build-goose	UNKNOWN STEP	﻿2026-10-20T20:31:45.9898870Z Current runner version: '2.337.0'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9914790Z ##[group]Runner Image Provisioner
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9915530Z Hosted Compute Agent
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9916150Z Version: 20260828.587
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9916600Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9917290Z Build Date: 2026-08-28T16:44:25Z
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9917760Z Worker ID: {b97c85f4-9166-4b83-b0f2-ff6ef52019ac}
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9918290Z Azure Region: westus
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9918910Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9919960Z ##[group]Operating System
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9920380Z macOS
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9920780Z 15.7.9
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9921250Z 24G830
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9921730Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9922150Z ##[group]Runner Image
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9922710Z Image: macos-15-arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9923170Z Version: 20260907.0337.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9924230Z Included Software: https://github.com/actions/runner-images/blob/macos-15-arm64/20260907.0337/images/macos/macos-15-arm64-Readme.md
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9925420Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-15-arm64%2F20260907.0337
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9926190Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9927130Z ##[group]GITHUB_TOKEN Permissions
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9928580Z Contents: read
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9928970Z Metadata: read
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9929400Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9930900Z Secret source: Actions
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9931600Z Cache mode: write
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:45.9932140Z Prepare workflow directory
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:46.0202110Z Prepare all required actions
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:46.0263970Z Getting action download info
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:46.4340570Z Download action repository 'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09' (SHA:fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:46.7736730Z Download action repository 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:46.8653160Z Download action repository 'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444' (SHA:a0853c24544627f65ddf259abe73b1d18a591444)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:46.9730510Z Download action repository 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.0547790Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.2604450Z Uses: andyconley/flow/.github/workflows/goose-build.yml@refs/pull/140/merge (fc84bcecb78388f00e57014278bb79001c4052b9)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.2607840Z ##[group] Inputs
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.2608250Z   source_sha: 836a0a72c282ebe855228cf9b92fe44b147026ce
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.2608690Z   version: v0.51.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.2609010Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.2609390Z Complete job name: offline-runtime / build-goose
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3132910Z ##[group]Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3133610Z with:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3133960Z   ref: 836a0a72c282ebe855228cf9b92fe44b147026ce
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3134370Z   fetch-depth: 0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3134700Z   persist-credentials: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3135100Z   repository: andyconley/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3137750Z   token: ***
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3138050Z   ssh-strict: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3138370Z   ssh-user: git
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3138670Z   clean: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3138980Z   sparse-checkout-cone-mode: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3139520Z   fetch-tags: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3139840Z   show-progress: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3140160Z   lfs: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3140460Z   submodules: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3140780Z   set-safe-directory: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3141150Z   allow-unsafe-pr-checkout: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.3141660Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.6610210Z Syncing repository: andyconley/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.6611520Z ##[group]Getting Git version info
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.6613260Z Working directory is '/Users/runner/work/flow/flow'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.6614770Z [command]/opt/homebrew/bin/git version
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7202130Z git version 2.55.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7224000Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7229200Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/56f47214-b5ba-4fc6-870c-6717ff996c5a/.gitconfig'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7247020Z Temporarily overriding HOME='/Users/runner/work/_temp/56f47214-b5ba-4fc6-870c-6717ff996c5a' before making global git config changes
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7249840Z Adding repository directory to the temporary git global config as a safe directory
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7252110Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/flow/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7355290Z Deleting the contents of '/Users/runner/work/flow/flow'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7356880Z ##[group]Initializing the repository
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7360490Z [command]/opt/homebrew/bin/git init /Users/runner/work/flow/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7538130Z hint: Using 'master' as the name for the initial branch. This default branch name
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7538990Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7539930Z hint: to use in all of your new repositories, which will suppress this warning,
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7540540Z hint: call:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7540850Z hint:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7541270Z hint: 	git config --global init.defaultBranch <name>
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7541730Z hint:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7542180Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7542890Z hint: 'development'. The just-created branch can be renamed via this command:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7543430Z hint:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7543750Z hint: 	git branch -m <name>
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7544170Z hint:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7544670Z hint: Disable this message with "git config set advice.defaultBranchName false"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7545370Z Initialized empty Git repository in /Users/runner/work/flow/flow/.git/
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7549220Z [command]/opt/homebrew/bin/git remote add origin https://github.com/andyconley/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7612950Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7613650Z ##[group]Disabling automatic garbage collection
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7615550Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7677110Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7677770Z ##[group]Setting up auth
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7683280Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.7752320Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.8548170Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.8612650Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.9329310Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:47.9387220Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:48.0588280Z [command]/opt/homebrew/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:48.0621300Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:48.0622090Z ##[group]Fetching the repository
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:48.0623090Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0537930Z From https://github.com/andyconley/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0541670Z  * [new branch]      Codex/coordinator-context-persistence -> origin/Codex/coordinator-context-persistence
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0546610Z  * [new branch]      Codex/coordinator-release-staging -> origin/Codex/coordinator-release-staging
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0550390Z  * [new branch]      Codex/openhands-policy-routing -> origin/Codex/openhands-policy-routing
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0553840Z  * [new branch]      Codex/runtime-release-roster -> origin/Codex/runtime-release-roster
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0557140Z  * [new branch]      Codex/runtime-wiring    -> origin/Codex/runtime-wiring
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0560330Z  * [new branch]      chunk6-project-migrate  -> origin/chunk6-project-migrate
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0564130Z  * [new branch]      codex/archive-legacy-import -> origin/codex/archive-legacy-import
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0567670Z  * [new branch]      codex/archive-retrieval -> origin/codex/archive-retrieval
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0571030Z  * [new branch]      codex/backfill-run-archives -> origin/codex/backfill-run-archives
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0575280Z  * [new branch]      codex/cancel-wakeup-all-waits -> origin/codex/cancel-wakeup-all-waits
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0580400Z  * [new branch]      codex/chartered-delivery-planning-contract -> origin/codex/chartered-delivery-planning-contract
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0585570Z  * [new branch]      codex/codex-skill-discovery -> origin/codex/codex-skill-discovery
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0589840Z  * [new branch]      codex/edit-worker-stream-cap -> origin/codex/edit-worker-stream-cap
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0594820Z  * [new branch]      codex/fix-local-agent-ci-python -> origin/codex/fix-local-agent-ci-python
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0599830Z  * [new branch]      codex/fix-release-api-read-limit -> origin/codex/fix-release-api-read-limit
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0604820Z  * [new branch]      codex/fix-release-candidate-suite -> origin/codex/fix-release-candidate-suite
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0610100Z  * [new branch]      codex/fix-release-candidate-suite-2 -> origin/codex/fix-release-candidate-suite-2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0615430Z  * [new branch]      codex/fix-release-upgrade-cache -> origin/codex/fix-release-upgrade-cache
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0619550Z  * [new branch]      codex/flow-shaper-mcp   -> origin/codex/flow-shaper-mcp
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0623600Z  * [new branch]      codex/maf-charter-job-launcher -> origin/codex/maf-charter-job-launcher
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0628830Z  * [new branch]      codex/maf-charter-release-test-portability -> origin/codex/maf-charter-release-test-portability
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0632130Z  * [new branch]      codex/maf-magentic-delivery-lead -> origin/codex/maf-magentic-delivery-lead
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0634750Z  * [new branch]      codex/maf-mixed-provider-delegation -> origin/codex/maf-mixed-provider-delegation
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0637060Z  * [new branch]      codex/manager-progress-retry -> origin/codex/manager-progress-retry
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0640150Z  * [new branch]      codex/ollama-no-execution-timeout -> origin/codex/ollama-no-execution-timeout
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0642380Z  * [new branch]      codex/ollama-verifier-think -> origin/codex/ollama-verifier-think
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0644650Z  * [new branch]      codex/producer-turn-contract -> origin/codex/producer-turn-contract
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0647140Z  * [new branch]      codex/provider-capacity-v9-migration -> origin/codex/provider-capacity-v9-migration
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0649870Z  * [new branch]      codex/release-on-macos-arm64 -> origin/codex/release-on-macos-arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0651970Z  * [new branch]      codex/release-pin-flow-python -> origin/codex/release-pin-flow-python
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0654440Z  * [new branch]      codex/role-method-differentiation-repair-3 -> origin/codex/role-method-differentiation-repair-3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0656940Z  * [new branch]      codex/runtime-budget-review-fixes -> origin/codex/runtime-budget-review-fixes
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0659430Z  * [new branch]      codex/runtime-machine-budget-recovery -> origin/codex/runtime-machine-budget-recovery
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0662220Z  * [new branch]      codex/shaper-delivery-runtime-definition -> origin/codex/shaper-delivery-runtime-definition
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0665030Z  * [new branch]      codex/step5-cancellation -> origin/codex/step5-cancellation
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0667140Z  * [new branch]      codex/step5-cancellation-archive -> origin/codex/step5-cancellation-archive
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0669460Z  * [new branch]      codex/step5-operational-handback -> origin/codex/step5-operational-handback
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0671740Z  * [new branch]      codex/step5-shaper-approval-design -> origin/codex/step5-shaper-approval-design
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0674080Z  * [new branch]      codex/structured-verifier-contract -> origin/codex/structured-verifier-contract
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0676400Z  * [new branch]      codex/v7-pre-send-failure-allow-list -> origin/codex/v7-pre-send-failure-allow-list
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0678520Z  * [new branch]      codex/v8-live-validation -> origin/codex/v8-live-validation
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0680310Z  * [new branch]      codex/v8-live-validation-2 -> origin/codex/v8-live-validation-2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0682230Z  * [new branch]      codex/v8-live-validation-3 -> origin/codex/v8-live-validation-3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0684150Z  * [new branch]      codex/v9-clean-boundary-resume -> origin/codex/v9-clean-boundary-resume
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0686420Z  * [new branch]      codex/v9-independence-fallback-resume -> origin/codex/v9-independence-fallback-resume
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0688700Z  * [new branch]      codex/v9-magentic-ownership -> origin/codex/v9-magentic-ownership
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0690550Z  * [new branch]      codex/v9-resume-help-sync -> origin/codex/v9-resume-help-sync
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0692240Z  * [new branch]      develop                 -> origin/develop
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0693770Z  * [new branch]      docs/decide-expansion   -> origin/docs/decide-expansion
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0695630Z  * [new branch]      dotfiles-and-overlay-nudge -> origin/dotfiles-and-overlay-nudge
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0697380Z  * [new branch]      evidence-gates-slice-a  -> origin/evidence-gates-slice-a
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0699350Z  * [new branch]      feat/architecture-evidence-pilot -> origin/feat/architecture-evidence-pilot
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0701490Z  * [new branch]      feat/bundled-goose-macos-arm64 -> origin/feat/bundled-goose-macos-arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0703280Z  * [new branch]      feat/cost-baseline      -> origin/feat/cost-baseline
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0704980Z  * [new branch]      feat/cost-capture-fidelity -> origin/feat/cost-capture-fidelity
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0706750Z  * [new branch]      feat/flow-v2-goose-langgraph -> origin/feat/flow-v2-goose-langgraph
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0708730Z  * [new branch]      feat/flow-v2-observability -> origin/feat/flow-v2-observability
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0710620Z  * [new branch]      feat/installer-defaults-review -> origin/feat/installer-defaults-review
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0712920Z  * [new branch]      feat/managed-knowledge-pipeline -> origin/feat/managed-knowledge-pipeline
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0715380Z  * [new branch]      feat/openhands-specialist-delegation -> origin/feat/openhands-specialist-delegation
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0717540Z  * [new branch]      feat/plugin-usage-history -> origin/feat/plugin-usage-history
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0719250Z  * [new branch]      feat/v2-managed-release -> origin/feat/v2-managed-release
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0720950Z  * [new branch]      feature/agent-distribution -> origin/feature/agent-distribution
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0722710Z  * [new branch]      fix/agent-distribution-ci -> origin/fix/agent-distribution-ci
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0742630Z  * [new branch]      fix/delivery-lead-planning-coordination -> origin/fix/delivery-lead-planning-coordination
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0745150Z  * [new branch]      fix/explicit-codex-role-registration -> origin/fix/explicit-codex-role-registration
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0747190Z  * [new branch]      fix/flow-home-not-a-project -> origin/fix/flow-home-not-a-project
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0749650Z  * [new branch]      fix/goose-prepare-dry-run-validation -> origin/fix/goose-prepare-dry-run-validation
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0751870Z  * [new branch]      fix/install-knowledge-provisioning -> origin/fix/install-knowledge-provisioning
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0754300Z  * [new branch]      fix/knowledge-provider-isolation -> origin/fix/knowledge-provider-isolation
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0756290Z  * [new branch]      fix/native-planning-host-persona -> origin/fix/native-planning-host-persona
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0758320Z  * [new branch]      fix/node-prerequisite-diagnostics -> origin/fix/node-prerequisite-diagnostics
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0760310Z  * [new branch]      fix/openhands-reporting-archive -> origin/fix/openhands-reporting-archive
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0762470Z  * [new branch]      fix/planning-host-specialist-boundary -> origin/fix/planning-host-specialist-boundary
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0764690Z  * [new branch]      fix/quota-aware-release-verification -> origin/fix/quota-aware-release-verification
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0766750Z  * [new branch]      fix/release-notes-preset -> origin/fix/release-notes-preset
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0768580Z  * [new branch]      fix/remove-dangling-evidence-link -> origin/fix/remove-dangling-evidence-link
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0770480Z  * [new branch]      fix/v2-empty-checkpoint -> origin/fix/v2-empty-checkpoint
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0771920Z  * [new branch]      main                    -> origin/main
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0773500Z  * [new branch]      test/flow-v2-regression-coverage -> origin/test/flow-v2-regression-coverage
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0775490Z  * [new branch]      token-advisory-store-bootstrap -> origin/token-advisory-store-bootstrap
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0777470Z  * [new branch]      worktree-chunk2-thin-scaffold -> origin/worktree-chunk2-thin-scaffold
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0779390Z  * [new branch]      worktree-chunk3-replaces-wiring -> origin/worktree-chunk3-replaces-wiring
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0781040Z  * [new tag]         v0.10.0                 -> v0.10.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0782120Z  * [new tag]         v0.11.0                 -> v0.11.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0783180Z  * [new tag]         v0.11.1                 -> v0.11.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0784200Z  * [new tag]         v0.12.0                 -> v0.12.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0785210Z  * [new tag]         v0.13.0                 -> v0.13.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0786190Z  * [new tag]         v0.13.1                 -> v0.13.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0787160Z  * [new tag]         v0.13.2                 -> v0.13.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0788310Z  * [new tag]         v0.14.0                 -> v0.14.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0789330Z  * [new tag]         v0.15.0                 -> v0.15.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0791510Z  * [new tag]         v0.16.0                 -> v0.16.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0792590Z  * [new tag]         v0.17.0                 -> v0.17.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0793630Z  * [new tag]         v0.18.0                 -> v0.18.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0794600Z  * [new tag]         v0.19.0                 -> v0.19.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0795820Z  * [new tag]         v0.19.1                 -> v0.19.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0796830Z  * [new tag]         v0.19.2                 -> v0.19.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0797800Z  * [new tag]         v0.20.0                 -> v0.20.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0798740Z  * [new tag]         v0.20.1                 -> v0.20.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0799740Z  * [new tag]         v0.20.2                 -> v0.20.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0800710Z  * [new tag]         v0.21.0                 -> v0.21.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0801690Z  * [new tag]         v0.22.0                 -> v0.22.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0802710Z  * [new tag]         v0.23.0                 -> v0.23.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0803640Z  * [new tag]         v0.24.0                 -> v0.24.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0804640Z  * [new tag]         v0.25.0                 -> v0.25.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0805580Z  * [new tag]         v0.26.0                 -> v0.26.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0806550Z  * [new tag]         v0.27.0                 -> v0.27.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0807650Z  * [new tag]         v0.28.0                 -> v0.28.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0808660Z  * [new tag]         v0.29.0                 -> v0.29.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0810190Z  * [new tag]         v0.30.0                 -> v0.30.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0811200Z  * [new tag]         v0.31.0                 -> v0.31.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0812210Z  * [new tag]         v0.32.0                 -> v0.32.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0813220Z  * [new tag]         v0.33.0                 -> v0.33.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0814230Z  * [new tag]         v0.34.0                 -> v0.34.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0815280Z  * [new tag]         v0.34.1                 -> v0.34.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0816290Z  * [new tag]         v0.35.0                 -> v0.35.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0817300Z  * [new tag]         v0.35.1                 -> v0.35.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0818330Z  * [new tag]         v0.35.2                 -> v0.35.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0819290Z  * [new tag]         v0.35.3                 -> v0.35.3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0821100Z  * [new tag]         v0.36.0                 -> v0.36.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0822160Z  * [new tag]         v0.36.1                 -> v0.36.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0823590Z  * [new tag]         v0.36.2                 -> v0.36.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0825440Z  * [new tag]         v0.37.0                 -> v0.37.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0826400Z  * [new tag]         v0.37.1                 -> v0.37.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0827370Z  * [new tag]         v0.38.0                 -> v0.38.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0828320Z  * [new tag]         v0.38.1                 -> v0.38.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0829260Z  * [new tag]         v0.38.2                 -> v0.38.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0830190Z  * [new tag]         v0.38.3                 -> v0.38.3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0831120Z  * [new tag]         v0.39.0                 -> v0.39.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0832220Z  * [new tag]         v0.39.1                 -> v0.39.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0833150Z  * [new tag]         v0.4.0                  -> v0.4.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0834090Z  * [new tag]         v0.4.1                  -> v0.4.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0835050Z  * [new tag]         v0.4.2                  -> v0.4.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0836000Z  * [new tag]         v0.4.3                  -> v0.4.3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0836930Z  * [new tag]         v0.4.4                  -> v0.4.4
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0837870Z  * [new tag]         v0.4.5                  -> v0.4.5
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0838880Z  * [new tag]         v0.40.0                 -> v0.40.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0839810Z  * [new tag]         v0.40.1                 -> v0.40.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0840750Z  * [new tag]         v0.40.10                -> v0.40.10
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0841730Z  * [new tag]         v0.40.11                -> v0.40.11
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0842680Z  * [new tag]         v0.40.12                -> v0.40.12
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0843600Z  * [new tag]         v0.40.13                -> v0.40.13
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0844620Z  * [new tag]         v0.40.14                -> v0.40.14
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0845940Z  * [new tag]         v0.40.15                -> v0.40.15
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0846990Z  * [new tag]         v0.40.16                -> v0.40.16
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0847930Z  * [new tag]         v0.40.2                 -> v0.40.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0848860Z  * [new tag]         v0.40.3                 -> v0.40.3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0849780Z  * [new tag]         v0.40.4                 -> v0.40.4
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0850770Z  * [new tag]         v0.40.5                 -> v0.40.5
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0851730Z  * [new tag]         v0.40.6                 -> v0.40.6
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0852690Z  * [new tag]         v0.40.7                 -> v0.40.7
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0853700Z  * [new tag]         v0.40.8                 -> v0.40.8
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0854710Z  * [new tag]         v0.40.9                 -> v0.40.9
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0855660Z  * [new tag]         v0.41.0                 -> v0.41.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0856690Z  * [new tag]         v0.41.1                 -> v0.41.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0857660Z  * [new tag]         v0.42.0                 -> v0.42.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0858580Z  * [new tag]         v0.42.1                 -> v0.42.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0859480Z  * [new tag]         v0.43.0                 -> v0.43.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0860640Z  * [new tag]         v0.44.0                 -> v0.44.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0861670Z  * [new tag]         v0.44.1                 -> v0.44.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0862670Z  * [new tag]         v0.44.2                 -> v0.44.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0863690Z  * [new tag]         v0.44.3                 -> v0.44.3
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0864650Z  * [new tag]         v0.44.4                 -> v0.44.4
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0865650Z  * [new tag]         v0.45.0                 -> v0.45.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0866600Z  * [new tag]         v0.45.1                 -> v0.45.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0867540Z  * [new tag]         v0.46.0                 -> v0.46.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0868500Z  * [new tag]         v0.46.1                 -> v0.46.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0869490Z  * [new tag]         v0.47.0                 -> v0.47.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0870480Z  * [new tag]         v0.48.0                 -> v0.48.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0871480Z  * [new tag]         v0.49.0                 -> v0.49.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0872550Z  * [new tag]         v0.49.1                 -> v0.49.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0873450Z  * [new tag]         v0.5.0                  -> v0.5.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0874390Z  * [new tag]         v0.50.0                 -> v0.50.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0875330Z  * [new tag]         v0.50.1                 -> v0.50.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0876330Z  * [new tag]         v0.51.0                 -> v0.51.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0877320Z  * [new tag]         v0.51.1                 -> v0.51.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0878240Z  * [new tag]         v0.51.2                 -> v0.51.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0879150Z  * [new tag]         v0.52.0                 -> v0.52.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0880050Z  * [new tag]         v0.6.0                  -> v0.6.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0880980Z  * [new tag]         v0.6.1                  -> v0.6.1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0881910Z  * [new tag]         v0.6.2                  -> v0.6.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0882890Z  * [new tag]         v0.7.0                  -> v0.7.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0883830Z  * [new tag]         v0.8.0                  -> v0.8.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0884760Z  * [new tag]         v0.9.0                  -> v0.9.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0887730Z [command]/opt/homebrew/bin/git rev-parse --verify --quiet 836a0a72c282ebe855228cf9b92fe44b147026ce^{object}
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0889170Z 836a0a72c282ebe855228cf9b92fe44b147026ce
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0891350Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0892400Z ##[group]Determining the checkout info
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0893560Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0894390Z [command]/opt/homebrew/bin/git sparse-checkout disable
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0896540Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0898930Z ##[group]Checking out the ref
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.0900550Z [command]/opt/homebrew/bin/git checkout --progress --force 836a0a72c282ebe855228cf9b92fe44b147026ce
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5086980Z HEAD is now at 836a0a7 fix: complete knowledge provisioning during install and update
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5236510Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5310950Z [command]/opt/homebrew/bin/git log -1 --format=%H
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5388450Z 836a0a72c282ebe855228cf9b92fe44b147026ce
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5405850Z ##[group]Removing auth
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5410150Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.5487170Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.6367290Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.6422690Z http.https://github.com/.extraheader
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.6427000Z [command]/opt/homebrew/bin/git config --local --unset-all http.https://github.com/.extraheader
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.6492150Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.7244830Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.7304240Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8081300Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8307800Z ##[group]Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8308250Z with:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8308490Z   python-version: 3.12
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8308710Z   check-latest: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8311170Z   token: ***
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8311380Z   update-environment: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8311630Z   allow-prereleases: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8311900Z   freethreaded: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.8312100Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9444180Z ##[group]Installed versions
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9494080Z (node:1960) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9494680Z Successfully set up CPython (3.12.10)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9495330Z (Use `node --trace-deprecation ...` to show where the warning was created)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9495970Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9602040Z ##[group]Run actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9602390Z with:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9602580Z   node-version: 24
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9602750Z   always-auth: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9602940Z   check-latest: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9604770Z   token: ***
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9604950Z   package-manager-cache: true
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9605160Z env:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9605400Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9605850Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.12.10/arm64/lib/pkgconfig
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9606290Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9606670Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9607040Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:51.9607340Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.0908640Z Found in cache @ /Users/runner/hostedtoolcache/node/24.20.0/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.0911440Z (node:1961) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.0913090Z (Use `node --trace-deprecation ...` to show where the warning was created)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.0914440Z ##[group]Environment details
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7613050Z node: v24.20.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7613650Z npm: 11.19.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7614010Z yarn: 1.22.22
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7615090Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7703440Z ##[group]Run test "$(uname -s)/$(uname -m)" = Darwin/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7703880Z ^[[36;1mtest "$(uname -s)/$(uname -m)" = Darwin/arm64^[[0m
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7704170Z ^[[36;1mrustup toolchain install 1.99.0 --profile minimal^[[0m
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7704420Z ^[[36;1mrustup default 1.99.0^[[0m
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7704610Z ^[[36;1mrustc --version^[[0m
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7755970Z shell: /bin/bash -e {0}
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7756220Z env:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7756540Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7757110Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.12.10/arm64/lib/pkgconfig
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7757600Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7758020Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7758480Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.7758790Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.8578470Z info: syncing channel updates for 1.99.0-aarch64-apple-darwin
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.9469610Z info: latest update on 2026-10-01 for version 1.99.0 (b940084d7 2026-09-28)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:52.9472250Z info: downloading 3 components
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.3070750Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.3457630Z info: self-update is disabled for this build of rustup
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.3458480Z info: any updates to rustup will need to be fetched with your system package manager
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.3459340Z   1.99.0-aarch64-apple-darwin installed - rustc 1.99.0 (b940084d7 2026-09-28)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.3462790Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.4019320Z info: using existing install for 1.99.0-aarch64-apple-darwin
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.4052550Z info: default toolchain set to 1.99.0-aarch64-apple-darwin
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.4052930Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.4240650Z   1.99.0-aarch64-apple-darwin unchanged - rustc 1.99.0 (b940084d7 2026-09-28)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.4242220Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.4532210Z rustc 1.99.0 (b940084d7 2026-09-28)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7031770Z ##[group]Run actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7032210Z with:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7032580Z   path: ~/.cargo/registry
+offline-runtime / build-goose	UNKNOWN STEP	~/.cargo/git
+offline-runtime / build-goose	UNKNOWN STEP	.release/goose-target
+offline-runtime / build-goose	UNKNOWN STEP	
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7033250Z   key: goose-macos15-arm64-rust199-release-13b40be76fd38506a18b34b084c4a408e174c3700065afc1b832b6833a66cc7b
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7033800Z   enableCrossOsArchive: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7034130Z   fail-on-cache-miss: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7034510Z   lookup-only: false
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7034700Z env:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7034980Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7035570Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.12.10/arm64/lib/pkgconfig
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7036050Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7036500Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7036990Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.7037350Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.8286930Z (node:2079) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:58.8287770Z (Use `node --trace-deprecation ...` to show where the warning was created)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:59.0954630Z Cache hit for: goose-macos15-arm64-rust199-release-13b40be76fd38506a18b34b084c4a408e174c3700065afc1b832b6833a66cc7b
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:31:59.1030140Z (node:2079) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:00.4237240Z Received 0 of 755157291 (0.0%), 0.0 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:01.4276760Z Received 62914560 of 755157291 (8.3%), 29.9 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:02.4433340Z Received 134217728 of 755157291 (17.8%), 42.3 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:03.4440720Z Received 201326592 of 755157291 (26.7%), 47.7 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:04.4460790Z Received 268435456 of 755157291 (35.5%), 50.9 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:05.4461120Z Received 331350016 of 755157291 (43.9%), 52.4 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:06.4467280Z Received 394264576 of 755157291 (52.2%), 53.5 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:07.4463870Z Received 427819008 of 755157291 (56.7%), 50.8 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:08.4469920Z Received 507510784 of 755157291 (67.2%), 53.6 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:09.4484690Z Received 557842432 of 755157291 (73.9%), 53.1 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:10.4487620Z Received 637534208 of 755157291 (84.4%), 55.1 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:11.4487490Z Received 692060160 of 755157291 (91.6%), 54.9 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:12.4492690Z Received 750962987 of 755157291 (99.4%), 55.0 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:12.5443260Z Received 755157291 of 755157291 (100.0%), 54.9 MBs/sec
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:12.5453090Z Cache Size: ~720 MB (755157291 B)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:12.5533650Z [command]/opt/homebrew/bin/gtar -xf /Users/runner/work/_temp/a90bd2d6-3617-41f6-a26f-402efbe32402/cache.tzst -P -C /Users/runner/work/flow/flow --delay-directory-restore --use-compress-program unzstd
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.4598010Z Cache restored successfully
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5276170Z Cache restored from key: goose-macos15-arm64-rust199-release-13b40be76fd38506a18b34b084c4a408e174c3700065afc1b832b6833a66cc7b
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5601580Z ##[group]Run python3 scripts/build_v2_release.py --version "$VERSION" --source-sha "$SOURCE_SHA" --output .release/dist
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5602500Z ^[[36;1mpython3 scripts/build_v2_release.py --version "$VERSION" --source-sha "$SOURCE_SHA" --output .release/dist^[[0m
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5805060Z shell: /bin/bash -e {0}
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5805340Z env:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5805760Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5806430Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.12.10/arm64/lib/pkgconfig
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5806940Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5807430Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5808140Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5808580Z   SOURCE_SHA: 836a0a72c282ebe855228cf9b92fe44b147026ce
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5808980Z   VERSION: v0.51.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:22.5809240Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:28.1062310Z From https://github.com/aaif-goose/goose
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:28.1063120Z  * branch            2bcb8583a18a0623eb78c9ed845d597ed99fae48 -> FETCH_HEAD
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:29.2597840Z HEAD is now at 2bcb858 pin openssl3 in macos builds (#12959)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:31.5157980Z    Compiling goose-provider-types v0.1.0-alpha.12 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-provider-types)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:32:31.5328640Z    Compiling goose-sdk-types v0.1.0-alpha.12 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-sdk-types)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:33:10.7348510Z    Compiling goose-context-management v0.1.0-alpha.12 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-context-management)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:33:13.5876320Z    Compiling goose-providers v0.1.0-alpha.12 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-providers)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:33:17.1143930Z    Compiling goose-agent v0.1.0-alpha.12 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-agent)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:33:21.4742300Z    Compiling goose-download-manager v0.1.0-alpha.12 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-download-manager)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:33:22.6926550Z    Compiling goose-acp-macros v1.55.0 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-acp-macros)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:33:24.5029140Z    Compiling goose v1.55.0 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:34:46.8497510Z    Compiling goose-cli v1.55.0 (/Users/runner/work/flow/flow/.release/goose-source/crates/goose-cli)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:41:50.8757070Z     Finished `release` profile [optimized] target(s) in 9m 20s
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.0449490Z Collecting aiosqlite==0.22.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 1))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.1621420Z   Downloading aiosqlite-0.22.1-py3-none-any.whl.metadata (4.3 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.2023250Z Collecting annotated-types==0.8.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 2))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.2206190Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.2566970Z Collecting anyio==4.15.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 3))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.2793990Z   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.3041230Z Collecting attrs==26.1.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 4))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.3263620Z   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.3551180Z Collecting certifi==2026.10.18 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 5))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.3782730Z   Downloading certifi-2026.10.18-py3-none-any.whl.metadata (2.5 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.5191510Z Collecting charset-normalizer==3.5.2 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 6))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.5417620Z   Downloading charset_normalizer-3.5.2-cp312-cp312-macosx_10_13_universal2.whl.metadata (46 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.5871400Z Collecting distro==1.9.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 7))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.6109960Z   Downloading distro-1.9.0-py3-none-any.whl.metadata (6.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.6345190Z Collecting h11==0.16.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 8))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.6590920Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.6856970Z Collecting httpcore2==2.14.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 9))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.7077490Z   Downloading httpcore2-2.14.0-py3-none-any.whl.metadata (27 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.7473620Z Collecting httpcore==1.0.9 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 10))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.7693600Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.7949520Z Collecting httpx2==2.14.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 11))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.8161670Z   Downloading httpx2-2.14.0-py3-none-any.whl.metadata (10 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.8416440Z Collecting httpx==0.28.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 12))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.8629350Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.8834520Z Collecting idna==3.20 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 13))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.9057490Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.9299430Z Collecting jsonpatch==1.35 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 14))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.9527540Z   Downloading jsonpatch-1.35-py3-none-any.whl.metadata (3.7 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:06.9754830Z Collecting jsonpointer==3.2.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 15))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.0010690Z   Downloading jsonpointer-3.2.1-py3-none-any.whl.metadata (2.6 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.0239920Z Collecting jsonschema-specifications==2025.9.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 16))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.0463280Z   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.0705030Z Collecting jsonschema==4.26.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 17))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.0915490Z   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.1274820Z Collecting langchain-core==1.6.12 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 18))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.1515080Z   Downloading langchain_core-1.6.12-py3-none-any.whl.metadata (4.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.1729530Z Collecting langchain-protocol==0.0.19 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 19))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.1942750Z   Downloading langchain_protocol-0.0.19-py3-none-any.whl.metadata (2.4 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.2189420Z Collecting langgraph-checkpoint-sqlite==3.1.2 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 20))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.2401470Z   Downloading langgraph_checkpoint_sqlite-3.1.2-py3-none-any.whl.metadata (4.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.2615650Z Collecting langgraph-checkpoint==4.3.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 21))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.2846840Z   Downloading langgraph_checkpoint-4.3.0-py3-none-any.whl.metadata (6.7 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.3109600Z Collecting langgraph-prebuilt==1.1.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 22))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.3361370Z   Downloading langgraph_prebuilt-1.1.1-py3-none-any.whl.metadata (6.9 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.3636820Z Collecting langgraph-sdk==0.4.8 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 23))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.3853800Z   Downloading langgraph_sdk-0.4.8-py3-none-any.whl.metadata (5.1 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.4186490Z Collecting langgraph==1.2.16 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 24))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.4414070Z   Downloading langgraph-1.2.16-py3-none-any.whl.metadata (4.9 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.4910630Z Collecting langsmith==0.14.11 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 25))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.5134230Z   Downloading langsmith-0.14.11-py3-none-any.whl.metadata (38 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.7012260Z Collecting orjson==3.13.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 26))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.7318990Z   Downloading orjson-3.13.0-cp312-cp312-macosx_15_0_arm64.whl.metadata (42 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.7907000Z Collecting ormsgpack==1.13.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 27))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.8140300Z   Downloading ormsgpack-1.13.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl.metadata (3.2 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.8379130Z Collecting packaging==26.3 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 28))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.8595310Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.9339020Z Collecting pydantic==2.14.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 29))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:07.9552760Z   Downloading pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.4746790Z Collecting pydantic_core==2.50.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 30))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.5050380Z   Downloading pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl.metadata (6.5 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.5319830Z Collecting PyYAML==6.0.3 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 31))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.5541480Z   Downloading pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl.metadata (2.4 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.5795020Z Collecting referencing==0.37.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 32))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.6011800Z   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.6251570Z Collecting requests-toolbelt==1.0.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 33))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.6471750Z   Downloading requests_toolbelt-1.0.0-py2.py3-none-any.whl.metadata (14 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.6739660Z Collecting requests==2.34.2 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 34))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.6959000Z   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.9269140Z Collecting rpds-py==2026.9.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 35))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.9471260Z   Downloading rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl.metadata (4.1 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.9648610Z Collecting sniffio==1.3.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 36))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:08.9857840Z   Downloading sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.0172890Z Collecting sqlite-vec==0.1.9 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 37))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.0402320Z   Downloading sqlite_vec-0.1.9-py3-none-macosx_11_0_arm64.whl.metadata (198 bytes)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.0643090Z Collecting tenacity==9.2.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 38))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.0854010Z   Downloading tenacity-9.2.1-py3-none-any.whl.metadata (1.4 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.1124380Z Collecting truststore==0.10.5 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 39))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.1352850Z   Downloading truststore-0.10.5-py3-none-any.whl.metadata (4.5 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.1564290Z Collecting typing-inspection==0.4.4 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 40))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.1773880Z   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.2006080Z Collecting typing_extensions==4.16.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 41))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.2221320Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.2461010Z Collecting urllib3==2.8.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 42))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.2672700Z   Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.3540810Z Collecting uuid_utils==0.17.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 43))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.3767740Z   Downloading uuid_utils-0.17.1-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl.metadata (6.4 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.4593390Z Collecting websockets==16.1.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 44))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.4853680Z   Downloading websockets-16.1.1-cp312-cp312-macosx_11_0_arm64.whl.metadata (6.8 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.5978940Z Collecting xxhash==4.0.1 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 45))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.6207810Z   Downloading xxhash-4.0.1-cp312-cp312-macosx_11_0_arm64.whl.metadata (17 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.6950330Z Collecting zstandard==0.25.0 (from -r /Users/runner/work/flow/flow/v2/requirements.lock (line 46))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.7211330Z   Downloading zstandard-0.25.0-cp312-cp312-macosx_11_0_arm64.whl.metadata (3.3 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.7580060Z Downloading aiosqlite-0.22.1-py3-none-any.whl (17 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.7820180Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.8081840Z Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.8386570Z Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.8657650Z Downloading certifi-2026.10.18-py3-none-any.whl (134 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.8979080Z Downloading charset_normalizer-3.5.2-cp312-cp312-macosx_10_13_universal2.whl (367 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.9498250Z Downloading distro-1.9.0-py3-none-any.whl (20 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:09.9805300Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.0043780Z Downloading httpcore2-2.14.0-py3-none-any.whl (84 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.0328870Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.0588550Z Downloading httpx2-2.14.0-py3-none-any.whl (96 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.0839790Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.1188970Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.1429450Z Downloading jsonpatch-1.35-py3-none-any.whl (17 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.1676480Z Downloading jsonpointer-3.2.1-py3-none-any.whl (8.3 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.1942200Z Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.2195380Z Downloading jsonschema-4.26.0-py3-none-any.whl (90 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.2479510Z Downloading langchain_core-1.6.12-py3-none-any.whl (573 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.2604570Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 573.8/573.8 kB 40.6 MB/s  0:00:00
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.2818670Z Downloading langchain_protocol-0.0.19-py3-none-any.whl (7.3 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.3075330Z Downloading langgraph_checkpoint_sqlite-3.1.2-py3-none-any.whl (41 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.3322350Z Downloading langgraph_checkpoint-4.3.0-py3-none-any.whl (58 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.3576630Z Downloading langgraph_prebuilt-1.1.1-py3-none-any.whl (42 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.3833620Z Downloading langgraph_sdk-0.4.8-py3-none-any.whl (164 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.4087850Z Downloading langgraph-1.2.16-py3-none-any.whl (260 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.4350520Z Downloading langsmith-0.14.11-py3-none-any.whl (869 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.4529190Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 869.0/869.0 kB 60.1 MB/s  0:00:00
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.4762580Z Downloading orjson-3.13.0-cp312-cp312-macosx_15_0_arm64.whl (123 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.5056440Z Downloading ormsgpack-1.13.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl (442 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.5322830Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.5576810Z Downloading pydantic-2.14.1-py3-none-any.whl (488 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.5946600Z Downloading pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl (2.0 MB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.6110000Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 125.9 MB/s  0:00:00
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.6348700Z Downloading pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl (173 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.6609110Z Downloading referencing-0.37.0-py3-none-any.whl (26 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.6848460Z Downloading requests_toolbelt-1.0.0-py2.py3-none-any.whl (54 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.7093320Z Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.7399240Z Downloading rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl (341 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.7674470Z Downloading sniffio-1.3.1-py3-none-any.whl (10 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.7932710Z Downloading sqlite_vec-0.1.9-py3-none-macosx_11_0_arm64.whl (165 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.8188670Z Downloading tenacity-9.2.1-py3-none-any.whl (32 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.8458010Z Downloading truststore-0.10.5-py3-none-any.whl (19 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.8710500Z Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.9009390Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.9305700Z Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.9616880Z Downloading uuid_utils-0.17.1-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl (557 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.9709000Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 557.1/557.1 kB 50.7 MB/s  0:00:00
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:10.9982760Z Downloading websockets-16.1.1-cp312-cp312-macosx_11_0_arm64.whl (177 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.0319660Z Downloading xxhash-4.0.1-cp312-cp312-macosx_11_0_arm64.whl (36 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.0715630Z Downloading zstandard-0.25.0-cp312-cp312-macosx_11_0_arm64.whl (640 kB)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.0817410Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 640.4/640.4 kB 52.8 MB/s  0:00:00
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1672510Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/aiosqlite-0.22.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1676580Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/annotated_types-0.8.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1684310Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/anyio-4.15.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1689790Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/attrs-26.1.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1695860Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/certifi-2026.10.18-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1701620Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/charset_normalizer-3.5.2-cp312-cp312-macosx_10_13_universal2.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1705520Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/distro-1.9.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1712580Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/h11-0.16.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1716350Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/httpcore2-2.14.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1720540Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/httpcore-1.0.9-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1726360Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/httpx2-2.14.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1730110Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/httpx-0.28.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1734640Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/idna-3.20-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1743270Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/jsonpatch-1.35-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1746030Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/jsonpointer-3.2.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1759390Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/jsonschema_specifications-2025.9.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1760570Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/jsonschema-4.26.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1766190Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langchain_core-1.6.12-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1768880Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langchain_protocol-0.0.19-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1772950Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langgraph_checkpoint_sqlite-3.1.2-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1776510Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langgraph_checkpoint-4.3.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1781760Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langgraph_prebuilt-1.1.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1789870Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langgraph_sdk-0.4.8-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1795310Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langgraph-1.2.16-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1805340Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/langsmith-0.14.11-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1809140Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/orjson-3.13.0-cp312-cp312-macosx_15_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1814780Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/ormsgpack-1.13.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1818850Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/packaging-26.3-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1824780Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/pydantic-2.14.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1838500Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1845900Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1851070Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/referencing-0.37.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1855890Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/requests_toolbelt-1.0.0-py2.py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1859700Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/requests-2.34.2-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1866100Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1869900Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/sniffio-1.3.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1874560Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/sqlite_vec-0.1.9-py3-none-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1877630Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/tenacity-9.2.1-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1880800Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/truststore-0.10.5-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1883480Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/typing_inspection-0.4.4-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1886890Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/typing_extensions-4.16.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1890970Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/urllib3-2.8.0-py3-none-any.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1896940Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/uuid_utils-0.17.1-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1900710Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/websockets-16.1.1-cp312-cp312-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1904240Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/xxhash-4.0.1-cp312-cp312-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1910650Z Saved /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-build-dche21at/wheels/zstandard-0.25.0-cp312-cp312-macosx_11_0_arm64.whl
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1913820Z Successfully downloaded aiosqlite annotated-types anyio attrs certifi charset-normalizer distro h11 httpcore2 httpcore httpx2 httpx idna jsonpatch jsonpointer jsonschema-specifications jsonschema langchain-core langchain-protocol langgraph-checkpoint-sqlite langgraph-checkpoint langgraph-prebuilt langgraph-sdk langgraph langsmith orjson ormsgpack packaging pydantic pydantic_core PyYAML referencing requests-toolbelt requests rpds-py sniffio sqlite-vec tenacity truststore typing-inspection typing_extensions urllib3 uuid_utils websockets xxhash zstandard
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1918910Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1919440Z [notice] A new release of pip is available: 26.2.1 -> 26.2.2
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.1920010Z [notice] To update, run: python3 -m pip install --upgrade pip
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6519120Z ##[group]Run python3 scripts/verify_v2_consumer.py --bundle .release/dist --output .release/consumer-verification.json
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6519860Z ^[[36;1mpython3 scripts/verify_v2_consumer.py --bundle .release/dist --output .release/consumer-verification.json^[[0m
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6804030Z shell: /bin/bash -e {0}
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6804820Z env:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6805130Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6805660Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.12.10/arm64/lib/pkgconfig
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6806310Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6806770Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6807280Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.12.10/arm64
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:11.6807620Z ##[endgroup]
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:12.4221420Z Detected Node.js v24.20.0 at /Users/runner/hostedtoolcache/node/24.20.0/arm64/bin/node; required exactly 24.x. Detected npm 11.19.0 at /Users/runner/hostedtoolcache/node/24.20.0/arm64/bin/npm.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.7679760Z Looking in links: /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.7723700Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/aiosqlite-0.22.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 1))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.7752830Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/annotated_types-0.8.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 2))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.7786160Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/anyio-4.15.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 3))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.7908180Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/attrs-26.1.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 4))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8009120Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/certifi-2026.10.18-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 5))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8113210Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/charset_normalizer-3.5.2-cp312-cp312-macosx_10_13_universal2.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 6))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8214740Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/distro-1.9.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 7))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8246700Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/h11-0.16.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 8))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8249700Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/httpcore2-2.14.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 9))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8353520Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/httpcore-1.0.9-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 10))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8381610Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/httpx2-2.14.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 11))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8387150Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/httpx-0.28.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 12))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8391690Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/idna-3.20-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 13))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8401070Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/jsonpatch-1.35-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 14))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8404910Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/jsonpointer-3.2.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 15))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8409390Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/jsonschema_specifications-2025.9.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 16))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8412750Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/jsonschema-4.26.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 17))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8416310Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langchain_core-1.6.12-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 18))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8419000Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langchain_protocol-0.0.19-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 19))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8421790Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langgraph_checkpoint_sqlite-3.1.2-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 20))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8424670Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langgraph_checkpoint-4.3.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 21))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8428020Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langgraph_prebuilt-1.1.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 22))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8431030Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langgraph_sdk-0.4.8-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 23))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8433950Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langgraph-1.2.16-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 24))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8437830Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/langsmith-0.14.11-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 25))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8502060Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/orjson-3.13.0-cp312-cp312-macosx_15_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 26))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8538240Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/ormsgpack-1.13.0-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 27))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8560190Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/packaging-26.3-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 28))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8576940Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/pydantic-2.14.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 29))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8634160Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 30))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8735780Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 31))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8839910Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/referencing-0.37.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 32))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.8942050Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requests_toolbelt-1.0.0-py2.py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 33))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9044500Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requests-2.34.2-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 34))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9245870Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/rpds_py-2026.9.1-cp312-cp312-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 35))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9361410Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/sniffio-1.3.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 36))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9488220Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/sqlite_vec-0.1.9-py3-none-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 37))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9506380Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/tenacity-9.2.1-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 38))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9637670Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/truststore-0.10.5-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 39))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9755550Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/typing_inspection-0.4.4-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 40))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9865060Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/typing_extensions-4.16.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 41))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:15.9979830Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/urllib3-2.8.0-py3-none-any.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 42))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:16.0184140Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/uuid_utils-0.17.1-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 43))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:16.0296760Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/websockets-16.1.1-cp312-cp312-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 44))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:16.0305880Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/xxhash-4.0.1-cp312-cp312-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 45))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:16.0413810Z Processing /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/zstandard-0.25.0-cp312-cp312-macosx_11_0_arm64.whl (from -r /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/wheels/requirements.lock (line 46))
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:16.0541440Z Installing collected packages: sqlite-vec, zstandard, xxhash, websockets, uuid_utils, urllib3, typing-inspection, typing_extensions, truststore, tenacity, sniffio, rpds-py, requests-toolbelt, requests, referencing, PyYAML, pydantic_core, pydantic, packaging, ormsgpack, orjson, langsmith, langgraph-sdk, langgraph-prebuilt, langgraph-checkpoint-sqlite, langgraph-checkpoint, langgraph, langchain-protocol, langchain-core, jsonschema-specifications, jsonschema, jsonpointer, jsonpatch, idna, httpx2, httpx, httpcore2, httpcore, h11, distro, charset-normalizer, certifi, attrs, anyio, annotated-types, aiosqlite
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:18.9820650Z Successfully installed PyYAML-6.0.3 aiosqlite-0.22.1 annotated-types-0.8.0 anyio-4.15.1 attrs-26.1.0 certifi-2026.10.18 charset-normalizer-3.5.2 distro-1.9.0 h11-0.16.0 httpcore-1.0.9 httpcore2-2.14.0 httpx-0.28.1 httpx2-2.14.0 idna-3.20 jsonpatch-1.35 jsonpointer-3.2.1 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 langchain-core-1.6.12 langchain-protocol-0.0.19 langgraph-1.2.16 langgraph-checkpoint-4.3.0 langgraph-checkpoint-sqlite-3.1.2 langgraph-prebuilt-1.1.1 langgraph-sdk-0.4.8 langsmith-0.14.11 orjson-3.13.0 ormsgpack-1.13.0 packaging-26.3 pydantic-2.14.1 pydantic_core-2.50.1 referencing-0.37.0 requests-2.34.2 requests-toolbelt-1.0.0 rpds-py-2026.9.1 sniffio-1.3.1 sqlite-vec-0.1.9 tenacity-9.2.1 truststore-0.10.5 typing-inspection-0.4.4 typing_extensions-4.16.0 urllib3-2.8.0 uuid_utils-0.17.1 websockets-16.1.1 xxhash-4.0.1 zstandard-0.25.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:19.3206370Z No broken requirements found.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8873110Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8876210Z added 126 packages, and audited 127 packages in 10s
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8877070Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8877500Z 46 packages are looking for funding
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8878500Z   run `npm fund` for details
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8879990Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:29.8880420Z found 0 vulnerabilities
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:30.3455320Z /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/v2/runtime/bundled-goose/goose
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:30.4548580Z Flow install/update: local knowledge needs provisioning. {"command": "flow knowledge setup --download", "consent": "Install/update interactive download consent or --knowledge download permits acquisition; advanced setup --download also permits it. Workflow execution/status never acquire assets.", "sources": ["https://pypi.org/simple", "https://pypi.org/pypi/<pinned-package>/<pinned-version>/json", "https://files.pythonhosted.org", "https://huggingface.co/Qdrant/bge-small-en-v1.5-onnx-Q/resolve/aa8f8b060edb00e03bfdd08813a2949946c8ba55/<pinned-file> (official HF CDN redirects)"], "embedding_bytes": 67179163, "minimum_free_bytes": 6442450944, "source_builds": "Only pinned pybars3/PyMeta3 source archives are built, using four pinned build-tool wheels in a disposable macOS environment with network denied", "disk": "Reserve at least 6 GiB for wheels, installed dependencies and staging; corpus backups/generations and Ollama weights need additional space", "network": "Dependency transfer varies by platform (typically hundreds of MB to a few GiB); embedding files add about 67 MB. Exact wheel sizes/hashes are recorded after resolution. No Ollama chat model is downloaded.", "supported_host": "Managed macOS 15+ arm64 release", "python": "Python 3.12 required; uses the managed Flow interpreter by default", "offline": "flow knowledge setup --python /path/to/python3.12 --wheelhouse /path/to/wheels; configure with a transferred embedding cache separately"}
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:30.4556080Z No chat weights, agent provider changes or credential copying. Provisioning/initial audit is bounded to 30 minutes. Deferring a fresh store leaves agent launches blocked until provisioning; existing known-good snapshots remain usable. Download, defer or cancel.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:30.4559020Z Flow install/update knowledge failed: Knowledge provisioning requires consent; no terminal input was read. Retry install/update with --knowledge download, --knowledge offline (verified existing assets), or --knowledge defer. No runtime activation occurred.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:31.3281030Z Flow knowledge transaction restored; attempt retained at /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/backups/knowledge-unselected-a647e14910d24efeb12ec87425ac3b54; manual changes preserved: []
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0478970Z Traceback (most recent call last):
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0479930Z   File "/Users/runner/work/flow/flow/scripts/verify_v2_consumer.py", line 35, in <module>
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0480730Z     args=parser.parse_args();result=verify(args.bundle)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0481320Z                                     ^^^^^^^^^^^^^^^^^^^
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0481970Z   File "/Users/runner/work/flow/flow/scripts/verify_v2_consumer.py", line 21, in verify
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0482650Z     managed.install_release(home,manifest,bundle=bundle)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0491970Z   File "/Users/runner/work/flow/flow/v2/poc/managed.py", line 386, in install_release
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0492920Z     knowledge=knowledge_runner(release,root,knowledge_mode)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0493420Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0493990Z   File "/Users/runner/work/flow/flow/v2/poc/managed.py", line 346, in provision_knowledge
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0495200Z     if child.returncode:raise subprocess.CalledProcessError(child.returncode,command)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0496130Z                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0504570Z subprocess.CalledProcessError: Command '['/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/releases/v0.51.0-836a0a72c282-f86a229a/v2/.venv/bin/python', '-m', 'poc.install_knowledge', '--root', '/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/state/knowledge', '--mode', 'ask', '--result', '/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-69flk9f3/.flow/v2/knowledge-result-475a8f7ea5e947e9860cebe57f48d0d2.json']' returned non-zero exit status 1.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0694640Z ##[error]Process completed with exit code 1.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.0967880Z Post job cleanup.
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.5927830Z [command]/opt/homebrew/bin/git version
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6022500Z git version 2.55.0
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6048610Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/beb41f3d-678e-4ab2-9cad-414a1d162ede/.gitconfig'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6056260Z Temporarily overriding HOME='/Users/runner/work/_temp/beb41f3d-678e-4ab2-9cad-414a1d162ede' before making global git config changes
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6057280Z Adding repository directory to the temporary git global config as a safe directory
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6060860Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/flow/flow
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6176990Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.6249220Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.7260450Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.7319410Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.8734520Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:33.9041620Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:34.0463260Z Evaluate and set job outputs
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:34.0470320Z Cleaning up orphan processes
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T20:42:35.8054090Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

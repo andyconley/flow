@@ -29,16 +29,63 @@ embedding caches must also be provisioned locally; they are not in Git.
 
 ## Supported local provisioning
 
-A normal install seeds authored notes without downloading models/dependencies. Run:
+Normal install and update detect and reuse healthy local knowledge assets. If assets
+or configuration are missing, an interactive run prints the disk/network plan and
+asks **download / defer / cancel** before acquisition. Download consent provisions
+verified dependencies/embeddings, configures the extraction runtime and waits for
+an audited initial snapshot before activating the new Flow runtime.
 
 ```sh
-flow knowledge setup                 # show sources, disk/network plan; no downloads
-flow knowledge setup --download      # explicit consent to acquire pinned local assets
-flow knowledge doctor
+flow update                           # reuse assets, otherwise ask on a terminal
+flow update --knowledge download      # explicit unattended download consent
+flow update --knowledge offline       # reuse verified installed assets; never acquire
+flow update --knowledge defer         # deliberately install with knowledge deferred
+flow update --non-interactive         # reuse healthy assets or fail without prompting
 flow knowledge status
 ```
 
-`--download` is the explicit user invocation/consent boundary. It acquires all
+The same flags work with `install-flow.sh install` and the public `install.sh`
+bootstrap. When piping bootstrap into Bash, consent uses an existing controlling terminal
+(`/dev/tty`); it never reads the shell script as an answer. Without a terminal, pass
+`bash -s -- --knowledge download` or `--knowledge defer` explicitly. JSON and
+`--non-interactive` runs never prompt; missing assets without explicit policy fail
+before runtime activation. `--check` is metadata-only and does not provision.
+A no-op update still completes deferred/missing knowledge provisioning.
+
+**After this correction is released — transition from v0.52.0:** that installed updater predates this gate and cannot
+execute it on its first upgrade. Use the current public bootstrap with an explicit
+knowledge policy for this one transition; it uses the new installer over the existing
+installation and preserves durable notes/configuration. An old `flow update` alone
+cannot retroactively prompt/provision. Future updates use the integrated gate.
+
+Explicit deferral reports `knowledge.state: deferred`, `ready: false`, the prior
+snapshot (if any) and a resume command `flow update --knowledge download`.
+Fresh deferred knowledge cannot serve agent tasks until provisioned; existing
+known-good snapshots remain available. No fallback search is substituted.
+Missing extraction chat weights cause a clear failure with exact Ollama commands;
+Flow never pulls them. Retry the same install/update command after satisfying the
+requirement, or explicitly defer. Verified acquired assets remain cached.
+
+Provisioning failures preserve the previous runtime, authored notes, settings and
+snapshot. Backups include the mutable knowledge transaction; unexpected manual
+edits/deletions remain active and are reported as preserved conflicts. Failed
+attempts and acquired assets are retained for recovery. Rollback refuses to replace
+knowledge changed since installation, including newly added configuration.
+Uncertain cancellation retains process identities/audit evidence, skips restoration
+and blocks further provisioning and agent launch until the recorded execution is
+reconciled. It never blindly retries a possibly live writer. No active user
+installation is touched by the tests.
+
+`knowledge setup` remains the repair/advanced entrypoint:
+
+```sh
+flow knowledge setup                 # inspect the acquisition plan
+flow knowledge setup --download      # explicit repair acquisition
+flow knowledge doctor
+```
+
+`--knowledge download`, interactive install/update download selection, and advanced
+`setup --download` are the acquisition consent boundaries. It acquires all
 187 exact Python dependency pins from the official PyPI release APIs,
 validates registry SHA-256/size, then installs offline with
 `--require-hashes`. It acquires the FastEmbed-maintained Qdrant conversion of
@@ -76,8 +123,7 @@ different roles. Choosing extraction does not select the agent provider.
 Once dependency/cache/model checks pass, setup backs up notes, configures a
 versioned runtime/cache under `~/.flow/v2/state/knowledge/provisioning/<id>/`,
 reconciles the shared corpus and automatically queues initial indexing. Wait for
-`flow knowledge status` to show `ready`. No manual wheel/cache assembly or
-`configure` command is needed for this normal path. Published snapshots and
+`flow knowledge status` to show `ready`. Normal install/update waits for the audited snapshot before activation; advanced setup queues it. No manual wheel/cache assembly or `configure` command is needed for the online path. Published snapshots and
 existing notes survive failed/interrupted acquisition. Partial downloads are
 private and removed on failure; verified files are reused on explicit retry.
 `--rebuild-runtime` creates a new isolated environment while retaining the old
@@ -197,3 +243,21 @@ The read-only production ACP knowledge-use task passes with Codex ACP, local Oll
 If offline setup fails, its partial `runtime/` is retained and replacement is refused. Inspect/remove only that failed virtual environment, or provision another isolated environment and configure its Python. Notes, backups and exports must remain intact.
 
 The native ACP transport remains explicit, as described in NATIVE-ACP-RESULTS.md.
+
+
+### Rollback after knowledge use
+
+`flow rollback` is deliberately conservative: any change to the recorded knowledge
+inventory, including normal reconciliation/processing status, can make it refuse
+with `Knowledge edits prevent rollback`. A same-version update does not clear that
+guard. Refusal leaves the runtime, current knowledge and backups untouched; it is
+not safe to delete the receipt or reset notes merely to force rollback.
+
+Run `flow knowledge export` to preserve authored cards and the generated export
+manifest; retain the durable knowledge directory/backups for configuration and
+processing evidence. For a runtime downgrade after this refusal, use an explicit
+published version, for example `flow install --version v0.52.0 --knowledge defer`.
+This performs a fresh installation transaction around the current durable knowledge
+rather than restoring the older knowledge backup. Deferral is visible and does not
+provision missing assets. Select a compatible supported release and inspect
+`flow knowledge status` afterward. There is no force-rollback flag.

@@ -27,7 +27,7 @@ def flow(home,*args):return command([home/'.local/bin/flow',*args],cwd=home,home
 
 
 def install(bundle,home):
-    result=managed.install_release(home,json.loads((bundle/'release-manifest.json').read_text()),bundle=bundle)
+    result=managed.install_release(home,json.loads((bundle/'release-manifest.json').read_text()),bundle=bundle,knowledge_mode='defer')
     return 0,json.dumps(result)+'\n'
 
 

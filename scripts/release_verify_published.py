@@ -157,12 +157,12 @@ def verify(
             (assets/'release-manifest.json').write_text(json.dumps(distribution,indent=2)+'\n')
             result['checks'].append({'id':'public-assets-and-provenance','result':'passed'})
             fresh_home=temp_root/'fresh-home';fresh_home.mkdir()
-            managed.install_release(fresh_home,distribution,bundle=assets)
+            managed.install_release(fresh_home,distribution,bundle=assets,knowledge_mode='defer')
             for check_id,arguments in [
                 ('public-fresh-install',('--version',)),
                 ('doctor-check',('doctor','--json')),
                 ('public-release-update-check',('update','--check','--json','--repository',github_repository)),
-                ('public-release-update',('update','--repository',github_repository))]:
+                ('public-release-update',('update','--repository',github_repository,'--knowledge','defer'))]:
                 code,text=flow(fresh_home,*arguments)
                 for line in text.splitlines():
                     if line.startswith(QUOTA_PREFIX):
