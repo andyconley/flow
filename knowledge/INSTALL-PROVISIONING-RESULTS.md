@@ -6,7 +6,7 @@ No chat weights, agent-provider changes or credential copies are introduced. Exi
 
 ## Transaction and review evidence
 
-- 247 tests passed in 27.675 seconds with seeded HOME and all local fixture flags enabled. New tests cover consent, absent terminal, piped-bootstrap controlling terminal, decline/defer/offline/noninteractive/JSON policy, no-op catch-up, model/dependency/snapshot failure, provider preservation, manual edit/deletion/config preservation, writer exclusion, complete rollback inventory, activation-time edits, same-version provisioning receipts, uncertain cancellation and pre-activation finalization failure.
+- 248 tests passed in the final consumer-policy regression run with seeded HOME and all local fixture flags enabled. New tests cover consent, absent terminal, piped-bootstrap controlling terminal, decline/defer/offline/noninteractive/JSON policy, no-op catch-up, model/dependency/snapshot failure, provider preservation, manual edit/deletion/config preservation, writer exclusion, complete rollback inventory, activation-time edits, same-version provisioning receipts, uncertain cancellation and pre-activation finalization failure.
 - The existing distribution fixture executes the staged installed helper with explicit deferred/no-model policy using a real interpreter. Dependencies/npm are fixture controlled. Full fresh online knowledge acquisition/model execution is not claimed.
 - Independent read-only review identified and verified fixes for restoration races, intended-byte audit, incomplete rollback checks, stale no-op receipts, cancellation uncertainty, post-activation finalization and late manual edits. No remaining substantiated blocker was reported after rechecks.
 - Final full log: `knowledge/evidence/install-update-final-regressions.log`. No large downloads, live models, active installation changes or credential copying were used.
@@ -22,3 +22,5 @@ The v0.52.0 installed updater cannot execute a hook it does not contain. Once th
 ## Release status and parallel scope
 
 This is a separate correction to v0.52.0, with no tag/release rewriting and no merge/release yet. The separate smoke-recovery task owns lifecycle/glg/preflight/handoffs. This branch does not edit those files; it calls the existing ProcessScope API, which must remain compatible at integration.
+
+Hosted head836a0a7 built the runtime but the separate verify_v2_consumer harness omitted an explicit unattended knowledge policy. It correctly failed consent. Both harness install calls now explicitly defer and assert visible deferral; existing consumer assertions remain intact. Negative hosted evidence is retained in evidence/install-update-hosted-failure-836a0a7.log. A regression executes the harness and verifies its full-check/idempotence/rollback behavior.
