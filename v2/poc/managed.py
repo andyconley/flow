@@ -314,6 +314,13 @@ def restore_knowledge(root,saved,*,expected,strict=False,held=False):
 
 def provision_knowledge(release,root,mode):
     if not (release/'knowledge/manifest.json').exists():return {'state':'not_distributed','ready':False}
+    if not (release/'v2/poc/install_knowledge.py').is_file():
+        if mode!='defer':raise ValueError('Target release predates integrated knowledge provisioning; select --knowledge defer explicitly or a newer release. No runtime activation occurred.')
+        from .knowledge import write as knowledge_write
+        deferred={'state':'deferred','ready':False,'reason':'Target release predates integrated provisioning; existing knowledge retained without model or dependency acquisition','resume':'Install a current release with integrated knowledge provisioning','legacy_target':True}
+        knowledge_write(root/'state/knowledge/install-status.json',deferred)
+        print('Flow knowledge DEFERRED: '+json.dumps(deferred),file=sys.stderr,flush=True)
+        return deferred
     result=root/('knowledge-result-'+uuid.uuid4().hex+'.json');uncertain=False
     env={key:value for key,value in os.environ.items() if not any(secret in key.upper() for secret in ('TOKEN','SECRET','PASSWORD','API_KEY'))}
     env.update(PYTHONPATH=str(release/'v2'),FLOW_KNOWLEDGE_HOME=str(root/'state/knowledge'))

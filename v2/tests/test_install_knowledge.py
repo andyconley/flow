@@ -294,4 +294,22 @@ class KnowledgeRuntimeRollbackTests(KnowledgeTransactionFixture, unittest.TestCa
         self.assertEqual(before,managed.knowledge_inventory(self.fixture.home/'.flow/v2'))
 
 
+class KnowledgeLegacyTargetTests(KnowledgeTransactionFixture, unittest.TestCase):
+    def test_legacy_manifest_without_hook_requires_explicit_defer(self):
+        self.seed('Preserve local authored note.\n')
+        release=self.fixture.root/'legacy-release';(release/'knowledge').mkdir(parents=True)
+        (release/'knowledge/manifest.json').write_text('{}')
+        root=self.fixture.home/'.flow/v2'
+        with patch.object(managed.subprocess,'Popen',side_effect=AssertionError('Must not launch missing helper')):
+            with self.assertRaisesRegex(ValueError,'predates integrated'):managed.provision_knowledge(release,root,'offline')
+            with managed.knowledge_transaction(root) as backup:
+                result=managed.provision_knowledge(release,root,'defer')
+                finalized=managed.finalize_knowledge(root,backup)
+        self.assertEqual('deferred',result['state']);self.assertFalse(result['ready'])
+        self.assertTrue(result['legacy_target']);self.assertEqual([],finalized['manual'])
+        self.assertEqual('Preserve local authored note.\n',(self.store/'notes/local.md').read_text())
+        self.assertEqual('known-good',k.read(self.store/'CURRENT.json')['generation'])
+        self.assertEqual('preserve-runtime',k.read(self.store/'settings.json')['python'])
+
+
 if __name__=='__main__':unittest.main()
