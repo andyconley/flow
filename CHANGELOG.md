@@ -2,6 +2,29 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.51.0](https://github.com/andyconley/flow/compare/v0.50.1...v0.51.0) (2026-10-20)
+
+### ⚠ BREAKING CHANGES
+
+* Normal installation and updates select managed Flow v2 on Apple Silicon macOS 15+ with Python 3.12 and Node 24. Legacy installations require the one-time release bootstrap; OpenHands execution is retired.
+
+### Features
+
+* ship v2-only managed releases and stage coordination ([007e013](https://github.com/andyconley/flow/commit/007e0131f8f11f39bd5a9392872f6aee7958f977))
+
+### Bug Fixes
+
+* bind public release verification to the tested build manifest ([8c3c7a0](https://github.com/andyconley/flow/commit/8c3c7a0805c919c415325fdd69a2860d227140f5))
+* capture bounded private ACP tool evidence ([cb9faf8](https://github.com/andyconley/flow/commit/cb9faf8c509b86cf2f9b2b340bdbf3844c76ce97))
+* enable portable read-only SQLite URI connections ([a04cc61](https://github.com/andyconley/flow/commit/a04cc6138f76d8cb10440871126b3d8698ec4f32))
+* reject retired releases in the managed bootstrap ([962a530](https://github.com/andyconley/flow/commit/962a53091193ebce30886230aa7dd7f5297e959a))
+* repair v2 native worker execution and completion ([57e61c9](https://github.com/andyconley/flow/commit/57e61c960bf2f559538b31270a42b120677443a8))
+* repair v2 worker scratch scope and delegation defaults ([1c98a09](https://github.com/andyconley/flow/commit/1c98a093b066fd121e6acd04258a3d9f1335053d))
+
+### Continuous Integration
+
+* avoid duplicate production Goose builds on main ([4f9af8a](https://github.com/andyconley/flow/commit/4f9af8a68134273ade01fa83601a2e1d9e640b7b))
+
 ## [0.50.1](https://github.com/andyconley/flow/compare/v0.50.0...v0.50.1) (2026-10-19)
 
 ### Bug Fixes
