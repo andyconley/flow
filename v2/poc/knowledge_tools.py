@@ -12,7 +12,7 @@ def require_ready():
     if not (root/'base.json').exists() and not (root/'settings.json').exists():return
     cfg=knowledge.read(root/'settings.json',{})
     if not cfg.get('python') or not Path(cfg['python']).is_file():
-        raise KnowledgeUnavailable('Knowledge runtime is not provisioned; run flow knowledge setup/configure, then process. No agent was launched.')
+        raise KnowledgeUnavailable('Knowledge runtime is not provisioned; run flow knowledge doctor for exact setup/configure commands, then flow knowledge process. No agent was launched.')
     try:knowledge.snapshot(root)
     except Exception as error:raise KnowledgeUnavailable(str(error)+'; no agent was launched') from error
     import subprocess

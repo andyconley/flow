@@ -27,3 +27,9 @@ The recorded actual readonly production ACP task passed on the explicitly select
 The corpus contains all 21 existing authoritative cards for six of 13 roles. Seven roles have no authoritative cards; no expertise was fabricated. Semantic ranking is imperfect and inferred edges remain suggestions. Notes and backups/generations have no automatic retention cleanup.
 
 This review authorizes no merge/release. Parent review of scope/results remains required. The isolated task model server is stopped; active installs and original sources remain untouched.
+
+## Provisioning usability follow-up
+
+`flow knowledge doctor` is a supported no-install diagnostic command. It reports Python, audited BM/CocoIndex, offline embedding cache and local model separately; accepts proposed `--python`, `--cache`, `--model`, `--ollama` before configure; and prints exact setup/wheelhouse/configure commands including the installed lock path. Ordinary status includes the diagnostics/setup hint. Missing inputs return nonzero and never switch retrieval or download resources. Real isolated diagnostic evidence passed dependencies/cache and explicitly failed the intentionally stopped local model server (`evidence/doctor-local-model-stopped.json`). All 204 local regressions passed (`evidence/provisioning-reviewed-regressions.log`).
+
+The separate reviewer also checked the diagnostic follow-up. Its two findings (effective settings/custom-home command preservation and eager offline cache validation) were fixed and re-reviewed with no remaining substantiated blocker.

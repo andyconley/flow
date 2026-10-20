@@ -35,13 +35,16 @@ before any BM operation. The private search projection shim requires re-audit
 before changing that version or source distribution. CocoIndex is 1.0.25, using
 local file targets and LMDB state, with no Neo4j or PostgreSQL service.
 
+Start with `flow knowledge doctor`: it exits nonzero when the local Python, audited dependencies, offline embedding cache or local model is missing, and prints exact setup commands with the installed requirements path. Use `doctor --python ... --cache ... --model ... --ollama ...` to diagnose proposed paths before configuring them. `flow knowledge status` also shows provisioning state and points to this command. Diagnostics do not install packages or download models.
+
 Prepare a wheelhouse explicitly from the official registry (or transfer an already
 verified wheelhouse for an offline machine):
 
 ```sh
-python3.12 -m pip download --index-url https://pypi.org/simple --only-binary=:all: --no-deps -r knowledge/requirements.lock -d /path/to/knowledge-wheels
+python3.12 -m pip download --index-url https://pypi.org/simple --only-binary=:all: --no-deps -r "$HOME/.flow/v2/current/knowledge/requirements.lock" -d /path/to/knowledge-wheels
 flow knowledge setup --python /path/to/python3.12 --wheelhouse /path/to/knowledge-wheels
 flow knowledge configure --python "$HOME/.flow/v2/state/knowledge/runtime/bin/python" --cache /path/to/preprovisioned/fastembed_cache --model qwen3:4b --ollama http://127.0.0.1:11434
+flow knowledge doctor
 flow knowledge process
 flow knowledge status
 ```
@@ -138,3 +141,5 @@ Coverage of all 13 roles is recorded in `COVERAGE.md`; the 21-card seed covers s
 The read-only production ACP knowledge-use task passes with Codex ACP, local Ollama `gpt-oss:20b`, and the explicit namespace compatibility adapter. Enable it with `flow knowledge namespace-compat on` (disable with `off`); it requires an explicitly configured credential-free loopback Codex provider. See `NATIVE-ACP-RESULTS.md` for exact versions, evidence and reproduction. Qwen final-contract failures remain in `ACP-STATUS.md`. A complete code-changing implementation/review workflow and other provider/model combinations are not qualified. Merge/release still requires parent review.
 
 If offline setup fails, its partial `runtime/` is retained and replacement is refused. Inspect/remove only that failed virtual environment, or provision another isolated environment and configure its Python. Notes, backups and exports must remain intact.
+
+The extraction model (`qwen3:4b` in these setup examples) and the ACP task model (`gpt-oss:20b` in the qualified test) have different roles. Configuring extraction does not select the agent provider/model. The native transport remains explicit, as described in NATIVE-ACP-RESULTS.md.

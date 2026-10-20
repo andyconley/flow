@@ -116,7 +116,8 @@ def fingerprint(root):
     code=[Path(__file__),*sorted(Path(__file__).with_name('knowledge_runtime').glob('*.py')),Path(__file__).with_name('knowledge_runtime')/'compatibility.json',SHARED/'requirements.lock']
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())
 def status(root):
-    state=read(root/'status.json',{'state':'pending','reason':'not processed'})
+    from .knowledge_health import hint
+    state={**read(root/'status.json',{'state':'pending','reason':'not processed'}),'provisioning':hint(root)}
     current=read(root/'CURRENT.json',{})
     if current and state.get('fingerprint')==current.get('fingerprint') and state.get('state')!='ready':
         receipt=read(root/'generations'/current['generation']/'receipt.json',{})
@@ -248,6 +249,8 @@ def graph(root,start,kind='complements',depth=2):
 def main(argv=None):
     parser=argparse.ArgumentParser();parser.add_argument('--home',type=Path,default=home());sub=parser.add_subparsers(dest='action',required=True)
     for name in ('seed','status','process','watch','export'):sub.add_parser(name)
+    health=sub.add_parser('doctor')
+    for option in ('python','cache','model','ollama'):health.add_argument('--'+option)
     setup=sub.add_parser('setup');setup.add_argument('--python',required=True);setup.add_argument('--wheelhouse',type=Path,required=True)
     c=sub.add_parser('configure');c.add_argument('--python',required=True);c.add_argument('--cache',required=True);c.add_argument('--model',default='qwen3:4b');c.add_argument('--ollama',default='http://127.0.0.1:11434')
     transport=sub.add_parser('namespace-compat');transport.add_argument('mode',choices=('on','off'))
@@ -260,7 +263,11 @@ def main(argv=None):
     g=sub.add_parser('graph');g.add_argument('permalink');g.add_argument('--type',default='complements');g.add_argument('--depth',type=int,default=2)
     a=parser.parse_args(argv);root=a.home.absolute()
     try:
-        if a.action=='setup':
+        if a.action=='doctor':
+            from .knowledge_health import doctor
+            result=doctor(root,python=a.python,cache=a.cache,model=a.model,ollama=a.ollama)
+            print(json.dumps(result,indent=2));return 0 if result['ok'] else 1
+        elif a.action=='setup':
             with locked(root):
                 target=root/'runtime'
                 if target.exists():raise ValueError('Knowledge runtime exists; stage a new runtime and configure explicitly')
