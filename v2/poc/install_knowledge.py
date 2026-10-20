@@ -113,6 +113,16 @@ def ensure_model(root,policy):
     except Exception as error:raise ValueError('Explicit extraction-model acquisition failed; no coding-agent provider change. '+model_requirement(model,endpoint,error,model_profile(root,model))) from error
 
 
+def verify_provisioned_model(root,model,endpoint,approved_digest):
+    """Do not let online's newly written config redefine the approved identity."""
+    selected=model_selection(root)
+    actual=k.local_model_digest(endpoint,model)
+    recorded=k.read(root/'settings.json',{}).get('model_digest',approved_digest)
+    normalize=lambda value:str(value).removeprefix('sha256:')
+    if selected!=(model,endpoint) or normalize(actual)!=normalize(approved_digest) or normalize(recorded)!=normalize(approved_digest):
+        raise ModelIdentityMismatch('Extraction model changed during provisioning: approved '+str(approved_digest)+', observed '+str(actual)+', recorded '+str(recorded)+'. No indexing or runtime activation occurred; preserve/review the intended model identity and retry. Acquired assets remain cached.')
+
+
 def provision(root, mode='ask', *, interactive=None, choose=None, model_policy='offline'):
     """No detached worker: installation succeeds only after an audited snapshot."""
     root = Path(root)
@@ -140,13 +150,14 @@ def provision(root, mode='ask', *, interactive=None, choose=None, model_policy='
         if not health['ok']:
             if mode == 'offline':
                 raise ValueError('Offline knowledge assets/configuration are incomplete; no downloads attempted. '+json.dumps(health)+'; supply verified offline assets using knowledge setup/configure, or explicitly choose --knowledge defer.')
-            previous = {**k.read(root/'provisioned-runtime.json', {}), **current}
-            ensure_model(root,model_policy)
+            model,endpoint=model_selection(root)
+            approved_digest=ensure_model(root,model_policy)
             k.write(root/'provisioning-status.json', {'state': 'running', 'consent': 'install/update --knowledge download or interactive download'})
-            result = online(root, sys.executable, previous.get('model', 'qwen3:4b'), previous.get('ollama', 'http://127.0.0.1:11434'))
+            result = online(root, sys.executable, model, endpoint)
             if not result['configured']:
                 k.write(root/'provisioning-status.json', {'state': 'awaiting_model', **result})
                 raise ValueError('Local extraction model unavailable after provisioning; acquired assets remain cached. '+json.dumps(result)+'; satisfy the printed Ollama requirement and retry install/update --knowledge download, or explicitly defer.')
+            verify_provisioned_model(root,model,endpoint,approved_digest)
             k.write(root/'provisioning-status.json', {'state': 'ready', 'assets_ready': True})
         shared = k.reconcile_shared(root)
     # Bounded worker build, audit and atomic CURRENT publication; no background job.
