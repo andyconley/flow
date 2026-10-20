@@ -432,6 +432,9 @@ jobs:
 
       - name: Verify public release and consumer paths
         env:
+          # Bound each metadata request to one full anonymous hourly reset.
+          # Consumers inherit this wait policy, never the metadata read token.
+          FLOW_GITHUB_RETRY_WAIT_SECONDS: '3900'
           FLOW_RELEASE_MANIFEST_SHA: ${{ needs.build-runtime.outputs.manifest_sha256 }}
           # This job inherits contents: read; the token is used only by the
           # release metadata GET and stripped from consumer subprocesses.

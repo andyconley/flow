@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 import urllib.request
 import uuid
+from .release_http import github_json
 
 REPOSITORY = 'andyconley/flow'
 ASSETS = ('flow-code.tar.gz','python-wheels.tar.gz','goose-macos-arm64.gz','goose-macos-arm64.json')
@@ -71,14 +72,14 @@ def supported():
     print(f'{detected} Detected npm {npm_version} at {npm}.',file=sys.stderr)
 
 
-def latest(repository=REPOSITORY, tag=None):
+def latest(repository=REPOSITORY, tag=None, *, evidence=None):
     if not re.fullmatch(r'[\w.-]+/[\w.-]+',repository): raise ValueError('Invalid release repository')
     endpoint = 'tags/'+tag if tag else 'latest'
     if tag and not re.fullmatch(r'v\d+\.\d+\.\d+',tag): raise ValueError('Stable release tag required')
     headers={'User-Agent':'Flow-v2-installer','Accept':'application/vnd.github+json'}
     if os.environ.get('FLOW_RELEASE_READ_TOKEN'):headers['Authorization']='Bearer '+os.environ['FLOW_RELEASE_READ_TOKEN']
     request = urllib.request.Request(f'https://api.github.com/repos/{repository}/releases/{endpoint}',headers=headers)
-    with urllib.request.urlopen(request,timeout=30) as response: release=json.load(response)
+    release=github_json(request,evidence=evidence)
     if release.get('draft') or release.get('prerelease'): raise ValueError('A published stable release is required')
     tag=release['tag_name']
     if not re.fullmatch(r'v\d+\.\d+\.\d+',tag): raise ValueError('Invalid release tag')
