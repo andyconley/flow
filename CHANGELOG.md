@@ -2,6 +2,13 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.51.1](https://github.com/andyconley/flow/compare/v0.51.0...v0.51.1) (2026-10-20)
+
+### Bug Fixes
+
+* explain Node and npm prerequisites before installation ([9bf6ccc](https://github.com/andyconley/flow/commit/9bf6ccca49c3a5deef04f3ac7041f75f76f6394b))
+* retain prerequisite context for unreadable version output ([abf7ae4](https://github.com/andyconley/flow/commit/abf7ae4ef42a6db7940b38829bbbdecd642eb845))
+
 ## [0.51.0](https://github.com/andyconley/flow/compare/v0.50.1...v0.51.0) (2026-10-20)
 
 ### ⚠ BREAKING CHANGES
