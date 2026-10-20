@@ -312,7 +312,7 @@ def restore_knowledge(root,saved,*,expected,strict=False,held=False):
     return conflicts
 
 
-def provision_knowledge(release,root,mode):
+def provision_knowledge(release,root,mode,model_policy='offline'):
     if not (release/'knowledge/manifest.json').exists():return {'state':'not_distributed','ready':False}
     if not (release/'v2/poc/install_knowledge.py').is_file():
         if mode!='defer':raise ValueError('Target release predates integrated knowledge provisioning; select --knowledge defer explicitly or a newer release. No runtime activation occurred.')
@@ -321,6 +321,16 @@ def provision_knowledge(release,root,mode):
         knowledge_write(root/'state/knowledge/install-status.json',deferred)
         print('Flow knowledge DEFERRED: '+json.dumps(deferred),file=sys.stderr,flush=True)
         return deferred
+    from .install_knowledge import resolve_model_mode
+    if mode=='ask':
+        # setsid() removes the worker's controlling terminal. Read consent in
+        # this foreground parent, never from curl's piped installer script.
+        from .install_knowledge import resolve_mode
+        from .knowledge_health import doctor
+        mode=resolve_mode(mode,doctor(root/'state/knowledge'))
+    mode,model_policy=resolve_model_mode(root/'state/knowledge',mode,model_policy)
+    model_protocol='MODEL_ACQUISITION_PROTOCOL = 1' in (release/'v2/poc/install_knowledge.py').read_text()
+    if model_policy=='download' and not model_protocol:raise ValueError('Target release cannot acquire extraction models; explicitly provision the selected model first or choose --knowledge defer')
     result=root/('knowledge-result-'+uuid.uuid4().hex+'.json');uncertain=False
     env={key:value for key,value in os.environ.items() if not any(secret in key.upper() for secret in ('TOKEN','SECRET','PASSWORD','API_KEY'))}
     env.update(PYTHONPATH=str(release/'v2'),FLOW_KNOWLEDGE_HOME=str(root/'state/knowledge'))
@@ -328,6 +338,7 @@ def provision_knowledge(release,root,mode):
         from .lifecycle import ProcessScope
         import time
         command=[str(release/'v2/.venv/bin/python'),'-m','poc.install_knowledge','--root',str(root/'state/knowledge'),'--mode',mode,'--result',str(result)]
+        if model_protocol:command.extend(['--model-policy',model_policy])
         child=subprocess.Popen(command,cwd=release/'v2',env=env,pass_fds=(int(env['FLOW_INSTALL_KNOWLEDGE_FD']),),start_new_session=True)
         try:scope=ProcessScope(child.pid)
         except BaseException:
@@ -466,6 +477,16 @@ def rollback(home):
             return {'restored':receipt['previous'] or 'pre-v2 installation','history_preserved':True}
 
 
+def active_release(home):
+    """Observe only the selected runtime manifest, including after a failed gate."""
+    current=Path(home).resolve()/'.flow/v2/current'
+    if not current.exists():return {'version':None,'runtime':None}
+    runtime=current.resolve()
+    try:version=json.loads((runtime/'release-manifest.json').read_text())['version']
+    except (OSError,ValueError,KeyError):version='unknown'
+    return {'version':version,'runtime':str(runtime)}
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action',choices=['install','update','rollback'])
@@ -473,8 +494,11 @@ def main(argv=None):
     parser.add_argument('--repository',default=REPOSITORY);parser.add_argument('--version');parser.add_argument('--check',action='store_true');parser.add_argument('--json',action='store_true')
     parser.add_argument('--knowledge',choices=('ask','download','offline','defer'),default='ask',help='Reuse working knowledge; otherwise ask for download consent. Noninteractive runs must explicitly download, use verified offline assets, or defer.')
     parser.add_argument('--non-interactive',action='store_true',help='Never prompt; reuse verified knowledge or require an explicit download/defer policy')
+    parser.add_argument('--knowledge-model',choices=('ask','offline','download'),default='ask',help='Separate consent for selected local extraction chat weights; never changes coding-agent provider/model')
     args=parser.parse_args(argv)
     if (args.non_interactive or args.json) and args.knowledge=='ask':args.knowledge='offline'
+    if (args.non_interactive or args.json) and args.knowledge_model=='ask':args.knowledge_model='offline'
+    before=active_release(args.home);manifest=None
     try:
         if args.action=='rollback': result=rollback(args.home)
         else:
@@ -483,10 +507,19 @@ def main(argv=None):
             else:manifest,urls=latest(args.repository,args.version)
             if args.check:
                 validate(manifest);result={'latest':manifest['version'],'source_sha':manifest['source_sha'],'supported_targets':manifest['supported_targets']}
-            else:result=install_release(args.home,manifest,urls=urls,bundle=args.bundle,knowledge_mode=args.knowledge)
+            else:result=install_release(args.home,manifest,urls=urls,bundle=args.bundle,knowledge_mode=args.knowledge,knowledge_runner=lambda release,root,mode:provision_knowledge(release,root,mode,model_policy=args.knowledge_model))
+        if args.action in ('install','update') and not args.check:
+            after=active_release(args.home)
+            result['activation']={'outcome':'activated' if result.get('changed') else 'unchanged','requested_version':manifest['version'],'current_version':after['version'],'previous_version':before['version']}
+            print('Flow '+args.action+(' UPDATED' if result.get('changed') else ' NOT UPDATED (already selected)')+': active version '+str(after['version'] or 'none')+'; knowledge '+str(result.get('knowledge',{}).get('state','unknown'))+'.',file=sys.stderr)
         print(json.dumps(result,indent=2));return 0
     except (ValueError,OSError,subprocess.SubprocessError) as error:
-        parser.exit(1,str(error)+'\n')
+        summary=''
+        if args.action in ('install','update') and not args.check:
+            after=active_release(args.home)
+            selection='Runtime selection unchanged.' if after==before else 'Runtime selection changed; inspect before retrying.'
+            summary='Flow '+args.action+(' NOT UPDATED (failed)' if after==before else ' FAILED')+': requested '+str(manifest['version'] if manifest else args.version or 'latest')+'; active version '+str(after['version'] or 'none')+'. '+selection+'\n'
+        parser.exit(1,str(error)+'\n'+summary)
 
 
 if __name__=='__main__': main()
