@@ -123,15 +123,19 @@ def fetch_shared(root,ref):
     write(root/'fetch-receipt.json',{'commit':commit,'ref':ref})
     return dest
 
+class LocalModelRequiredError(ValueError):pass
+
+
 def local_model_digest(endpoint,model):
     import urllib.request
     from urllib.parse import urlparse
     u=urlparse(endpoint)
     if u.scheme!='http' or u.hostname not in ('127.0.0.1','localhost','::1') or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):raise ValueError('Only unauthenticated loopback Ollama is supported')
     with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(endpoint+'/api/tags',timeout=2) as response:models=json.load(response)['models']
-    found=[m['digest'] for m in models if m.get('name')==model or m.get('model')==model]
+    found=[m for m in models if m.get('name')==model or m.get('model')==model]
     if len(found)!=1:raise ValueError('Configured local model not installed; no automatic model download: '+model)
-    return found[0]
+    if found[0].get('remote_model') or found[0].get('remote_host'):raise LocalModelRequiredError('Cloud-hosted extraction models are unsupported; choose downloaded locally executed weights')
+    return found[0]['digest']
 
 def fingerprint(root):
     cfg=read(root/'settings.json',{})

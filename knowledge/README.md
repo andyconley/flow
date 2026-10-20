@@ -295,3 +295,7 @@ Qwen passed the coding-agent ACP final contract. Existing explicit local digest
 selections win. Unexpected installed/acquired digest changes fail before dependency
 acquisition; no alias/default is silently replaced. Unknown profile sizes are labeled
 unknown; streamed Ollama progress reports exact layer totals when available.
+
+Cloud-tagged models and Ollama model entries reporting a remote model/host are
+rejected before acquisition or extraction. This setup requires downloaded, locally
+executed weights; loopback access alone does not make cloud inference local.

@@ -28,12 +28,14 @@ class InstallerTerminalTests(unittest.TestCase):
         (release/'v2/.venv/bin/python').symlink_to(sys.executable)
         (release/'v2/poc').symlink_to(ROOT/'poc', target_is_directory=True)
         (release/'knowledge').symlink_to(ROOT.parent/'knowledge', target_is_directory=True)
-        self.model_present=False;self.model_pulls=[]
+        self.model_present=False;self.model_pulls=[];self.remote=False
         owner=self
         class LocalOllama(http.server.BaseHTTPRequestHandler):
             def log_message(self,*args):pass
             def do_GET(self):
-                body=json.dumps({'models':[{'name':'fixture:local','digest':'fixture-digest','size':42}] if owner.model_present else []}).encode()
+                row={'name':'fixture:local','digest':'fixture-digest','size':42}
+                if owner.remote:row.update(remote_model='fixture-cloud',remote_host='https://unused.invalid')
+                body=json.dumps({'models':[row] if owner.model_present else []}).encode()
                 self.send_response(200);self.end_headers();self.wfile.write(body)
             def do_POST(self):
                 owner.model_pulls.append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
@@ -177,4 +179,10 @@ except Exception as error:
         self.assertEqual(1,result.returncode,result.stdout+result.stderr)
         self.assertIn('--knowledge-model download',result.stdout+result.stderr)
         self.assertNotIn('[download/defer/cancel]',result.stderr)
+        self.assertEqual([],self.model_pulls)
+
+    def test_remote_model_metadata_cannot_trigger_acquisition_or_inference(self):
+        from poc import install_knowledge as gate,knowledge as k
+        self.start_server();self.model_present=True;self.remote=True
+        with self.assertRaises(k.LocalModelRequiredError):gate.ensure_model(self.folder/'managed/state/knowledge','download')
         self.assertEqual([],self.model_pulls)

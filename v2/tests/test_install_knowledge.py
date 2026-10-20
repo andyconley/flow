@@ -85,6 +85,11 @@ class KnowledgeGateTests(KnowledgeGateFixture, unittest.TestCase):
         self.online.assert_not_called();self.process.assert_not_called()
         self.assertFalse((self.root/'settings.json').exists())
 
+    def test_cloud_model_selection_is_rejected_before_any_network_or_acquisition(self):
+        k.write(self.root/'settings.json',{'model':'qwen3:4b-cloud'})
+        with self.assertRaises(k.LocalModelRequiredError):gate.resolve_model_mode(self.root,'download','download')
+        self.model.assert_not_called();self.online.assert_not_called()
+
     def test_known_default_size_is_displayed_and_identity_drift_cannot_pull(self):
         profile=gate.model_profile(self.root,'qwen3:4b')
         detail=gate.model_requirement('qwen3:4b','http://127.0.0.1:11434','missing',profile)

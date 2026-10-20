@@ -6,7 +6,7 @@
       "download_bytes": 2497293931,
       "source": "https://ollama.com/library/qwen3:4b",
       "observed_on": "2026-10-20",
-      "qualification": "Existing isolated21-card CocoIndex extraction audit; not coding-agent or general model qualification"
+      "qualification": "Existing isolated 21-card CocoIndex extraction audit; not coding-agent or general model qualification"
     }
   }
 }

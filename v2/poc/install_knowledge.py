@@ -47,6 +47,7 @@ def model_selection(root):
     if u.scheme!='http' or u.hostname not in ('127.0.0.1','localhost','::1') or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):
         raise ValueError('Only unauthenticated loopback Ollama is supported')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:/-]*',model):raise ValueError('Invalid local extraction model name')
+    if model.lower().endswith((':cloud','-cloud')):raise k.LocalModelRequiredError('Cloud-hosted extraction models are unsupported; choose downloaded locally executed weights')
     return model,endpoint
 
 
@@ -81,7 +82,7 @@ def resolve_model_mode(root,mode,policy='ask',*,interactive=None,choose=None):
     if mode!='download':return mode,'offline'
     model,endpoint=model_selection(root)
     try:checked_model_digest(root,model,endpoint);return mode,'offline'
-    except ModelIdentityMismatch:raise
+    except (ModelIdentityMismatch,k.LocalModelRequiredError):raise
     except Exception as error:detail=model_requirement(model,endpoint,error,model_profile(root,model))
     if policy=='download':return mode,'download'
     if policy=='offline':raise ValueError(detail)
@@ -94,7 +95,7 @@ def resolve_model_mode(root,mode,policy='ask',*,interactive=None,choose=None):
 def ensure_model(root,policy):
     model,endpoint=model_selection(root)
     try:return checked_model_digest(root,model,endpoint)
-    except ModelIdentityMismatch:raise
+    except (ModelIdentityMismatch,k.LocalModelRequiredError):raise
     except Exception as error:
         if policy!='download':raise ValueError(model_requirement(model,endpoint,error,model_profile(root,model))) from error
     # Only the separately consented worker performs model acquisition, inside
@@ -108,7 +109,7 @@ def ensure_model(root,policy):
                 if row.get('error'):raise ValueError(row['error'])
                 print('Ollama extraction model: '+str(row.get('status',''))+' '+str(row.get('completed',''))+'/'+str(row.get('total',''))+' bytes',file=sys.stderr,flush=True)
         return checked_model_digest(root,model,endpoint)
-    except ModelIdentityMismatch:raise
+    except (ModelIdentityMismatch,k.LocalModelRequiredError):raise
     except Exception as error:raise ValueError('Explicit extraction-model acquisition failed; no coding-agent provider change. '+model_requirement(model,endpoint,error,model_profile(root,model))) from error
 
 
