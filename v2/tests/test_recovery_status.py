@@ -107,7 +107,7 @@ class RecoveryStatusTests(unittest.TestCase):
         closure = self.artifacts.publish('closures', 'closure', {})
         brief = self.artifacts.publish('briefs', 'brief', {})
         result = self.summarize({'lifecycle_phase': 'closed', 'phase': 'blocked', 'candidate': 'exact-candidate',
-                                 'review': {'reason': 'Expired'}, 'closure_ref': closure, 'brief_ref': brief})
+                                 'resume_stage': 'review', 'review': {'blocked': True, 'passed': False, 'reason': 'Expired'}, 'closure_ref': closure, 'brief_ref': brief})
         decision = result['recover_review']['decision']
         self.assertEqual(decision['action'], 'recover-review')
         self.assertEqual(decision['candidate_revision'], 'exact-candidate')

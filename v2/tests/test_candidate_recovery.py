@@ -59,6 +59,9 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(self.h.calls, 1); self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]['recovery_candidate'], self.decision['candidate_revision'])
         self.assertEqual(calls[0]['budget_seconds'], 120)
+        with glg.SqliteSaver.from_conn_string(str(glg.storage(self.project,'recovery')/'workflow.sqlite')) as saver:
+            checkpoint=saver.get({'configurable':{'thread_id':'recovery'}})
+            self.assertEqual(checkpoint['channel_values']['runtime_options']['budget_seconds'],120)
         self.assertEqual(calls[0]['pause_remaining'], None)
         record = self.store.read(recovered['references']['closure_ref'])
         self.assertEqual(record['supersedes'], self.decision['closure_ref'])
@@ -142,6 +145,34 @@ class RecoveryTests(unittest.TestCase):
         with patch.object(glg.BriefChecker, 'run_state', side_effect=check):
             self.assertEqual(self.recover()['delivery_phase'], 'blocked')
         self.assertEqual(self.h.calls, 1)
+
+    def test_substantive_rejection_cannot_be_recovered_again(self):
+        self.h.review=lambda s:{'passed':False,'candidate':digest_tree(self.project),'findings':['Real defect requires correction']}
+        rejected=self.recover()
+        self.assertIsNone(rejected['recover_review'])
+        decision={**self.decision,'closure_ref':rejected['references']['closure_ref']}
+        before=len(list(self.store.root.rglob('*.json')))
+        self.h.review=lambda s:self.fail('Rejected unchanged candidate reviewed again')
+        with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):self.recover(**decision)
+        self.assertEqual(before,len(list(self.store.root.rglob('*.json'))));self.assertEqual(1,self.h.calls)
+
+    def test_eligibility_rejects_findings_and_exhausted_corrections(self):
+        from poc.recovery import review_delivery_recoverable
+        state={'lifecycle_phase':'closed','phase':'blocked','resume_stage':'review','candidate':'a','review':{'blocked':True,'passed':False}}
+        self.assertTrue(review_delivery_recoverable(state))
+        for delta in ({'findings':['defect']},{'failure':'3 correction rounds exhausted'}, {'review':{'blocked':True,'outcome':'request_changes'}}, {'review':{'passed':False,'findings':[]}}):
+            self.assertFalse(review_delivery_recoverable({**state,**delta}))
+
+
+class NativeRecoveryBudgetTests(unittest.TestCase):
+    def test_existing_harness_uses_new_approved_budget_after_recovery(self):
+        from poc.goose_job import GooseJob
+        harness=glg.NativeHarness({'provider':'codex-acp','model':'fixture','budget_seconds':60})
+        with patch('poc.runtime_env.setup'),patch.object(GooseJob,'review',autospec=True,side_effect=lambda job,state:{'timeout':job.timeout}):
+            self.assertEqual(60,harness.review({'budget_seconds':60})['timeout'])
+            self.assertEqual(600,harness.review({'budget_seconds':600,'recovery_ref':{'path':'fixture','revision':'approved'}})['timeout'])
+            self.assertEqual(60,harness.options['budget_seconds'])
+
 
 
 class PauseBudgetTests(fixtures.LifecycleTests):

@@ -13,7 +13,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from .artifacts import ArtifactError, Artifacts, identifier, validate_brief
 from .contracts import digest_tree
-from .recovery import PAUSE_POLICY, approve_recovery, require_resume_budget, delivery_state, validate_candidate_recovery
+from .recovery import PAUSE_POLICY, approve_recovery, require_resume_budget, delivery_state, validate_candidate_recovery, review_delivery_recoverable
 from .project_context import resolve
 from .runtime_env import ROOT
 from .work_lifecycle import build, publish_index
@@ -51,26 +51,28 @@ class NativeHarness:
         self.options = options
         self.job = None
 
-    def _job(self):
+    def _job(self, state=None):
         if self.job is None:
             from .runtime_env import setup
             from .goose_job import GooseJob
             setup()
             self.job = GooseJob(provider=self.options['provider'], model=self.options['model'],
                                 timeout=self.options['budget_seconds'], role_bundle=ROOT / 'role-bundle')
+        if state is not None:
+            self.job.timeout=state.get('budget_seconds', self.options['budget_seconds'])
         return self.job
 
     def implement(self, state):
-        return self._job().implement(state)
+        return self._job(state).implement(state)
 
     def review(self, state):
-        return self._job().review(state)
+        return self._job(state).review(state)
 
     def shape(self,state,stage,assignment):
-        return self._job().shape(state,stage,assignment)
+        return self._job(state).shape(state,stage,assignment)
 
     def reconcile(self, state):
-        return self._job().reconcile(state)
+        return self._job(state).reconcile(state)
 
 
 def storage(project, work):
@@ -208,7 +210,7 @@ def summarize(snapshot, artifacts):
     intentional = values.get('outcome') in {'stopped', 'replaced'} or values.get('lifecycle_phase') == 'stopped'
     blocked = values.get('phase') in {'blocked', 'permission_required', 'scope_required'} and not intentional
     recovery = None
-    if not problems and values.get('lifecycle_phase') == 'closed' and values.get('phase') == 'blocked' and values.get('review') and values.get('candidate'):
+    if not problems and review_delivery_recoverable(values) and values.get('candidate'):
         import shlex
         recovery = {'decision': {'action': 'recover-review', 'actor': '<actor>', 'reason': '<why a new review is warranted>',
                                  'closure_ref': values.get('closure_ref'), 'brief_ref': values.get('brief_ref'),

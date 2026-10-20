@@ -24,10 +24,19 @@ def require_resume_budget(state):
         raise ArtifactError('Approved delivery budget expired; no resume recorded. Inspect status; an unchanged closed candidate needs explicit recover-review approval, or create a fresh successor.')
 
 
+def review_delivery_recoverable(state):
+    """Only missing/invalid review delivery may be retried, never findings."""
+    review=state.get('review') or {}
+    if state.get('lifecycle_phase')!='closed' or state.get('phase')!='blocked' or state.get('resume_stage')!='review':return False
+    if state.get('failure') or state.get('findings') or review.get('findings'):return False
+    if review.get('outcome') in ('request_changes','correction'):return False
+    return review.get('blocked') is True or (review.get('passed') is True and review.get('candidate')!=state.get('candidate'))
+
+
 def validate_candidate_recovery(state, decision, artifacts):
     """Validate everything before publishing authority or changing a checkpoint."""
-    if state.get('lifecycle_phase') != 'closed' or state.get('phase') != 'blocked' or not state.get('review'):
-        raise ArtifactError('recover-review requires a closed blocked review')
+    if not review_delivery_recoverable(state):
+        raise ArtifactError('Recovery requires a review delivery/runtime blocker without substantive findings or exhausted corrections; use a separately approved successor')
     if not all(isinstance(decision.get(k), str) and decision[k].strip() for k in ('actor', 'reason')):
         raise ArtifactError('recover-review requires actor and reason')
     for name in ('closure_ref', 'brief_ref'):
@@ -72,6 +81,7 @@ def approve_recovery(state, decision, artifacts):
     return {'candidate_reused': True, 'recovery_ref': ref, 'recovery_candidate': candidate,
             'lifecycle_phase': 'delivery', 'decision_refs': [*decisions, ref],
             'deadline': time.time()+seconds, 'budget_seconds': seconds,
+            'runtime_options': {**state.get('runtime_options', {}), 'budget_seconds': seconds},
             'pause_remaining': None, 'budget_policy': PAUSE_POLICY,
             'resume_epoch': state.get('resume_epoch', 0)+1, 'failure': '',
             'review': {}, 'check': {}, 'findings': [], 'test_results': {}}
