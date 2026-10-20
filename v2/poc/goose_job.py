@@ -1,7 +1,7 @@
 """One job boundary, never dispatch individual workers. External intents reconcile first."""
 import json,os,signal,subprocess,time,hashlib,sys
 from pathlib import Path
-from .runtime_env import ROOT,environment,scoped,goose_binary
+from .runtime_env import ROOT,environment,scoped,goose_binary,WORKER_MAX_TURNS
 from .evidence import final_object,delegations,native_sessions
 from .contracts import task_input_digest
 from .lifecycle import ProcessScope
@@ -23,6 +23,9 @@ class GooseJob:
    if prior['inputs']!=s['inputs']:return {'status':'blocked','reason':'input identity changed'}
    if prior['status'] in {'completed','permission_required','scope_required'}:return prior
    return self.reconcile_record(p)
+  from .project_python import select
+  try:python = select(s['workspace'], s.get('check_command'))
+  except ValueError as error:return {'status':'scope_required','reason':str(error)}
   record={'output':str(p.with_suffix('.jsonl')),'stderr':str(p.with_suffix('.stderr')),'status':'uncertain','inputs':s['inputs'],'workspace':s['workspace'],'started':time.time(),'kind':kind}
   store(p,record) # Before submit: crash here is explicitly uncertain, never silently resubmitted.
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
@@ -31,10 +34,18 @@ class GooseJob:
   env=environment(project=s['workspace'],provider=provider,model=self.model);env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model
   if self.role_bundle:
    from .native_runtime import prepare
-   profile, native_env = prepare(Path(s['workspace']), p.parent, self.role_bundle,provider=provider,model=self.model)
+   from .role_renderer import bind_bundle
+   role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles',
+                             s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
+                             s.get('project_context',''))
+   profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,provider=provider,model=self.model,check_command=s.get('check_command'))
+   record['native_evidence_directory'] = native_env.get('FLOW_V2_ACP_EVIDENCE_DIR')
+   record['native_client_error_file'] = native_env.get('FLOW_V2_CLIENT_ERROR_FILE')
+   record['project_python'] = str(python) if python else None
    cmd=cmd[3:];cmd[0]=str(goose_binary())
    position=cmd.index('developer');del cmd[position-1:position+1]
-   env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(self.role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
+   env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
+   env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
    cmd[cmd.index('--max-turns')+1]='8'
   from .device_context import settings
   record['context_configuration']=settings(s['workspace'],self.model)
@@ -49,6 +60,9 @@ class GooseJob:
    next_observation=time.monotonic()
    while child.poll() is None:
     scope.observe();record['processes']=scope.known;store(p,record)
+    if record.get('native_client_error_file') and Path(record['native_client_error_file']).is_file():
+     scope.stop();child.wait(timeout=5)
+     break
     if time.monotonic()>deadline:
      stopped=scope.stop();child.wait(timeout=5)
      record.update(status='blocked',reason='timeout; do not resubmit without reconciliation',stop=stopped);self._observe(record,s,kind,index);store(p,record);return record
@@ -60,6 +74,8 @@ class GooseJob:
   while scope.observe() and time.monotonic()<deadline:time.sleep(.1)
   alive=scope.observe()
   boundary=boundary_error(output.read_text()+'\n'+err.read_text()) if self.role_bundle else None
+  if record.get('native_client_error_file') and Path(record['native_client_error_file']).is_file():
+   boundary=boundary_error('Error: GLG_NATIVE_BOUNDARY:'+Path(record['native_client_error_file']).read_text()) or boundary
   if boundary:
    stopped=scope.stop() if alive else None
    record.update(status=boundary['kind'],native_error=boundary,reason=boundary['error'].get('message','Explicit native permission/scope boundary'),exit=code,quiescent=not scope.observe(),stop=stopped,finished=time.time())
@@ -101,6 +117,28 @@ class GooseJob:
  def implement(self,s):return self._role_operation(s,'implement')
  def review(self,s):return self._role_operation(s,'review')
 
+ def shape(self,s,stage,assignment):
+  from .project_context import render
+  from .artifacts import Artifacts
+  roles={'define':'business-analyst','solution':'solution-architect','plan':'lead-developer'}
+  context=render(Artifacts(s['workspace'],s['work_id']).read(s['context_ref'])['payload'])
+  task=json.dumps({'stage':stage,'assignment':assignment,'approval':s['stage_authorization_ref']},sort_keys=True)
+  state={**s,'task':task,'project_context':context,'inputs':task_input_digest(task,s['workspace'],context),
+         'job_id':s['job_id']+'-'+stage+'-'+s['stage_authorization_ref']['revision'][:12],
+         'deadline':time.time()+s.get('budget_seconds',600),'corrections':0,'resume_epoch':0}
+  prompt=f'''You are the Goose coordinator for Flow's {stage} stage. LangGraph owns dispatch and durable state; the native host is only the conversational interface and human approval surface.
+Delegate through converted role source {roles[stage]} and other configured specialists as appropriate. You own research coordination, comparison, synthesis and the proposed stage result. Do not ask the host model to do research, delegate specialists or write the plan. Ask consequential questions in findings for the human.
+Assignment: {task}
+Project context: {context}
+Research/planning authority only. No implementation, install, deployment, new login or automatic approval. Preserve existing scope and permission boundaries. Return only JSON with outcome completed|blocked|permission_required|scope_required, content containing substantive findings and limitations. Plan may additionally return brief with goal, scope, acceptance_criteria and check_command argv. Human approval remains mandatory; no stage result grants implementation authority.'''
+  result=self._run(state,'shape-'+stage,prompt)
+  if result['status']!='completed':return result
+  report=final_object(result['output'])
+  status=report.get('outcome')
+  if status not in {'completed','blocked','permission_required','scope_required'} or not isinstance(report.get('content'),str) or not report['content'].strip():
+   return {'status':'blocked','reason':'Stage coordinator did not return the required substantive result','runtime':result}
+  return {'status':status,'content':report['content'],'runtime':result,**({'brief':report['brief']} if 'brief' in report else {})}
+
  def _role_operation(self,s,kind):
   roles=[p.stem for p in (self.role_bundle/'recipes').glob('*.yaml')]
   prompt=f"""You are Goose's implementation coordinator. Use the converted role recipes available through summon; select appropriate roles and configured providers yourself. Available roles: {', '.join(sorted(roles))}.
@@ -108,11 +146,11 @@ Approved task: {s['task']}
 Workspace: {s['workspace']}
 Project context: {s.get('project_context','')}
 Operation: {kind}. {'Delegate actual implementation, normally using lead-developer, and consume its result.' if kind=='implement' else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.'}
-Pass task and project_context as recipe parameters. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
+Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. Use the delegate parameters object only when refining a role assignment; preserve the approved scope. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
 Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
 Candidate revision: {s.get('candidate','not yet checked')}
-Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Final acceptance belongs to the task graph. Parent 8 turns, children at most 4 Goose turns, no merge or deployment."""
+Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Final acceptance belongs to the task graph. Parent 8 turns, children at most {WORKER_MAX_TURNS} Goose turns within the original approved deadline, no merge or deployment."""
   try:result=self._run(s,kind,prompt)
   except PermissionError as error:result={'status':'permission_required','reason':str(error)}
   if result['status']!='completed':

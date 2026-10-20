@@ -1,5 +1,11 @@
 # Flow over OpenHands
 
+> **Deprecated:** Use [Flow v2](../v2/README.md) for new work. This guide is
+> retained for existing OpenHands installations and historical workflows.
+> Preserve active runs and partial edits; migrate through a separately approved
+> successor work item. No automatic runtime switch or execution-policy change
+> is implied by this deprecation.
+
 This branch replaces Flow's execution architecture. Flow owns the stages,
 approvals, specialist definitions, skills, project context and durable outputs.
 OpenHands owns the model-driven loop, tools, delegation, workspace operations,

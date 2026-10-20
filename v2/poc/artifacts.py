@@ -56,6 +56,15 @@ class Artifacts:
         revision = hashlib.sha256(raw).hexdigest()
         path = self.root / kind / f'{record_id}-{revision}.json'
         self._contained(path)
+        # Keep private generated state out of Git without editing project or
+        # shared-worktree Git configuration. Never overwrite a user's ignore.
+        ignore = self.project/'.glg/.gitignore'
+        ignore.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with ignore.open('x') as stream:
+                stream.write('*\n')
+        except FileExistsError:
+            pass
         # Link publication is atomic and never replaces an existing revision.
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(dir=path.parent, prefix='.revision-')

@@ -1,77 +1,19 @@
-# Retained Goose build for Apple Silicon
+# Retained offline Goose fixture and production assets
 
-`goose-macos-arm64.gz` contains the exact existing Flow v2 acceptance-tested
-Goose executable from the Mac Studio. No Rust build, stripping, relinking or
-signing was performed for this package. This is a retained debug build, not an
-optimized release build. Its gzip header has no original filename or timestamp.
+The checked-in gzip/JSON retain the previously verified Studio build for
+maintainer offline regressions and provenance history. They are not a normal
+installer fallback. Historical verification is in [VERIFICATION.md](VERIFICATION.md).
 
-The adjacent JSON records both SHA-256 hashes, sizes, original and current source
-locks, upstream and integration commit IDs, architecture, deployment target and
-system dylibs. `../goose-native.patch` and `../GOOSE_LICENSE` accompany it.
-Provenance is based on retained local sources and matching installed/build
-executable hashes; it is not a signed build attestation.
+Production release CI runs scripts/build_v2_release.py: it fetches the locked
+upstream Goose commit, checks/applies the full-index Flow patch, validates the
+source tree, compiles with Rust 1.99.0 and locked Cargo dependencies, and verifies
+architecture, system libraries, deployment metadata, signature and executable
+behavior. Only Darwin arm64/macOS 15+ is release-qualified. No live provider
+qualification is claimed.
 
-## Consume without Rust
-
-Use a checkout containing this artifact on an Apple Silicon Mac, with a native
-arm64 Python 3.12+ process and Node/npm. From the repository root:
-
-```sh
-./install-flow-v2.sh prepare
-./install-flow-v2.sh install --dry-run
-./install-flow-v2.sh install
-```
-
-`prepare`, `install` and `update` automatically verify and extract the bundle.
-Existing source-bound `flow-v2 install` / `flow-v2 update` also use this behavior
-once their source checkout contains this change. Rerunning install/update reuses
-the verified executable; it never compiles Rust. Dry runs validate the archive
-and report `goose_extraction_planned` when extraction would be needed, without
-writing files. A prepared Python environment is still required for install/update.
-The release bootstrap `install.sh` continues to select tagged releases; this
-branch must be merged and released separately before that path can acquire it.
-
-Extraction verifies the source lock, shipped patch, archive size/hash, executable
-size/hash, platform and macOS version. It writes only the ignored local
-`v2/runtime/bundled-goose/goose`; an existing conflicting executable is preserved
-and rejected. Preparation installs Python/npm packages and does not compile Rust
-unless `--build-goose` is explicitly supplied. Installing/selecting Flow remains a
-separate step described in `../../FLOW_V2_INSTALL.md`. The standalone
-`cd v2 && python3.12 -m poc.goose_artifact --extract` command remains available for
-manual extraction and `python3.12 -m poc.goose_artifact` verifies the selected bundle.
-
-After extraction, native and scoped Goose jobs use the verified bundled build.
-Selection order is an explicit `FLOW_V2_GOOSE_BINARY` override, then a verified
-extracted bundled executable, then the existing source-build path. Overrides
-retain their existing semantics: they are caller-qualified and bypass bundled
-verification. A corrupt/incompatible extracted artifact fails instead of silently
-falling back. Other platforms can use a qualified override or `prepare
---build-goose` with Rust. No artifact download or release pipeline is added.
-
-The binary is arm64 Mach-O, declares macOS 11.0 minimum (SDK 26.4), links only
-Apple system libraries, and has an ad hoc linker signature. It passes
-`codesign --verify --strict` and offline CLI/recipe tests on Studio macOS 26.6.
-The declared minimum is not a runtime qualification on older macOS or on the
-MacBook. It is not Developer ID signed or notarized; normal macOS download policy
-may require user approval. No global security setting should be changed.
-
-## Git size and delivery
-
-The raw binary is 252,884,216 bytes (241.17 MiB). The exact gzip archive is
-51,507,861 bytes (49.12 MiB), below GitHub's 50 MiB warning and 100 MiB hard file
-limit. This one artifact is therefore stored in ordinary Git, without LFS or
-chunking. See [GitHub size limits](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github).
-Future binary growth or repeated build distribution should use verified GitHub
-release assets instead; publishing releases remains separately authorized work.
-
-## Source patch identity and preservation
-
-The original lock's patch hash was
-`6d31c884eaecdb310f95fe231eac123203d9dff5063fb313e28ddd2548f3dc4e`.
-Its patch abbreviated index IDs to seven characters. Full-index generation now
-matches full-index verification; only those index lines changed. The new patch
-hash is `a4bbbc65cbd81603b9b143d313fb0025fc585c9ec7829c9f30b92958ac9d09ef`.
-The JSON retains both complete locks. No existing `.flow-v2-patch.json` stamp was
-rewritten. An old stamped build checkout will still be rejected by the new
-bootstrap's strict lock comparison: preserve it and prepare a separate source
-checkout if building again. Do not set `core.abbrev` to work around validation.
+Release assets contain a freshly built gzip and provenance JSON, code tarball,
+hashed Python wheel closure, release-manifest.json and SHA256SUMS. Every asset
+is size/hash checked by the managed consumer before activation. Consumers do
+not compile Rust. A maintainer existing-binary packaging shortcut is explicitly
+rejected by publication checks. The normal install/update/rollback instructions
+are in [the managed guide](../../FLOW_V2_INSTALL.md).

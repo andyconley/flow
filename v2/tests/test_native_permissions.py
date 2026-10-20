@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -21,6 +22,41 @@ MESSAGE = "PermissionError: [Errno 1] Operation not permitted: '/fixture/.venv/p
 
 
 class NativePermissionTests(unittest.TestCase):
+    def test_private_auth_preflight_stops_job_and_preserves_explicit_blocker(self):
+        from poc.contracts import task_input_digest
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root/'runtime').mkdir()
+            workspace = root/'workspace'; workspace.mkdir()
+            marker = root/'client-error.json'
+            error = {'schema_version':1,'kind':'permission_required',
+                     'source':'claude_native_auth_preflight',
+                     'error':{'code':'AUTH_REQUIRED','message':'Private native sign-in required'}}
+            class Process:
+                pid = 999; returncode = None
+                def poll(self): return self.returncode
+                def wait(self, timeout=None): self.returncode = 77; return 77
+            class Scope:
+                stopped = 0
+                def __init__(self, pid): self.known = {}
+                def observe(self): return {}
+                def stop(self): Scope.stopped += 1; return {'stopped':True}
+            def launch(*args, **kwargs):
+                marker.write_text(json.dumps(error)); return Process()
+            state = {'task':'approved task','workspace':str(workspace),'project_context':'context',
+                     'inputs':task_input_digest('approved task',workspace,'context'),'job_id':'private-auth'}
+            job = GooseJob(role_bundle=ROOT/'role-bundle')
+            with patch('poc.goose_job.ROOT',root), patch('poc.goose_job.ProcessScope',Scope), \
+                    patch('poc.goose_job.subprocess.Popen',side_effect=launch) as start, \
+                    patch.object(job,'_observe'), \
+                    patch('poc.native_runtime.prepare',return_value=(root/'worker.sb',
+                          {'PATH':'/usr/bin','FLOW_V2_CLIENT_ERROR_FILE':str(marker)})):
+                result = job._run(state,'implement','approved prompt')
+                self.assertEqual(result['status'],'permission_required')
+                self.assertEqual(result['native_error'],error)
+                self.assertEqual(Scope.stopped,1)
+                self.assertEqual(job._run(state,'implement','approved prompt'),result)
+                self.assertEqual(start.call_count,1)
+
     def test_guard_rejects_unqualified_adapter_source(self):
         with self.assertRaises(ValueError):
             guarded_source("unknown adapter implementation")
@@ -69,7 +105,7 @@ class NativePermissionTests(unittest.TestCase):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary); (root/'runtime').mkdir(); project = root/'project'; project.mkdir()
                 a = Artifacts(project, 'denial')
-                brief = a.publish('briefs', 'brief', {'goal': 'approved check', 'scope': ['local'], 'acceptance_criteria': ['check'], 'check_command': ['python3', '-m', 'unittest']})
+                brief = a.publish('briefs', 'brief', {'goal': 'approved check', 'scope': ['local'], 'acceptance_criteria': ['check'], 'check_command': [sys.executable, '-m', 'unittest']})
                 context = a.publish('contexts', 'project', resolve(project))
                 error = {'schema_version': 1, 'kind': kind, 'source': 'acp_tool', 'tool_call_id': 'denied-1', 'error': {'code': 'EPERM', 'message': MESSAGE}}
                 class Process:

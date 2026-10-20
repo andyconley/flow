@@ -16,6 +16,23 @@ from poc.glg import storage
 
 
 class InstallTests(unittest.TestCase):
+    def test_activation_preserves_generated_user_overlay_command_and_lists_it(self):
+        for runtime, base in (('claude','.claude/skills'),('codex','.agents/skills')):
+            path = self.home/base/'session-hygiene/SKILL.md'; path.parent.mkdir(parents=True)
+            path.write_text('user overlay session hygiene\n')
+            with (self.home/('.'+runtime)/'flow.managed.toml').open('a') as manifest:
+                manifest.write('\n[[files]]\npath="'+str(path.relative_to(self.home))+'"\nkind="skill"\nsource="~/.flow/user/commands/session-hygiene.md"\nsync_mode="replace"\nsha256="'+hashlib.sha256(path.read_bytes()).hexdigest()+'"\n')
+        before = {path:path.read_bytes() for path in self.home.glob('*/skills/session-hygiene/SKILL.md')}
+        self.assertEqual(len(before),2)
+        install('install',self.home)
+        dry = install('activate',self.home,replace_legacy=True,dry_run=True)
+        self.assertEqual(set(dry['legacy_cleanup']['preserved_overlay_commands']), {str(p.resolve()) for p in before})
+        install('activate',self.home,replace_legacy=True)
+        install('update',self.home)
+        for path, raw in before.items(): self.assertEqual(path.read_bytes(),raw)
+        install('restore',self.home)
+        for path, raw in before.items(): self.assertEqual(path.read_bytes(),raw)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)/'home'; self.home.mkdir()
@@ -42,7 +59,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual((self.home/base/'flow-boot/SKILL.md').read_text(), 'legacy boot\n')
             self.assertTrue((self.home/base/'flow-v2/SKILL.md').exists())
         result = subprocess.run([str(self.home/'.local/bin/flow-v2'), '--version'], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0); self.assertIn('Flow 2.0.0-preview', result.stdout)
+        self.assertEqual(result.returncode, 0); self.assertIn('Flow 2.0.0', result.stdout)
 
     def test_explicit_cutover_restore_and_skill_directory_symlink(self):
         install('install', self.home)

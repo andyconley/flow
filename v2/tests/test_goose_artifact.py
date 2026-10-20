@@ -77,6 +77,38 @@ class ArtifactTests(unittest.TestCase):
         self.assertNotIn('Would create', stdout)
         self.assertFalse((self.root/'runtime').exists())
 
+    def test_known_predecessor_upgrade_is_verified_preserved_and_idempotent(self):
+        old = b'#!/bin/sh\necho previous\n'
+        previous = {'binary_size':len(old), 'binary_sha256':hashlib.sha256(old).hexdigest()}
+        self.meta['previous_binaries'] = [previous]
+        self.manifest.write_text(json.dumps(self.meta))
+        target = artifact.binary_path(self.root); target.parent.mkdir(parents=True)
+        target.write_bytes(old); target.chmod(0o755)
+        before = {p.relative_to(self.root):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        path, planned = artifact.provision(self.root, dry_run=True)
+        self.assertTrue(planned)
+        self.assertEqual(path, target.absolute())
+        self.assertEqual(before, {p.relative_to(self.root):p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+        artifact.provision(self.root)
+        self.assertEqual(artifact.digest(target), self.meta['binary_sha256'])
+        backup = target.with_name('goose-'+previous['binary_sha256'])
+        self.assertEqual(backup.read_bytes(), old)
+        artifact.provision(self.root)
+        self.assertEqual(backup.read_bytes(), old)
+
+    def test_upgrade_rejects_corruption_and_backup_collision_without_replacing_old(self):
+        old = b'#!/bin/sh\necho previous\n'
+        previous = {'binary_size':len(old), 'binary_sha256':hashlib.sha256(old).hexdigest()}
+        self.meta['previous_binaries'] = [previous]; self.manifest.write_text(json.dumps(self.meta))
+        target = artifact.binary_path(self.root); target.parent.mkdir(parents=True)
+        target.write_bytes(old); target.chmod(0o755)
+        backup = target.with_name('goose-'+previous['binary_sha256']); backup.write_bytes(b'unknown')
+        with self.assertRaises(ValueError): artifact.provision(self.root)
+        self.assertEqual(target.read_bytes(), old); self.assertEqual(backup.read_bytes(), b'unknown')
+        archive = self.root/'vendor/artifacts'/self.meta['archive']; archive.write_bytes(b'corrupt')
+        with self.assertRaises(ValueError): artifact.provision(self.root)
+        self.assertEqual(target.read_bytes(), old)
+
     def test_prepare_dry_run_cli_validates_valid_archive_without_writes(self):
         with patch.object(artifact, 'provision', wraps=artifact.provision) as provision:
             code, stdout, stderr = self.prepare_dry_run_cli()
@@ -206,6 +238,16 @@ class ArtifactTests(unittest.TestCase):
             self.assertEqual(target.stat().st_mtime_ns, before)
             target.unlink()
             install('update', home, source=self.root)
+            old = b'#!/bin/sh\necho previous installed build\n'
+            previous = {'binary_size':len(old),'binary_sha256':hashlib.sha256(old).hexdigest()}
+            self.meta['previous_binaries'] = [previous]; self.manifest.write_text(json.dumps(self.meta))
+            target.write_bytes(old); target.chmod(0o755)
+            dry = install('update',home,source=self.root,dry_run=True)
+            self.assertIn('goose_extraction_planned',dry)
+            self.assertEqual(target.read_bytes(),old)
+            install('update',home,source=self.root)
+            self.assertEqual(artifact.digest(target),self.meta['binary_sha256'])
+            self.assertEqual(target.with_name('goose-'+previous['binary_sha256']).read_bytes(),old)
             self.assertTrue(target.is_file())
             target.write_bytes(b'user changed binary')
             with self.assertRaisesRegex(ValueError, 'executable checksum'):
@@ -230,7 +272,10 @@ class ArtifactTests(unittest.TestCase):
     def test_shipped_artifact_and_lock_identity(self):
         value = artifact.metadata(ROOT)
         archive = ROOT/'vendor/artifacts'/value['archive']
-        self.assertLess(archive.stat().st_size, 50*1024*1024)
+        # The checked-in fixture fits normal Git. Production CI assets use
+        # GitHub release delivery and may exceed Git's warning threshold.
+        limit = 2*1024**3 if value.get('build_kind') == 'pinned-source-CI-release-build' else 50*1024*1024
+        self.assertLess(archive.stat().st_size, limit)
         self.assertEqual(artifact.digest(archive), value['archive_sha256'])
         digest = hashlib.sha256(); size = 0
         with gzip.open(archive, 'rb') as stream:

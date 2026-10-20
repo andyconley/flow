@@ -34,6 +34,10 @@ class State(TypedDict,total=False):
  phase:str
  candidate:str
  check:dict
+ check_command:list
+ stage_to_run:str
+ stage_authorization_ref:dict
+ stage_result:dict
  review:dict
  result:dict
  candidate_reused:bool

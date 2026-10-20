@@ -28,15 +28,17 @@ def main():
     context=contract.get('project_context','')+'\nTest command: '+json.dumps(command)
     digest=task_input_digest(contract['task'],workspace,context)
     state={'task':contract['task'],'workspace':workspace,'project_context':context,'job_id':args.job,
-           'inputs':digest,'approved':digest if args.approved else '', 'corrections':0,'attempt':0,'deadline':time.time()+args.budget_seconds}
+           'inputs':digest,'approved':digest if args.approved else '', 'check_command':command,'corrections':0,'attempt':0,'deadline':time.time()+args.budget_seconds}
     if args.budget_seconds<=0:parser.error('budget-seconds must be positive')
     remaining_deadline=[state['deadline']]
     setup();out=ROOT/'artifacts'/args.job;out.mkdir(parents=True,exist_ok=True)
     def check(path):
         remaining=remaining_deadline[0]-time.time()
         if remaining<=0:return {'passed':False,'outcome':'blocked','reason':'Workflow time budget exhausted'}
-        try:result=subprocess.run(command,cwd=path,capture_output=True,text=True,timeout=min(60,remaining))
+        from .project_python import check_command
+        try:result=subprocess.run(check_command(path,command),cwd=path,capture_output=True,text=True,timeout=min(60,remaining))
         except subprocess.TimeoutExpired:return {'passed':False,'outcome':'blocked','reason':'Independent check time budget exhausted'}
+        except (OSError,ValueError) as error:return {'passed':False,'outcome':'scope_required','reason':str(error)}
         return {'passed':result.returncode==0,'exit':result.returncode,'stdout':result.stdout,'stderr':result.stderr}
     with SqliteSaver.from_conn_string(str(out/'workflow.sqlite')) as saver:
         graph=build(GooseJob(provider='chatgpt_codex',model='gpt-5.6-sol',timeout=600,role_bundle=ROOT/'role-bundle'),check).compile(checkpointer=saver)

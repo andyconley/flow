@@ -27,8 +27,12 @@ class Handoffs:
         if assignment['payload']['kind'] != kind:
             raise ArtifactError('Wrong assignment at execution boundary')
         for name in ('brief_ref', 'approval_ref', 'context_ref'):
-            self.artifacts.read(assignment['payload'][name])
-            if assignment['payload'][name] != state[name]:
+            reference=assignment['payload'][name]
+            if reference is None and name=='brief_ref' and kind in {'define','solution','plan'}:
+                if state.get(name) is not None: raise ArtifactError('Assignment brief changed')
+                continue
+            self.artifacts.read(reference)
+            if reference != state[name]:
                 raise ArtifactError('Assignment context changed')
         operation = assignment['id']
         ref, previous = self.artifacts.leaf('results', operation)
@@ -95,6 +99,9 @@ class Handoffs:
             raise ArtifactError('Implementation result requires status')
         if kind in {'check', 'review'} and not isinstance(result.get('passed'), bool):
             raise ArtifactError('Check/review result requires passed boolean')
+        if kind in {'define','solution','plan'} and (result.get('status') not in {'completed','blocked','permission_required','scope_required','uncertain','pending'} or
+                (result.get('status')=='completed' and not isinstance(result.get('content'),str))):
+            raise ArtifactError('Stage result requires an explicit status and substantive content')
 
     def _result(self, operation, state, result, effect, supersedes, evidence, decision_ref=None):
         return self.artifacts.publish('results', operation, {

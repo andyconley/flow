@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "minimum_macos": "11.0",
+  "sdk": "26.4",
+  "version": "1.55.0",
+  "archive": "goose-macos-arm64.gz",
+  "archive_size": 51507861,
+  "archive_sha256": "234682d49b25425c265275dfeefccce3e67b6970ad28162de9510c43ef9209ad",
+  "binary_size": 252884216,
+  "binary_sha256": "7530c1ff8cdf0d8e68a74ed9b72d20aa38bbdeae6a5e041fb4794a91dbfd8beb",
+  "source_lock": {
+    "repository": "https://github.com/aaif-goose/goose.git",
+    "version": "1.55.0",
+    "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
+    "integration_commit_reference": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
+    "patch": "goose-native.patch",
+    "patch_sha256": "a4bbbc65cbd81603b9b143d313fb0025fc585c9ec7829c9f30b92958ac9d09ef",
+    "build_package": "goose-cli",
+    "features": [
+      "scheduler",
+      "tree-sitter",
+      "rustls-tls"
+    ]
+  },
+  "original_source_lock": {
+    "repository": "https://github.com/aaif-goose/goose.git",
+    "version": "1.55.0",
+    "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
+    "integration_commit_reference": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
+    "patch": "goose-native.patch",
+    "patch_sha256": "6d31c884eaecdb310f95fe231eac123203d9dff5063fb313e28ddd2548f3dc4e",
+    "build_package": "goose-cli",
+    "features": [
+      "scheduler",
+      "tree-sitter",
+      "rustls-tls"
+    ]
+  },
+  "source_integration_commit": "106df93b9b260399f705165b67cc7f0fe9ee4c7b",
+  "build_profile": "debug",
+  "transformation": "gzip -n; no stripping, relinking, signing or rebuilding",
+  "dynamic_libraries": [
+    "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.50.119)",
+    "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 4424.1.255)",
+    "\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1965.4.5)",
+    "\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4424.1.255)",
+    "\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)",
+    "\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.101.4)",
+    "\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1405.100.8)",
+    "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
+    "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)"
+  ],
+  "provenance_basis": "Existing Studio executable matches active v0.49.1 installed executable SHA-256. Clean integration checkout HEAD equals integration commit; installed staged source full-index diff equals shipped patch. Prior acceptance report qualifies this executable; no new provider calls. This is retained local build provenance, not a signed or reproducible build attestation."
+}

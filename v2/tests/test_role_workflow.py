@@ -131,6 +131,9 @@ class RoleWorkflowTests(unittest.TestCase):
             self.assertEqual(first['status'],'completed');self.assertEqual(first,second)
             command=launch.call_args.args[0]
             self.assertNotIn('developer',command);self.assertIn('summon',command)
+            sources=json.loads(launch.call_args.kwargs['env']['FLOW_V2_ROLE_SOURCES'])
+            self.assertIn('lead-developer',sources);self.assertIn('quality-reviewer',sources)
+            self.assertEqual(len(sources),13)
 
     def test_actual_checker_permission_error_pauses_and_resumes_checks(self):
         with tempfile.TemporaryDirectory() as tmp:

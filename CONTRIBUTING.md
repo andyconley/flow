@@ -15,24 +15,28 @@ Good contributions usually explain:
 
 ## Local Setup
 
-Use develop mode when working on the framework:
+Work in a checkout without changing your active installation:
 
-```bash
+```sh
 git clone https://github.com/andyconley/flow.git
 cd flow
-./install-flow.sh --develop
-flow setup machine
-flow setup user
+python3.12 v2/bootstrap.py prepare
 ```
 
-`~/.flow/source` points at your checkout in develop mode, so framework edits take effect after the relevant sync command.
+That prepares maintainer-local test dependencies and the retained offline Goose
+fixture. Normal user installation always uses verified managed releases; source
+checkouts, `--develop` and legacy installation/update are not supported consumer
+modes. CI builds fresh patched Goose from its pinned upstream/patch with Rust
+1.99.0, packages hashed Python wheels, and verifies the real consumer bundle.
+Rust is a maintainer/build-worker dependency only.
 
 ## Validation
 
 Run the checks that match the change. For most code changes:
 
 ```bash
-/opt/homebrew/bin/python3.12 -m unittest discover -s tests
+PYTHONPATH=v2 v2/.venv/bin/python -m unittest discover -s v2/tests -v
+v2/.venv/bin/python -m unittest tests.test_release_gate tests.test_release_highlights -v
 git diff --check
 ```
 
@@ -62,7 +66,7 @@ fix: preserve user overlay files during setup
 feat: add definition-stage research artifacts
 ```
 
-Release automation reads those commit messages. `feat:` produces a minor release, `fix:` produces a patch release, and breaking-change markers produce a major release. `docs:` also produces a patch release. Use `docs(framework):`, `docs(commands):`, `docs(agents):`, or `docs(standards):` when a documentation change materially changes Flow behavior; those scopes produce a minor release.
+Release automation reads those commit messages. `feat:` produces a minor release, `fix:` produces a patch release, and before 1.0, breaking-change markers produce a minor release under release.config.cjs. `docs:` also produces a patch release. Use `docs(framework):`, `docs(commands):`, `docs(agents):`, or `docs(standards):` when a documentation change materially changes Flow behavior; those scopes produce a minor release.
 
 The changelog is generated from commits. Put longer design context in the docs,
 specs, or architecture notes changed by the work. When several commits deliver

@@ -1,69 +1,41 @@
-# Studio artifact verification — 2026-10-19
+# Studio worker-fix artifact verification — 2026-10-19
 
-The host was `AndysMacStudio.attlocal.net`, arm64, macOS 26.6 (25G5043d).
-Both active launchers (`~/.local/bin/flow` and `flow-v2`) were read directly.
-They select the clean v0.49.1 source at
-`/Users/andyconley/Documents/Codex/2026-10-18/task-3/flow-v2-installed-tested/v2`,
-Flow commit `0ace3f43b99a5bd28c7890ce735722d41118b58a`.
-Its default Goose selection is `runtime/goose/target/debug/goose`.
+Source was built offline in a separate checkout, using a copy of the existing
+toolchain and build cache. The original Goose checkout, target directory,
+installed executable and old source stamps remain unchanged.
 
-That executable and the retained original build at
-`/Users/andyconley/Documents/Codex/2026-10-18/task-3/goose-native-acp-patch/target/debug/goose`
-have identical size (252,884,216 bytes) and SHA-256:
-`7530c1ff8cdf0d8e68a74ed9b72d20aa38bbdeae6a5e041fb4794a91dbfd8beb`.
-The archive decompresses to those exact bytes. No rebuild was needed.
+- Upstream: `2bcb8583a18a0623eb78c9ed845d597ed99fae48` (Goose 1.55.0).
+- Integration: `7c755c3dedb17a4b0f3c0c75f2684fddb534e890`.
+- Full-index patch SHA-256:
+  `a1cf00413949b78c022d7de8145d4cf120609cba3ce2825c13d15bea6cff0054`.
+- Executable: 252,874,344 bytes, SHA-256
+  `3ce9c3aa715e9e67bb85bc7384d9199db639a3e99f2b62ffce2c080f463b6142`.
+- Archive: 51,167,028 bytes (48.80 MiB), SHA-256
+  `41136b409ef3c6b8e01f54d87d36060d15f7b85b121dd66027209e1e85dee9f7`.
 
-The original build source is clean at integration commit
-`106df93b9b260399f705165b67cc7f0fe9ee4c7b`. Its full-index binary diff from
-upstream `2bcb8583a18a0623eb78c9ed845d597ed99fae48` is byte-identical to
-the newly shipped patch. The installed source is detached at that upstream base,
-with precisely the integration patch staged and the original lock stamp as its
-only untracked source file. The strict source verifier accepts its full-index
-diff; its old stamp remains unchanged. The patch comparison with v0.49.1 changes
-only the 27 abbreviated index lines to full IDs, with all other bytes equal.
+The binary is arm64 Mach-O, declares macOS 11.0 minimum and SDK 26.4, links only
+Apple system libraries, and passes codesign --verify --strict. This deployment
+target is not a qualification on older systems. The linker signature is ad hoc;
+no Developer ID signature or notarization is claimed. The exact build command is
+in the artifact JSON; Rust was 1.99.0 (b940084d7 2026-09-28).
 
-`file` reports arm64 Mach-O. `otool -l` reports macOS minimum 11.0 and SDK 26.4.
-`otool -L` reports AppKit, Foundation, CoreGraphics, CoreFoundation, Security,
-SystemConfiguration and `/usr/lib` libobjc, libiconv and libSystem. There are no
-Homebrew or build-directory dylib dependencies or LC_RPATH entries.
-`codesign -dv` reports an ad hoc linker signature and no TeamIdentifier;
-`codesign --verify --strict` succeeds on the extracted executable.
+A second source checkout at the locked upstream commit applied the shipped patch
+with git apply --index and passed bootstrap.verify_goose_source. Deterministic
+full-index validation remains strict; unrelated-edit and old-stamp regressions
+remain in the v2 suite.
 
-The extracted executable reports `1.55.0`, and `run --help` exposes
-`--no-profile`, `--output-format` and `--max-tool-repetitions`. Existing offline
-role tests execute the extracted binary to validate valid/invalid result schemas
-and render quoted multiline recipe parameters. These checks make no provider or
-model calls. The retained earlier
-`/Users/andyconley/Documents/Codex/2026-10-18/task-3/flow-v2-installed-acceptance-report.md`
-records 35 installed acceptance checks and 92 v2 tests with the same qualified
-Goose binary. Earlier live qualification was reused, not repeated.
+Offline Rust checks passed: 41 summon/delegation tests, 18 native-completion
+tests and 117 ACP-provider tests. The completion transport matrix includes six
+new cases generated from the actual pinned guarded adapter definitions with
+synthetic events: nonzero and zero exits, untyped shell failure, missing exit,
+terminal nonzero exit, and an explicit failed final report. This is replay
+qualification, not captured historical wire evidence or live inference.
 
-Current validation: all 100 offline v2 tests pass, with zero skips, including
-8 new artifact/source regressions. The suite uses copied Python/npm dependencies
-in this isolated checkout and temporary installation homes. Child-process
-cancellation tests require process inspection permission. Initial attempts lacked
-those fresh-checkout dependencies and sandbox permission; the final complete run
-has neither limitation. Distribution inventory and `git diff --check` pass.
+The known previous extracted executable was verified and retained under its
+SHA-256-named backup while the new archive was verified and extracted in this
+isolated Flow checkout. Repeating provision reuses the verified executable.
+Corrupt/unknown executables and backup collisions remain rejected. Neither
+active Studio installation nor the MacBook was updated. Successful live delivery
+and authentication in the new private Claude configuration remain unqualified.
 
-The original installed Flow checkout remains clean. The active launchers,
-executable and stamped source were preserved. No MacBook operation, installer
-activation, merge, release, LFS setup, Rust compilation or provider call was
-performed. macOS 11.0 is the binary's deployment target, not evidence of testing
-on that OS; the MacBook itself has not been qualified here.
-
-## Automatic installer follow-up
-
-Preparation now provisions the bundled executable automatically on Apple Silicon
-macOS unless `--build-goose` or an explicit binary override is supplied. The v2
-installer's install/update actions also extract it when missing. Reruns verify
-and reuse the existing executable. Dry runs validate the archive and report
-planned extraction without changing runtime or installation paths. Unsupported
-platforms retain the existing source-build/explicit-override route; no automatic
-Rust compilation was introduced.
-
-All 103 offline v2 tests pass, zero skips. The three additional regressions cover
-automatic preparation without Git/Cargo commands; install/update extraction,
-reinstall idempotence, dry-run preservation and modified-binary rejection; and
-platform/override/source-build handling with archive-corruption rejection. The
-public release bootstrap still selects tagged releases; merging and publishing
-this branch remain separate work.
+The original retained-build report is [preserved here](VERIFICATION-v0.50.md).
