@@ -1,0 +1,40 @@
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6775760Z ERROR: test_real_job_record_enters_graph_pause_without_another_dispatch (test_native_permissions.NativePermissionTests.test_real_job_record_enters_graph_pause_without_another_dispatch) (kind='permission_required')
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6778640Z ----------------------------------------------------------------------
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6781030Z Traceback (most recent call last):
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6784130Z   File "/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-7u_dsxbo/.flow/v2/releases/v0.51.0-f35231644449-b5d4a055/v2/tests/test_native_permissions.py", line 129, in test_real_job_record_enters_graph_pause_without_another_dispatch
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6787230Z     pending = result['__interrupt__'][0].value
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6787770Z               ~~~~~~^^^^^^^^^^^^^^^^^
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6788230Z KeyError: '__interrupt__'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6788360Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6788660Z ======================================================================
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6789950Z ERROR: test_real_job_record_enters_graph_pause_without_another_dispatch (test_native_permissions.NativePermissionTests.test_real_job_record_enters_graph_pause_without_another_dispatch) (kind='scope_required')
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6791060Z ----------------------------------------------------------------------
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6791500Z Traceback (most recent call last):
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6792850Z   File "/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-7u_dsxbo/.flow/v2/releases/v0.51.0-f35231644449-b5d4a055/v2/tests/test_native_permissions.py", line 129, in test_real_job_record_enters_graph_pause_without_another_dispatch
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6793920Z     pending = result['__interrupt__'][0].value
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6794420Z               ~~~~~~^^^^^^^^^^^^^^^^^
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6794750Z KeyError: '__interrupt__'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6795010Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6795330Z ======================================================================
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6796530Z FAIL: test_private_auth_preflight_stops_job_and_preserves_explicit_blocker (test_native_permissions.NativePermissionTests.test_private_auth_preflight_stops_job_and_preserves_explicit_blocker)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6797520Z ----------------------------------------------------------------------
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6798550Z Traceback (most recent call last):
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6799930Z   File "/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-7u_dsxbo/.flow/v2/releases/v0.51.0-f35231644449-b5d4a055/v2/tests/test_native_permissions.py", line 54, in test_private_auth_preflight_stops_job_and_preserves_explicit_blocker
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6801030Z     self.assertEqual(result['status'],'permission_required')
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6801630Z AssertionError: 'blocked' != 'permission_required'
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6802050Z - blocked
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6802360Z + permission_required
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6802570Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6802570Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6802880Z ======================================================================
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6804460Z FAIL: test_existing_intent_record_prevents_duplicate_subprocess (test_role_workflow.RoleWorkflowTests.test_existing_intent_record_prevents_duplicate_subprocess)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6805320Z ----------------------------------------------------------------------
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6805870Z Traceback (most recent call last):
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6807730Z   File "/private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/flow-v2-consumer-7u_dsxbo/.flow/v2/releases/v0.51.0-f35231644449-b5d4a055/v2/tests/test_role_workflow.py", line 130, in test_existing_intent_record_prevents_duplicate_subprocess
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6808770Z     self.assertEqual(launch.call_count,1)
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6809180Z AssertionError: 0 != 1
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6809420Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6809680Z ----------------------------------------------------------------------
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6810150Z Ran 204 tests in 35.169s
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6810380Z 
+offline-runtime / build-goose	UNKNOWN STEP	2026-10-20T17:53:45.6810650Z FAILED (failures=2, errors=2, skipped=3)

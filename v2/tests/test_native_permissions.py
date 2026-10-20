@@ -1,5 +1,6 @@
 """Observed native denial regression; fake transports only, no provider calls."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -22,6 +23,14 @@ MESSAGE = "PermissionError: [Errno 1] Operation not permitted: '/fixture/.venv/p
 
 
 class NativePermissionTests(unittest.TestCase):
+    def setUp(self):
+        # Mock provider tests own their store; installed consumer HOME is seeded
+        # but deliberately unprovisioned. Keep real readiness behavior elsewhere.
+        fixture = tempfile.TemporaryDirectory(prefix='flow-mock-knowledge-')
+        self.addCleanup(fixture.cleanup)
+        env = patch.dict(os.environ, FLOW_KNOWLEDGE_HOME=fixture.name)
+        env.start(); self.addCleanup(env.stop)
+
     def test_private_auth_preflight_stops_job_and_preserves_explicit_blocker(self):
         from poc.contracts import task_input_digest
         with tempfile.TemporaryDirectory() as directory:
