@@ -64,7 +64,7 @@ class ReleaseHttpTests(unittest.TestCase):
         self.assertEqual(rows[0]['request_id'], 'ABCD:1234')
 
     def test_retry_after_and_reset_both_respected(self):
-        self.get(self.failure(Retry_After=20, X_RateLimit_Remaining=0, X_RateLimit_Reset=1800000010), io.BytesIO(b'{}'))
+        self.get(self.failure(Retry_After=' 20 ', X_RateLimit_Remaining=' 0 ', X_RateLimit_Reset=' 1800000010 '), io.BytesIO(b'{}'))
         self.assertEqual(self.sleeps, [20])
 
     def test_retry_after_http_date(self):

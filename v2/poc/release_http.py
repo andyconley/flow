@@ -17,7 +17,7 @@ MAX_WAIT = 3900
 
 
 def _number(value):
-    text = str(value or '')
+    text = str(value or '').strip()
     return int(text) if re.fullmatch(r'[0-9]{1,12}', text) else None
 
 
