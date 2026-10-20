@@ -47,6 +47,8 @@ class GooseJob:
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
    env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
    cmd[cmd.index('--max-turns')+1]='8'
+  from .knowledge_tools import attach
+  if self.role_bundle:cmd,env=attach(cmd,env)
   from .device_context import settings
   record['context_configuration']=settings(s['workspace'],self.model)
   record['context_configuration']['context_tokens']=int(env['GOOSE_INPUT_LIMIT']) if env.get('GOOSE_INPUT_LIMIT') else None
