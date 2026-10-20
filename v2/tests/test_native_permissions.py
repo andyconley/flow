@@ -57,7 +57,7 @@ class NativePermissionTests(unittest.TestCase):
             with patch('poc.goose_job.ROOT',root), patch('poc.goose_job.ProcessScope',Scope), \
                     patch('poc.goose_job.subprocess.Popen',side_effect=launch) as start, \
                     patch.object(job,'_observe'), \
-                    patch('poc.native_runtime.prepare',return_value=(root/'worker.sb',
+                    patch('poc.provider_preflight.check',return_value={'passed':True}),patch('poc.native_runtime.prepare',return_value=(root/'worker.sb',
                           {'PATH':'/usr/bin','FLOW_V2_CLIENT_ERROR_FILE':str(marker)})):
                 result = job._run(state,'implement','approved prompt')
                 self.assertEqual(result['status'],'permission_required')
@@ -129,7 +129,7 @@ class NativePermissionTests(unittest.TestCase):
                     kwargs['stdout'].flush()
                     return Process()
                 job = GooseJob(role_bundle=ROOT/'role-bundle')
-                with patch('poc.goose_job.ROOT', root), patch('poc.goose_job.ProcessScope', Scope), patch('poc.goose_job.subprocess.Popen', side_effect=launch) as start, patch('poc.native_runtime.prepare', return_value=(root/'worker.sb', {'PATH': '/usr/bin'})):
+                with patch('poc.goose_job.ROOT', root), patch('poc.goose_job.ProcessScope', Scope), patch('poc.goose_job.subprocess.Popen', side_effect=launch) as start, patch('poc.provider_preflight.check',return_value={'passed':True}),patch('poc.native_runtime.prepare', return_value=(root/'worker.sb', {'PATH': '/usr/bin'})):
                     with SqliteSaver.from_conn_string(str(root/'workflow.sqlite')) as saver:
                         graph = build(a, job, lambda path: self.fail('Check ran after denied implementation')).compile(checkpointer=saver)
                         config = {'configurable': {'thread_id': 'denial'}}

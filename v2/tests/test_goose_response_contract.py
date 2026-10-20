@@ -14,7 +14,7 @@ class ResponseContractTests(unittest.TestCase):
    schema={'type':'object','properties':{'outcome':{'type':'string'}},'required':['outcome']}
    state={'task':'Approved fixture','workspace':str(work),'project_context':'','job_id':'contract-fixture','response_schema':schema};state['inputs']=task_input_digest(state['task'],work,'')
    def prepare(workspace,run_dir,roles,**kw):return run_dir/'worker.sb',{'PATH':os.environ['PATH'],'HOME':str(root/'home')}
-   with patch.dict(os.environ,HOME=str(root/'home')),patch.object(goose_job,'ROOT',root),patch.object(goose_job,'goose_binary',return_value=binary),patch('poc.native_runtime.prepare',side_effect=prepare):result=goose_job.GooseJob(provider=provider,role_bundle=bundle)._run(state,'read','Exact approved instructions')
+   with patch.dict(os.environ,HOME=str(root/'home')),patch.object(goose_job,'ROOT',root),patch.object(goose_job,'goose_binary',return_value=binary),patch('poc.provider_preflight.check',return_value={'passed':True}),patch('poc.native_runtime.prepare',side_effect=prepare):result=goose_job.GooseJob(provider=provider,role_bundle=bundle)._run(state,'read','Exact approved instructions')
    args=json.loads(argv_file.read_text());contract=json.loads((root/'artifacts/contract-fixture/contracts/read-1-0.json').read_text())
    instructions=Path(args[args.index('--instructions')+1]).read_text() if '--instructions' in args else None
    return result,args,contract,instructions

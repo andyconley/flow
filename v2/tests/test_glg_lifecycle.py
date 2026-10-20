@@ -247,6 +247,9 @@ class LifecycleTests(unittest.TestCase):
             paused = invoke('create', '--brief-file', str(brief_file))
             blocked = invoke('approve', '--actor', 'Andy', '--revision', paused['references']['brief_ref']['revision'])
             self.assertEqual(blocked['delivery_phase'], 'blocked')
+            retry = json.loads(decision_file.read_text())
+            retry.update(closure_ref=blocked['references']['closure_ref'], brief_ref=blocked['references']['brief_ref'], candidate_revision=digest_tree(self.project))
+            decision_file.write_text(json.dumps(retry))
             candidate = self.project / 'change.txt'; before = candidate.read_bytes(); candidate.write_text('changed')
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 invoke('resume', '--decision-file', str(decision_file))

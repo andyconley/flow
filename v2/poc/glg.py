@@ -1,6 +1,6 @@
 """Flow v2.0 native-host entry, powered by Goose/LangGraph."""
 import argparse
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, ExitStack
 import fcntl
 import hashlib
 import json
@@ -13,6 +13,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from .artifacts import ArtifactError, Artifacts, identifier, validate_brief
 from .contracts import digest_tree
+from .recovery import PAUSE_POLICY, approve_recovery, require_resume_budget, delivery_state, validate_candidate_recovery
 from .project_context import resolve
 from .runtime_env import ROOT
 from .work_lifecycle import build, publish_index
@@ -119,7 +120,9 @@ def read_json(path):
 
 
 def summarize(snapshot, artifacts):
-    values = snapshot.values
+    from .recovery import budget_status, delivery_state
+    values = {**snapshot.values, **delivery_state(snapshot)}
+    budget = budget_status(values)
     references = {key: values[key] for key in ('brief_ref', 'context_ref', 'approval_ref', 'closure_ref') if values.get(key)}
     problems = []
     def verify(value):
@@ -142,29 +145,90 @@ def summarize(snapshot, artifacts):
             if hasattr(task.state, 'tasks'):
                 result.extend(pauses(task.state))
         return result
-    pending = pauses(snapshot)
+    pending = []
+    observed = {}
+    for item in pauses(snapshot):
+        encoded = json.dumps(item['value'], sort_keys=True, default=str)
+        variants = observed.setdefault(item['id'], set())
+        if encoded in variants:
+            continue
+        if variants:
+            problems.append({'interrupt_id': item['id'],
+                             'error': 'Conflicting pending decisions share an interrupt ID; inspect checkpoint before responding'})
+        variants.add(encoded)
+        value = item['value'] if isinstance(item['value'], dict) else {}
+        kind = value.get('kind')
+        if kind in {'permission_required', 'scope_required'}:
+            item['decision_options'] = [{'actor': '<actor>', 'action': 'resume', 'reason': '<resolved blocker evidence>'},
+                                        {'actor': '<actor>', 'action': 'stop', 'reason': '<why stopped>'}]
+            item['instruction'] = 'Resolve the reported blocker, inspect remaining budget, then explicitly resume the same scope or stop.'
+            if budget['expired']:
+                item['decision_options'] = [item['decision_options'][1]]
+                item['instruction'] = 'Approved budget expired; resume is rejected. Stop and create a separately approved successor, preserving this evidence.'
+        elif kind == 'reconcile-effect':
+            item['decision_options'] = [{'actor': '<actor>', 'effect': 'not_started', 'evidence': '<observed evidence>'},
+                                        {'actor': '<actor>', 'effect': 'completed', 'evidence': '<observed evidence>',
+                                         'result': '<actual structured result>'}]
+            item['instruction'] = 'Inspect the actual operation before deciding; never infer that an uncertain invocation did not execute.'
+        if item.get('decision_options'):
+            import shlex
+            item['command'] = shlex.join(['flow', '--project', str(artifacts.project), '--work', str(values.get('work_id')),
+                                         'resume', '--decision-file', 'DECISION.json'])
+        pending.append(item)
     launch_context = []
+    operations = {}
     for operation, reference in values.get('result_refs', {}).items():
         try:
-            result = artifacts.read(reference)['payload'].get('result', {})
+            record = artifacts.read(reference)
+            payload = record['payload']
+            result = payload.get('result') or {}
             runtime = result.get('runtime', {})
             if isinstance(runtime, dict) and isinstance(runtime.get('context_configuration'), dict):
                 launch_context.append({'operation': operation, 'result_ref': reference,
                                        'configuration': runtime['context_configuration'],
                                        'session_ids': runtime.get('goose_session_ids', [])})
-        except (ArtifactError, OSError, ValueError, TypeError, AttributeError):
+            if not payload.get('assignment_ref'):
+                continue  # Older observational records may predate controlled assignments.
+            assignment = artifacts.read(payload['assignment_ref'])
+            operation_id = assignment['payload'].get('operation_id', assignment['id'])
+            history = [{'reference': ref, 'effect': revision['payload'].get('effect'),
+                        'supersedes': revision.get('supersedes')}
+                       for ref, revision in artifacts.revisions('results', record['id'])]
+            operations[operation_id] = {'operation_id': operation_id, 'kind': assignment['payload'].get('kind'),
+                               'assignment_ref': payload['assignment_ref'], 'result_ref': reference,
+                               'effect': payload.get('effect'), 'result': payload.get('result'),
+                               'records': history,
+                               'interpretation': 'Intent and outcome records describe one operation boundary; record count is not an execution count. Early rejection may submit no native execution.'}
+        except (ArtifactError, OSError, ValueError, KeyError, TypeError, AttributeError):
             pass  # Reference diagnostics above remain visible; observations grant no authority.
     from .monitoring import report, context_report
+    stage = values.get('resume_stage')
+    detail = values.get('review') if stage == 'review' else values.get('check') if stage == 'check' else values.get('result')
+    reason = values.get('failure') or (detail.get('reason') if isinstance(detail, dict) else None)
+    intentional = values.get('outcome') in {'stopped', 'replaced'} or values.get('lifecycle_phase') == 'stopped'
+    blocked = values.get('phase') in {'blocked', 'permission_required', 'scope_required'} and not intentional
+    recovery = None
+    if not problems and values.get('lifecycle_phase') == 'closed' and values.get('phase') == 'blocked' and values.get('review') and values.get('candidate'):
+        import shlex
+        recovery = {'decision': {'action': 'recover-review', 'actor': '<actor>', 'reason': '<why a new review is warranted>',
+                                 'closure_ref': values.get('closure_ref'), 'brief_ref': values.get('brief_ref'),
+                                 'candidate_revision': values['candidate'], 'budget_seconds': 600},
+                    'instruction': 'Inspect the exact candidate and evidence; choose an explicit new budget (1–86400 seconds) before approving. Recovery permits independent checks and fresh review only.',
+                    'command': shlex.join(['flow', '--project', str(artifacts.project), '--work', str(values.get('work_id')),
+                                           'resume', '--decision-file', 'DECISION.json'])}
     return {'work_id': values.get('work_id'), 'phase': values.get('lifecycle_phase'),
             'delivery_phase': values.get('phase'), 'outcome': values.get('outcome'),
+            'termination': 'intentional-stop' if intentional else 'blocked' if blocked else None,
+            'blocker': {'stage': stage, 'reason': reason, 'result': detail} if blocked else None,
+            'budget': budget, 'recover_review': recovery,
             'references': references, 'pending': pending, 'next_nodes': list(snapshot.next),
             'recovery_problems': problems,
             'usage': report(artifacts.project, job_id=values.get('job_id')),
             'context_monitoring': context_report(artifacts.project, job_id=values.get('job_id')),
-            'launch_context': launch_context,
+            'launch_context': launch_context, 'operations': list(operations.values()),
             'stage_assignments':values.get('shaping_assignment_refs',{}),'stage_results':values.get('shaping_refs',{}),
             'stage_outcome':values.get('stage_result'),
-            'next_action': 'Inspect referenced revision problems' if problems else 'Respond to pending decision' if pending else 'Inspect blocker/closure' if not snapshot.next else 'Resume the checkpoint'}
+            'next_action': 'Inspect referenced revision problems' if problems else 'Inspect candidate and approve recover_review with an explicit new budget' if recovery else 'Budget expired; resume is rejected. Stop or create a separately approved successor' if pending and budget['expired'] else 'Respond to pending decision' if pending else 'Inspect blocker/closure' if not snapshot.next else 'Resume the checkpoint'}
 
 
 def main(argv=None):
@@ -182,6 +246,8 @@ def main(argv=None):
     create.add_argument('--request', default='')
     create.add_argument('--brief-file', type=Path)
     create.add_argument('--legacy-run', help='Reference an existing legacy run in a NEW work item; never import its approval/checkpoint')
+    create.add_argument('--predecessor-work', help='Link a distinct closed native work item as history; no approval is imported')
+    create.add_argument('--predecessor-revision', help='Exact current predecessor closure revision; required with --predecessor-work')
     create.add_argument('--provider', default='chatgpt_codex')
     create.add_argument('--model', default='gpt-5.6-sol')
     create.add_argument('--budget-seconds', type=int, default=600)
@@ -241,6 +307,10 @@ def main(argv=None):
             return
         missing_checkpoint = 'No v2 checkpoint exists. Legacy .flow runs require their original runtime or create --legacy-run ID with fresh approval.'
         if args.command == 'create':
+            if bool(args.predecessor_work) != bool(args.predecessor_revision):
+                parser.error('--predecessor-work and --predecessor-revision must be provided together')
+            if args.predecessor_work == args.work:
+                parser.error('Predecessor must be a distinct work item')
             if args.legacy_run == args.work:
                 parser.error('A legacy handoff requires a distinct new v2 work ID; checkpoints and approvals are not imported')
             if args.budget_seconds <= 0 or not (args.request or args.brief_file):
@@ -268,7 +338,7 @@ def main(argv=None):
                     result['next_action'] = 'Inspect running delivery; wait for the active operator before mutations'
                 print(json.dumps(result, indent=2, default=str))
             return
-        with locked(state_dir), SqliteSaver.from_conn_string(str(state_dir / 'workflow.sqlite')) as saver:
+        with locked(state_dir), SqliteSaver.from_conn_string(str(state_dir / 'workflow.sqlite')) as saver, ExitStack() as guards:
             config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
             checkpoint = saver.get(config)
             old = checkpoint['channel_values'] if checkpoint else {}
@@ -284,6 +354,22 @@ def main(argv=None):
             saved = graph.get_state(config, subgraphs=True)
             if args.command == 'create':
                 context = resolve(project)
+                if args.predecessor_work:
+                    from .predecessor import validated_predecessor
+                    predecessor_dir = storage(project, args.predecessor_work)
+                    def predecessor_snapshot():
+                        with checkpoint_snapshot(predecessor_dir/'workflow.sqlite') as prior_saver:
+                            prior_config = {'configurable': {'thread_id': args.predecessor_work}}
+                            prior = prior_saver.get(prior_config)
+                            if not prior or not prior.get('channel_values'):
+                                raise ArtifactError('Predecessor checkpoint is empty')
+                            prior_options = prior['channel_values']['runtime_options']
+                            prior_graph = build(Artifacts(project, args.predecessor_work), NativeHarness(prior_options),
+                                                BriefChecker(Artifacts(project, args.predecessor_work))).compile(checkpointer=prior_saver)
+                            return prior_graph.get_state(prior_config, subgraphs=True)
+                    context['predecessor_work'] = guards.enter_context(validated_predecessor(
+                        project, args.work, args.predecessor_work, args.predecessor_revision,
+                        predecessor_dir, predecessor_snapshot))
                 if args.legacy_run:
                     from .history import legacy_run
                     legacy = legacy_run(project, args.legacy_run)
@@ -296,16 +382,24 @@ def main(argv=None):
                 initial = {'work_id': args.work, 'workspace': str(project), 'request': args.request,
                            'job_id': hashlib.sha256(str(project).encode()).hexdigest()[:16] + '-' + args.work,
                            'context_ref': context_ref, 'runtime_options': options,
-                           'budget_seconds': args.budget_seconds, 'lifecycle_phase': 'shaping'}
+                           'budget_seconds': args.budget_seconds, 'budget_policy': PAUSE_POLICY, 'lifecycle_phase': 'shaping'}
                 if args.brief_file:
                     brief = validate_brief(read_json(args.brief_file))
+                    from .project_python import check_command
+                    check_command(project, brief['check_command'])
                     if context.get('legacy_handoff'):
                         brief['historical_references'] = [*brief.get('historical_references', []), context['legacy_handoff']]
                     initial['brief_ref'] = artifacts.publish('briefs', 'brief', brief)
                 graph.invoke(initial, config)
             elif args.command == 'resume':
                 decision = read_json(args.decision_file) if args.decision_file else None
-                if isinstance(decision, dict) and decision.get('action') == 'retry-review':
+                if isinstance(decision, dict) and decision.get('action') == 'recover-review':
+                    if saved.next:
+                        parser.error('Recovery requires quiescent closed work with no pending execution')
+                    update = approve_recovery(old, decision, artifacts)
+                    graph.update_state(config, update, as_node='prepare')
+                    graph.invoke(None, config)
+                elif isinstance(decision, dict) and decision.get('action') == 'retry-review':
                     if old.get('lifecycle_phase') != 'closed' or old.get('phase') != 'blocked' or not old.get('review'):
                         parser.error('retry-review requires a closed blocked review')
                     if not decision.get('actor') or not decision.get('reason'):
@@ -314,17 +408,22 @@ def main(argv=None):
                         parser.error('Candidate changed; use a separately approved successor work item')
                     if old['deadline'] <= time.time():
                         parser.error('Original delivery budget exhausted; no retry started')
+                    if saved.next:
+                        parser.error('Recovery requires quiescent closed work with no pending execution')
+                    validate_candidate_recovery(old, decision, artifacts)
                     decisions = old.get('decision_refs', [])
                     ref = artifacts.publish('decisions', f'decision-{len(decisions)+1:04d}',
                                             {**decision, 'target_ref': old['closure_ref'],
                                              'brief_ref': old['brief_ref'], 'authority': 'Recheck unchanged candidate; no implementation'})
                     # LangGraph re-enters the existing delivery subgraph. Its
                     # authorize node routes candidate_reused directly to checks.
-                    graph.update_state(config, {'candidate_reused': True, 'lifecycle_phase': 'delivery',
+                    graph.update_state(config, {'candidate_reused': True, 'recovery_candidate': old['candidate'], 'lifecycle_phase': 'delivery',
                                                 'decision_refs': [*decisions, ref],
                                                 'resume_epoch': old.get('resume_epoch', 0)+1}, as_node='prepare')
                     graph.invoke(None, config)
                 else:
+                    if saved.next and old.get('deadline') is not None and not (isinstance(decision, dict) and decision.get('action') == 'stop'):
+                        require_resume_budget(delivery_state(saved))
                     graph.invoke(Command(resume=decision) if args.decision_file else None, config)
             elif args.command == 'accept':
                 if old.get('lifecycle_phase') != 'closed' or old.get('phase') != 'reviewed-and-ready' or old.get('acceptance') == 'accepted':
@@ -341,6 +440,8 @@ def main(argv=None):
                     parser.error('Shaping commands apply only before implementation approval; start a successor work item for changed scope')
                 if args.command == 'brief':
                     brief = validate_brief(read_json(args.file))
+                    from .project_python import check_command
+                    check_command(project, brief['check_command'])
                     legacy = artifacts.read(old['context_ref'])['payload'].get('legacy_handoff')
                     if legacy and legacy not in brief.get('historical_references', []):
                         brief['historical_references'] = [*brief.get('historical_references', []), legacy]
@@ -368,6 +469,8 @@ def main(argv=None):
                 elif args.command == 'approve':
                     if not old.get('brief_ref') or args.revision != old['brief_ref']['revision']:
                         parser.error('Approval revision must match the exact currently proposed brief')
+                    from .project_python import check_command
+                    check_command(project, validate_brief(artifacts.read(old['brief_ref'])['payload'])['check_command'])
                     response = {'action': 'approve', 'actor': args.actor, 'brief_ref': old['brief_ref']}
                 else:
                     response = {'action': args.command, 'actor': args.actor, 'reason': args.reason}

@@ -9,11 +9,13 @@ class Handoffs:
         self.artifacts = artifacts
 
     def assign(self, state, kind):
+        self._recovery_boundary(state, kind)
         operation = f"{kind}-{state.get('corrections', 0)}-{state.get('resume_epoch', 0)}"
         # A restarted prepare node republishes the same immutable assignment.
         ref = self.artifacts.publish('assignments', operation, {
             'operation_id': operation, 'kind': kind, 'brief_ref': state['brief_ref'],
             'approval_ref': state['approval_ref'], 'context_ref': state['context_ref'],
+            'recovery_ref': state.get('recovery_ref'),
             'task': state['task'], 'workspace': state['workspace'],
             'expected_result': 'Actual outcome, findings, checks, limitations and effects',
             'authority': 'Approved brief and existing workspace/credential permissions only',
@@ -23,6 +25,7 @@ class Handoffs:
                 'assignment_refs': {**state.get('assignment_refs', {}), operation: ref}}
 
     def call(self, state, kind, execute):
+        self._recovery_boundary(state, kind)
         assignment = self.artifacts.read(state['assignment_ref'])
         if assignment['payload']['kind'] != kind:
             raise ArtifactError('Wrong assignment at execution boundary')
@@ -80,6 +83,17 @@ class Handoffs:
         ref = self._result(operation, state, result, 'completed', marker,
                            'Invocation returned this result; reported limitations remain authoritative', decision_ref)
         return result, self._refs(state, operation, ref)
+
+    def _recovery_boundary(self, state, kind):
+        if not state.get('candidate_reused'): return
+        if kind not in {'check', 'review'}:
+            raise ArtifactError('Candidate-only recovery cannot authorize implementation')
+        if digest_tree(state['workspace']) != state.get('recovery_candidate', state.get('candidate')):
+            raise ArtifactError('Recovery candidate changed; no execution authorized')
+        if state.get('recovery_ref'):
+            decision = self.artifacts.read(state['recovery_ref'])['payload']
+            if decision.get('action') != 'recover-review' or decision.get('candidate_revision') != state['recovery_candidate'] or decision.get('brief_ref') != state['brief_ref']:
+                raise ArtifactError('Recovery authority changed')
 
     def escalation(self, state, decision):
         if not isinstance(decision, dict) or not decision.get('actor') or decision.get('action') not in {'resume', 'stop'}:

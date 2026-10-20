@@ -47,7 +47,7 @@ class HistoryAccessTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(self.run.read_bytes()).hexdigest(),self.digest)
 
     def test_handoff_creates_new_approval_boundary_with_controlled_historical_reference(self):
-        brief = self.root/'brief.json'; brief.write_text(json.dumps({'goal':'successor','scope':['README'],'acceptance_criteria':['documented'],'check_command':['python3','-m','unittest']}))
+        brief = self.root/'brief.json'; brief.write_text(json.dumps({'goal':'successor','scope':['README'],'acceptance_criteria':['documented'],'check_command':[sys.executable,'-m','unittest']}))
         value = self.cli('--work','new-work','create','--legacy-run','old-work','--brief-file',str(brief))
         self.assertTrue(value['pending']); self.assertNotIn('approval_ref',value['references'])
         saved = json.loads((self.project/value['references']['brief_ref']['path']).read_text())['payload']
