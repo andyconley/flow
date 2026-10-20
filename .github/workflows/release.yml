@@ -395,7 +395,7 @@ jobs:
           retention-days: 14
 
   verify-published:
-    needs: [analyze, validate-candidate, publish]
+    needs: [analyze, build-runtime, validate-candidate, publish]
     if: >-
       needs.analyze.outputs.release_required == 'true' &&
       needs.publish.result == 'success'
@@ -432,6 +432,7 @@ jobs:
 
       - name: Verify public release and consumer paths
         env:
+          FLOW_RELEASE_MANIFEST_SHA: ${{ needs.build-runtime.outputs.manifest_sha256 }}
           # This job inherits contents: read; the token is used only by the
           # release metadata GET and stripped from consumer subprocesses.
           FLOW_RELEASE_READ_TOKEN: ${{ github.token }}

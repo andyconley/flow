@@ -1,5 +1,7 @@
 """Release identity, security boundaries and fail-closed candidate evidence."""
 import importlib.util
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -13,9 +15,20 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'scripts'))
 import release_gate
 import v2_release_checks
+from release_verify_published import verify_public_manifest
 
 
 class ReleasePipelineTests(unittest.TestCase):
+    def test_public_manifest_is_bound_to_exact_verified_build(self):
+        manifest={'version':'v0.51.0'}
+        raw=json.dumps(manifest).encode();digest=hashlib.sha256(raw).hexdigest()
+        urls={'release-manifest.json':'https://example.invalid/release-manifest.json'}
+        with patch('urllib.request.urlopen',side_effect=lambda *a,**kw:io.BytesIO(raw)):
+            verify_public_manifest(manifest,urls,digest)
+            for expected in (None,'0'*64):
+                with self.assertRaises(release_gate.ContractError):verify_public_manifest(manifest,urls,expected)
+            with self.assertRaises(release_gate.ContractError):verify_public_manifest({'version':'changed'},urls,digest)
+
     def test_every_publisher_depends_on_verified_exact_build_and_candidate(self):
         workflow=yaml.safe_load((ROOT/'.github/workflows/release.yml').read_text())
         jobs=workflow['jobs'];publish=jobs['publish']
@@ -31,6 +44,8 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertNotIn('secrets.GITHUB_TOKEN',json.dumps(jobs['analyze']))
         self.assertNotIn('secrets.GITHUB_TOKEN',json.dumps(jobs['validate-candidate']))
         self.assertIn('needs.publish.result',jobs['verify-published']['if'])
+        self.assertIn('build-runtime',jobs['verify-published']['needs'])
+        self.assertIn('needs.build-runtime.outputs.manifest_sha256',json.dumps(jobs['verify-published']))
 
     def test_production_builder_pins_source_patch_compiler_and_has_no_live_checks(self):
         workflow=(ROOT/'.github/workflows/goose-build.yml').read_text()

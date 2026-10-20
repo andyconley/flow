@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -61,6 +62,15 @@ def _release_body(repository: str, tag: str, fixture: Path | None) -> tuple[str,
         raise ContractError("GitHub release URL is missing")
     return body, url
 
+
+
+def verify_public_manifest(manifest: dict, urls: dict, expected: str | None) -> None:
+    if not expected or not re.fullmatch(r'[a-f0-9]{64}', expected):
+        raise ContractError('Missing exact build-job manifest identity')
+    with urllib.request.urlopen(urls['release-manifest.json'], timeout=30) as response:
+        raw = response.read(1024*1024+1)
+    if len(raw)>1024*1024 or hashlib.sha256(raw).hexdigest()!=expected or json.loads(raw)!=manifest:
+        raise ContractError('Published manifest differs from the verified build job')
 
 
 def verify(
@@ -138,6 +148,7 @@ def verify(
             from poc import managed
             from v2_release_checks import flow
             distribution,urls=managed.latest(github_repository,predicted['tag'])
+            verify_public_manifest(distribution,urls,os.environ.get('FLOW_RELEASE_MANIFEST_SHA'))
             if distribution['source_sha']!=plan['source_sha']:
                 raise ContractError('Public distribution source differs from published plan')
             assets=temp_root/'assets';managed.fetch_assets(distribution,assets,urls)
