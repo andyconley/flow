@@ -139,7 +139,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     env.update(PATH=str(bindir)+':'+env['PATH'],CLAUDE_CODE_EXECUTABLE=str(claude),
                FLOW_V2_ACP_EVIDENCE_DIR=str(evidence),
                FLOW_V2_CLIENT_ERROR_FILE=str(client_error),
-               CLAUDE_CONFIG_DIR=str(claude_config),
+               CLAUDE_CONFIG_DIR=str(claude_config), FLOW_V2_CLAUDE_BINARY=executable,
                CLAUDE_CODE_TMPDIR=str(scratch),
                HOME=str(home), TMPDIR=str(temporary), TMPPREFIX=str(temporary/'zsh'),
                PYTHONPYCACHEPREFIX=str(home/'pycache'),

@@ -40,6 +40,11 @@ class State(TypedDict,total=False):
  stage_result:dict
  review:dict
  result:dict
+ recovery_ref:dict
+ recovery_candidate:str
+ budget_seconds:int
+ budget_policy:str
+ pause_remaining:float
  candidate_reused:bool
  max_attempts:int
  failure:str

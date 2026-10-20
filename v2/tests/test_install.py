@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import os
 import io
+import sys
 import json
 from pathlib import Path
 import shutil
@@ -118,7 +119,7 @@ class InstallTests(unittest.TestCase):
         run('--work', 'smoke', 'assign', '--stage', 'define', '--question', 'Inspect existing docs')
         note = self.home/'findings.md'; note.write_text('Host-authored source inspection, no delegation claimed.')
         run('--work', 'smoke', 'stage', '--stage', 'define', '--file', str(note))
-        brief = self.home/'brief.json'; brief.write_text(json.dumps({'goal':'docs', 'scope':['README'], 'acceptance_criteria':['clear usage'], 'check_command':['python3','-m','unittest']}))
+        brief = self.home/'brief.json'; brief.write_text(json.dumps({'goal':'docs', 'scope':['README'], 'acceptance_criteria':['clear usage'], 'check_command':[sys.executable,'-m','unittest']}))
         run('--work', 'smoke', 'brief', '--file', str(brief))
         saved = run('--work', 'smoke', 'resume'); self.assertTrue(saved['pending'])
         self.assertNotIn('approval_ref', saved['references'])

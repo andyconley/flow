@@ -114,7 +114,7 @@ class MonitoringTests(unittest.TestCase):
         state = {'task':'approved','workspace':str(self.project),'project_context':'facts','job_id':'job','deadline':time.time()+10}
         state['inputs']=task_input_digest(state['task'],state['workspace'],state['project_context'])
         output=io.StringIO()
-        with patch.dict(os.environ,{'HOME':str(self.home),'GOOSE_INPUT_LIMIT':''}), patch('poc.goose_job.ROOT',self.root), patch('poc.goose_job.ProcessScope',Scope), patch('poc.native_runtime.prepare',side_effect=prepare), patch('poc.goose_job.subprocess.Popen',return_value=Process()) as launch, patch('poc.goose_job.time.sleep'), contextlib.redirect_stderr(output):
+        with patch.dict(os.environ,{'HOME':str(self.home),'GOOSE_INPUT_LIMIT':''}), patch('poc.goose_job.ROOT',self.root), patch('poc.goose_job.ProcessScope',Scope), patch('poc.provider_preflight.check',return_value={'passed':True}),patch('poc.native_runtime.prepare',side_effect=prepare), patch('poc.goose_job.subprocess.Popen',return_value=Process()) as launch, patch('poc.goose_job.time.sleep'), contextlib.redirect_stderr(output):
             result=GooseJob(provider='ollama',model='configured-model',role_bundle=self.root/'role-bundle')._run(state,'implement','approved instructions')
         self.assertEqual(launch.call_args.kwargs['env']['GOOSE_INPUT_LIMIT'],'65536')
         self.assertEqual(result['context_configuration']['context_tokens'],65536)

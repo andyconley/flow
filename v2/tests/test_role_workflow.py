@@ -93,7 +93,7 @@ class RoleWorkflowTests(unittest.TestCase):
             h=Harness(permission_at='implement');g,s=self.graph(tmp,h);config={'configurable':{'thread_id':'scope'}}
             self.assertIn('__interrupt__',g.invoke(s,config))
             self.assertEqual((h.implementations,h.reviews),(1,0))
-            self.assertEqual(g.invoke(Command(resume='stop'),config)['phase'],'blocked')
+            self.assertEqual(g.invoke(Command(resume='stop'),config)['phase'],'stopped')
             self.assertEqual(h.implementations,1)
 
     def test_role_adapter_uses_catalog_and_structured_real_result(self):
@@ -133,7 +133,7 @@ class RoleWorkflowTests(unittest.TestCase):
             workspace=root/'workspace';workspace.mkdir()
             state={'task':'task','workspace':str(workspace),'project_context':'context','inputs':task_input_digest('task',workspace,'context'),'job_id':'one'}
             job=GooseJob(provider='chatgpt_codex',role_bundle=ROOT/'role-bundle')
-            with patch('poc.goose_job.ROOT',root),patch('poc.goose_job.ProcessScope',Scope),patch('poc.goose_job.subprocess.Popen',return_value=Process()) as launch,patch('poc.native_runtime.prepare',return_value=(root/'common.sb',{'PATH':'/usr/bin'})):
+            with patch('poc.goose_job.ROOT',root),patch('poc.goose_job.ProcessScope',Scope),patch('poc.goose_job.subprocess.Popen',return_value=Process()) as launch,patch('poc.provider_preflight.check',return_value={'passed':True}),patch('poc.native_runtime.prepare',return_value=(root/'common.sb',{'PATH':'/usr/bin'})):
                 first=job._run(state,'implement','prompt')
                 second=job._run(state,'implement','prompt')
             self.assertEqual(launch.call_count,1)

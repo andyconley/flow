@@ -3,6 +3,7 @@ import json
 import time
 from .artifacts import ArtifactError, atomic_write, validate_brief
 from .contracts import State, task_input_digest, digest_tree
+from .project_python import check_command
 from .handoffs import Handoffs
 from .project_context import render
 from .workflow import build as delivery
@@ -29,6 +30,8 @@ def build(artifacts, harness, checker):
         decision = interrupt({'kind': 'approve-brief' if brief else 'shape-request',
                               'work_id': s['work_id'], 'request': s.get('request'),
                               'brief_ref': brief_ref, 'brief': brief,
+                              'proposed_budget_seconds': s.get('budget_seconds', 600),
+                              'budget_policy': s.get('budget_policy', 'legacy-wall-clock'),
                               'context_ref': s['context_ref'], 'shaping_refs': s.get('shaping_refs', {}),
                               'shaping_assignments': s.get('shaping_assignment_refs', {}),
                               'actions': ['brief', 'assign', 'run-stage', 'stage', 'approve-stage', 'approve', 'stop']})
@@ -53,6 +56,7 @@ def build(artifacts, harness, checker):
             reference = decision['brief_ref']
             record = artifacts.read(reference)
             validate_brief(record['payload'])
+            check_command(s['workspace'], record['payload']['check_command'])
             if record['kind'] != 'briefs' or record['supersedes'] != brief_ref:
                 raise ArtifactError('Brief must explicitly supersede the currently proposed revision')
             return {'brief_ref': reference, 'lifecycle_phase': 'awaiting-approval'}
@@ -86,12 +90,15 @@ def build(artifacts, harness, checker):
                 if not brief:
                     raise ArtifactError('Publish a complete brief before approving implementation')
                 validate_brief(brief)
+                check_command(s['workspace'], brief['check_command'])
                 if decision.get('brief_ref') != brief_ref:
                     raise ArtifactError('Approval must name the exact proposed brief revision')
             decisions = s.get('decision_refs', [])
             ref = artifacts.publish('decisions', f'decision-{len(decisions)+1:04d}', {
                 'action': action, 'actor': actor, 'target_ref': target,
                 'reason': decision.get('reason', ''), 'supersedes_decision': decision.get('supersedes_decision'),
+                'budget_seconds': s.get('budget_seconds', 600) if action == 'approve' else None,
+                'budget_policy': s.get('budget_policy', 'legacy-wall-clock') if action == 'approve' else None,
                 'authority': 'implementation' if action == 'approve' else 'stage-only' if action == 'approve-stage' else 'stop'})
             update = {'decision_refs': [*decisions, ref], 'lifecycle_phase': 'approved' if action == 'approve' else 'stopped' if action == 'stop' else 'awaiting-approval' if s.get('brief_ref') else 'shaping'}
             if action == 'approve':
@@ -128,12 +135,14 @@ def build(artifacts, harness, checker):
             update['shaping_refs']={**s.get('shaping_refs',{}),stage:ref}
             if result.get('brief'):
                 brief=validate_brief(result['brief'])
+                check_command(s['workspace'], brief['check_command'])
                 update['brief_ref']=artifacts.publish('briefs','brief',brief,supersedes=s.get('brief_ref'))
                 update['lifecycle_phase']='awaiting-approval'
         return update
 
     def prepare(s):
         brief = validate_brief(artifacts.read(s['brief_ref'])['payload'])
+        check_command(s['workspace'], brief['check_command'])
         context = artifacts.read(s['context_ref'])['payload']
         decision = artifacts.read(s['approval_ref'])['payload']
         if decision['action'] != 'approve' or decision['target_ref'] != s['brief_ref']:
@@ -151,7 +160,15 @@ def build(artifacts, harness, checker):
     def closure(s):
         # Technical readiness and user acceptance are deliberately separate.
         from .monitoring import report
+        stage = s.get('resume_stage')
+        detail = s.get('review') if stage == 'review' else s.get('check') if stage == 'check' else s.get('result')
+        reason = s.get('failure') or (detail.get('reason') if isinstance(detail, dict) else None)
+        intentional = s.get('outcome') in {'stopped', 'replaced'} or s.get('phase') in {'stopped', 'replaced'}
+        blocked = s.get('phase') in {'blocked', 'permission_required', 'scope_required'} and not intentional
         payload = {'work_id': s['work_id'], 'outcome': s.get('outcome', s.get('phase')),
+                   'termination': 'intentional-stop' if intentional else 'blocked' if blocked else None,
+                   'stage': stage, 'reason': reason, 'result': detail,
+                   'blocker': {'stage': stage, 'reason': reason, 'result': detail} if blocked else None,
                    'acceptance': s.get('acceptance', 'not-recorded'),
                    'brief_ref': s['brief_ref'], 'context_ref': s['context_ref'],
                    'decision_refs': s.get('decision_refs', []),

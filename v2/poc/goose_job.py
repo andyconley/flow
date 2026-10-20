@@ -45,7 +45,7 @@ class GooseJob:
   except ValueError as error:return {'status':'scope_required','reason':str(error)}
   record={'output':str(p.with_suffix('.jsonl')),'stderr':str(p.with_suffix('.stderr')),'status':'uncertain','inputs':s['inputs'],'workspace':s['workspace'],'started':time.time(),'kind':kind}
   if namespace_audit:record['namespace_wire_audit']=namespace_audit
-  store(p,record) # Before submit: crash here is explicitly uncertain, never silently resubmitted.
+  # Publish the uncertain native intent only after readiness checks succeed.
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
   output=p.with_suffix('.jsonl');err=p.with_suffix('.stderr')
   cmd=scoped([str(goose_binary()),'run','--no-profile','--with-builtin','developer','--with-builtin','summon','--provider',provider,'--model',self.model,'--max-turns','25','--max-tool-repetitions','3','--output-format','stream-json','--name',f'{s["job_id"]}-{kind}-{index}','--instructions',str(instructions)])
@@ -53,12 +53,18 @@ class GooseJob:
   if self.role_bundle:
    from .native_runtime import prepare
    from .role_renderer import bind_bundle
-   role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles',
+   role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles-{time.time_ns()}',
                              s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
                              s.get('project_context',''))
    options={'provider':provider,'model':self.model,'check_command':s.get('check_command')}
    if namespace_endpoint:options['namespace_endpoint']=namespace_endpoint
    profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
+   from .provider_preflight import check as provider_check,PreflightError
+   try:record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'))
+   except PreflightError as error:
+    return {'status':error.status,'reason':str(error),'source':'provider_preflight','submitted':False}
+   except (OSError,ValueError,KeyError) as error:
+    return {'status':'scope_required','reason':'Provider readiness configuration needs attention: '+str(error),'source':'provider_preflight','submitted':False}
    record['native_evidence_directory'] = native_env.get('FLOW_V2_ACP_EVIDENCE_DIR')
    record['native_client_error_file'] = native_env.get('FLOW_V2_CLIENT_ERROR_FILE')
    record['project_python'] = str(python) if python else None
@@ -83,7 +89,10 @@ class GooseJob:
   record['context_configuration']=settings(s['workspace'],self.model)
   record['context_configuration']['context_tokens']=int(env['GOOSE_INPUT_LIMIT']) if env.get('GOOSE_INPUT_LIMIT') else None
   record['context_configuration']['application_basis']='captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx'
-  store(p,record)
+  if self.role_bundle and s.get('deadline') is not None:
+   budget=min(budget,max(0,s['deadline']-time.time()))
+   if budget<=0:return {'status':'blocked','reason':'Approved workflow time budget exhausted during preflight; no execution submitted','submitted':False}
+  store(p,record) # Native invocation intent; a crash now requires reconciliation.
   with output.open('w') as out,err.open('w') as errors:
    child=subprocess.Popen(cmd,cwd=s['workspace'],env=env,stdout=out,stderr=errors,start_new_session=True)
    record.update(pid=child.pid,execution_scope=child.pid,processes={},supervisor_pid=os.getpid());store(p,record)
