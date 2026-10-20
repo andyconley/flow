@@ -19,6 +19,20 @@ from release_verify_published import verify_public_manifest
 
 
 class ReleasePipelineTests(unittest.TestCase):
+    def test_bootstrap_rejects_legacy_release_before_running_its_installer(self):
+        script=(ROOT/'install.sh').read_text().split("<<'PYTHON'\n",1)[1].split('\nPYTHON',1)[0]
+        tag='v0.51.0';base='https://github.com/andyconley/flow/releases/download/'+tag+'/'
+        names=('flow-code.tar.gz','python-wheels.tar.gz','goose-macos-arm64.gz','goose-macos-arm64.json','release-manifest.json')
+        payload={'tag_name':tag,'assets':[{'name':name,'browser_download_url':base+name} for name in names]}
+        with patch.object(sys,'argv',['bootstrap','andyconley/flow']),patch('builtins.print') as output:
+            with patch('urllib.request.urlopen',side_effect=lambda *a,**kw:io.BytesIO(json.dumps(payload).encode())):
+                exec(compile(script,'install.sh bootstrap','exec'),{})
+            output.assert_called_once_with(tag)
+            payload['assets']=[]
+            with patch('urllib.request.urlopen',side_effect=lambda *a,**kw:io.BytesIO(json.dumps(payload).encode())):
+                with self.assertRaisesRegex(SystemExit,'legacy installation is not supported'):
+                    exec(compile(script,'install.sh bootstrap','exec'),{})
+
     def test_public_manifest_is_bound_to_exact_verified_build(self):
         manifest={'version':'v0.51.0'}
         raw=json.dumps(manifest).encode();digest=hashlib.sha256(raw).hexdigest()

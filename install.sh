@@ -11,6 +11,10 @@ req=urllib.request.Request("https://api.github.com/repos/"+repo+"/releases/lates
 with urllib.request.urlopen(req,timeout=30) as response:release=json.load(response)
 tag=release["tag_name"]
 if release.get("draft") or release.get("prerelease") or not re.fullmatch(r"v\d+\.\d+\.\d+",tag):raise SystemExit("Published stable release required")
+required={"flow-code.tar.gz","python-wheels.tar.gz","goose-macos-arm64.gz","goose-macos-arm64.json","release-manifest.json"}
+assets={asset["name"]:asset["browser_download_url"] for asset in release.get("assets",[])}
+base="https://github.com/"+repo+"/releases/download/"+tag+"/"
+if any(assets.get(name)!=base+name for name in required):raise SystemExit("Latest release has no complete managed-v2 distribution; legacy installation is not supported")
 print(tag)
 PYTHON
 )"
