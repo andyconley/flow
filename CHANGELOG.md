@@ -4,6 +4,19 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Candidate-bound recover-review adds fresh checks/review with explicit approval and budget, never implementation. Pauses preserve remaining time; preflight blocks unready providers. Live MacBook qualification remains pending.
+- Install/update asks before acquiring missing knowledge assets and audits a snapshot before activation; explicit offline/defer modes preserve control. v0.52.0 needs corrected bootstrap once; full fresh acquisition remains untested.
+
+
+## [0.52.1](https://github.com/andyconley/flow/compare/v0.52.0...v0.52.1) (2026-10-20)
+
+### Bug Fixes
+
+* provision knowledge during normal install and update ([83174d9](https://github.com/andyconley/flow/commit/83174d9344fa90f31da87833f2c8c63f0ae63bec))
+* **v2:** preserve pause budgets and candidate review recovery ([7df514c](https://github.com/andyconley/flow/commit/7df514c112ac974e628e85ead888c5009722255b))
+
+### Highlights
+
 - Opt-in setup --download; 21 cards/6 roles. Managed edits autoindex; external edits catch up next use or optional watcher. Qualified: readonly local gpt-oss:20b ACP only; full fresh acquisition untested. See knowledge/README.md.
 
 
