@@ -141,7 +141,9 @@ def fingerprint(root):
     cfg=read(root/'settings.json',{})
     authored={n:digest(b) for n,b in inventory(root/'notes').items()}
     if cfg.get('model_digest'):
-        cfg={**cfg,'observed_model_digest':local_model_digest(cfg['ollama'],cfg['model'])}
+        observed=local_model_digest(cfg['ollama'],cfg['model'])
+        if str(observed).removeprefix('sha256:')!=str(cfg['model_digest']).removeprefix('sha256:'):raise ValueError('Configured extraction model digest changed; expected '+str(cfg['model_digest'])+', observed '+str(observed)+'. Review/configure the intended model explicitly; the prior snapshot remains selected.')
+        cfg={**cfg,'observed_model_digest':observed}
     # Include all pipeline code and pins, not just a manually bumped number.
     code=[Path(__file__),*sorted(Path(__file__).with_name('knowledge_runtime').glob('*.py')),Path(__file__).with_name('knowledge_runtime')/'compatibility.json',SHARED/'requirements.lock',SHARED/'embedding.lock.json']
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())

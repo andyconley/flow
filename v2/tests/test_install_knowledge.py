@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from poc import install_knowledge as gate, knowledge as k, managed
 from tests import test_managed_release as fixtures
 
@@ -420,6 +420,30 @@ class KnowledgeProvisionedModelRaceTests(KnowledgeTransactionFixture, unittest.T
     def test_changed_recorded_digest_is_rejected_even_if_alias_changes_back(self):
         baseline=k.read(k.SHARED/'extraction-models.json')['models']['qwen3:4b']['digest']
         self.exercise_race(baseline)
+
+    def test_drift_after_verification_is_rejected_at_real_process_boundary(self):
+        self.seed('Retain authored note.\n')
+        approved=k.read(k.SHARED/'extraction-models.json')['models']['qwen3:4b']['digest']
+        cfg={'model':'qwen3:4b','model_digest':approved,'ollama':'http://127.0.0.1:11434'}
+        k.write(self.store/'settings.json',cfg);original=(self.store/'settings.json').read_bytes()
+        first=self.run_install(lambda *a:{'state':'ready'})
+        real_process=k.process
+        builder=Mock(return_value={'passed':True,'unresolved_edges':0})
+        def online(*args):
+            k.write(self.store/'settings.json',cfg)
+            return {'configured':True,'assets_ready':True}
+        with patch.object(gate,'doctor',return_value={'ok':False}),patch.object(k,'local_model_digest',return_value=approved) as model,patch.object(gate,'online',side_effect=online):
+            def begin_processing(root):
+                model.return_value='replacement-digest'
+                return real_process(root,builder)
+            with patch.object(k,'process',side_effect=begin_processing):
+                with self.assertRaisesRegex(ValueError,'digest changed'):
+                    self.run_install(lambda *a:gate.provision(self.store,'download'),'v0.53.0')
+        builder.assert_not_called()
+        self.assertEqual(Path(first['runtime']),(self.fixture.home/'.flow/v2/current').resolve())
+        self.assertEqual(original,(self.store/'settings.json').read_bytes())
+        self.assertEqual('known-good',k.read(self.store/'CURRENT.json')['generation'])
+        self.assertEqual('Retain authored note.\n',(self.store/'notes/local.md').read_text())
 
 
 if __name__=='__main__':unittest.main()
