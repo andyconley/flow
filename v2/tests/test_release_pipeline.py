@@ -44,6 +44,11 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertIn("'--require-hashes'",(ROOT/'v2/poc/managed.py').read_text())
         self.assertNotIn('native_inference',workflow)
         self.assertNotIn('auth login',workflow)
+        # Main's release workflow already owns the production build. Avoid
+        # launching a second identical Rust build for the same main push.
+        consumer=yaml.safe_load((ROOT/'.github/workflows/openhands-runtime.yml').read_text())
+        events=consumer.get('on',consumer.get(True))
+        self.assertNotIn('push',events)
 
     def test_failure_of_each_required_check_stops_all_later_checks(self):
         environment={

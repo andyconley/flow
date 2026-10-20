@@ -1,8 +1,6 @@
 name: Flow v2 production package and consumer
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
