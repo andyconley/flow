@@ -274,4 +274,24 @@ class KnowledgePriorManualEditTests(KnowledgeTransactionFixture, unittest.TestCa
         self.assertFalse((self.store/'notes/deleted.md').exists());self.assertTrue((self.store/'added-config.json').exists())
 
 
+class KnowledgeRuntimeRollbackTests(KnowledgeTransactionFixture, unittest.TestCase):
+    def test_normal_processing_guards_rollback_and_explicit_install_preserves_state(self):
+        self.seed('Authored text remains authoritative.\n')
+        first=self.run_install(lambda *a:{'state':'ready'})
+        # Real supervisor publication, without models or network. An unprovisioned
+        # ordinary context command takes this same failed-worker status path.
+        with patch.object(k,'worker_command',side_effect=ValueError('Missing local runtime')):
+            with self.assertRaisesRegex(ValueError,'Missing local runtime'):k.process(self.store)
+        self.assertEqual('failed',k.read(self.store/'status.json')['state'])
+        before=managed.knowledge_inventory(self.fixture.home/'.flow/v2')
+        self.assertFalse(self.run_install(lambda *a:{'state':'ready'})['changed'])
+        with self.assertRaisesRegex(ValueError,'Knowledge edits prevent rollback'):managed.rollback(self.fixture.home)
+        self.assertEqual(Path(first['runtime']),(self.fixture.home/'.flow/v2/current').resolve())
+        self.assertEqual(before,managed.knowledge_inventory(self.fixture.home/'.flow/v2'))
+        # Supported explicit-version install makes a fresh transaction; it does
+        # not restore the obsolete rollback baseline over current knowledge.
+        self.run_install(lambda *a:{'state':'ready'},'v0.50.0')
+        self.assertEqual(before,managed.knowledge_inventory(self.fixture.home/'.flow/v2'))
+
+
 if __name__=='__main__':unittest.main()
