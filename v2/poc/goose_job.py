@@ -23,6 +23,9 @@ class GooseJob:
    if prior['inputs']!=s['inputs']:return {'status':'blocked','reason':'input identity changed'}
    if prior['status'] in {'completed','permission_required','scope_required'}:return prior
    return self.reconcile_record(p)
+  from .knowledge_tools import require_ready,KnowledgeUnavailable
+  try:require_ready()
+  except KnowledgeUnavailable as error:return {'status':'blocked','reason':str(error),'source':'knowledge_preflight','submitted':False}
   from .project_python import select
   try:python = select(s['workspace'], s.get('check_command'))
   except ValueError as error:return {'status':'scope_required','reason':str(error)}
@@ -56,8 +59,19 @@ class GooseJob:
   store(p,record)
   with output.open('w') as out,err.open('w') as errors:
    child=subprocess.Popen(cmd,cwd=s['workspace'],env=env,stdout=out,stderr=errors,start_new_session=True)
-   scope=ProcessScope(child.pid)
-   record.update(pid=child.pid,execution_scope=child.pid,processes=scope.known,supervisor_pid=os.getpid());store(p,record)
+   record.update(pid=child.pid,execution_scope=child.pid,processes={},supervisor_pid=os.getpid());store(p,record)
+   try:scope=ProcessScope(child.pid)
+   except PermissionError as error:
+    # Record identity before observation, and stop the owned initial process group.
+    # Detached descendants remain uncertain without process visibility; never retry.
+    try:os.killpg(child.pid,signal.SIGTERM)
+    except ProcessLookupError:pass
+    try:child.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+     os.killpg(child.pid,signal.SIGKILL);child.wait(timeout=5)
+    record.update(status='permission_required',reason=str(error),exit=child.returncode,scope_uncertain=True)
+    store(p,record);return record
+   record['processes']=scope.known;store(p,record)
    deadline=time.monotonic()+budget
    next_observation=time.monotonic()
    while child.poll() is None:
@@ -69,11 +83,20 @@ class GooseJob:
      stopped=scope.stop();child.wait(timeout=5)
      record.update(status='blocked',reason='timeout; do not resubmit without reconciliation',stop=stopped);self._observe(record,s,kind,index);store(p,record);return record
     if time.monotonic()>=next_observation:
+     from .knowledge import home as knowledge_home,trigger
+     try:
+      kh=knowledge_home()
+      record['knowledge_status']=trigger(kh) if (kh/'settings.json').exists() else {'state':'unconfigured'}
+     except Exception as error:record['knowledge_status']={'state':'pending','error':str(error)}
      self._observe(record,s,kind,index);store(p,record);next_observation=time.monotonic()+5
     time.sleep(.25)
    code=child.returncode
   deadline=time.monotonic()+2
   while scope.observe() and time.monotonic()<deadline:time.sleep(.1)
+  alive=scope.observe()
+  if alive:
+   record['cleanup_after_provider_exit']=scope.stop()
+   record['outlived_provider_root']=list(alive)
   alive=scope.observe()
   boundary=boundary_error(output.read_text()+'\n'+err.read_text()) if self.role_bundle else None
   if record.get('native_client_error_file') and Path(record['native_client_error_file']).is_file():

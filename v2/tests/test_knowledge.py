@@ -60,7 +60,8 @@ class KnowledgeTests(unittest.TestCase):
  def test_agent_extension_and_cli_dispatch(self):
   from poc.knowledge_tools import attach
   with patch.dict(os.environ,FLOW_KNOWLEDGE_HOME=str(self.root)):
-   k.write(self.root/'settings.json',{'python':'/safe path/python'});self.run_build();cmd,env=attach(['goose','run'],{})
+   k.write(self.root/'settings.json',{'python':'/safe path/python'});self.run_build();
+   with patch('poc.knowledge_tools.require_ready'):cmd,env=attach(['goose','run'],{})
   self.assertIn('--with-extension',cmd);self.assertIn("'/safe path/python'",cmd[-1]);self.assertEqual(str(self.root),env['FLOW_KNOWLEDGE_HOME'])
  def test_export_and_restore_are_runtime_independent(self):
   import contextlib,io

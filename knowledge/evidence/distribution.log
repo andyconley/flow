@@ -1,0 +1,16 @@
+test_invalid_shared_version_cannot_escape_local_home (tests.test_knowledge_distribution.DistributionTests.test_invalid_shared_version_cannot_escape_local_home) ... ok
+test_real_remote_fetch_update_conflicts_and_runtime_independence (tests.test_knowledge_distribution.DistributionTests.test_real_remote_fetch_update_conflicts_and_runtime_independence) ... ok
+test_unprovisioned_installed_store_blocks_before_provider (tests.test_knowledge_distribution.DistributionTests.test_unprovisioned_installed_store_blocks_before_provider) ... ok
+test_real_install_seed_and_local_update_without_runtime_change (tests.test_knowledge_distribution.FreshInstallKnowledgeTests.test_real_install_seed_and_local_update_without_runtime_change) ... ok
+test_empty_wheelhouse_and_missing_model_block_without_data_loss (tests.test_knowledge_distribution.ProvisioningBehaviorTests.test_empty_wheelhouse_and_missing_model_block_without_data_loss) ... Looking in links: /var/folders/2b/86qh8ksj6lj3y6k7kzb81h0c0000gn/T/tmpgg4uewew/wheels
+ERROR: Could not find a version that satisfies the requirement agent-detector==2.0.0 (from versions: none)
+ERROR: No matching distribution found for agent-detector==2.0.0
+ok
+test_local_codex_network_permission_requires_explicit_credential_free_loopback (tests.test_knowledge_distribution.ReadinessBoundaryTests.test_local_codex_network_permission_requires_explicit_credential_free_loopback) ... ok
+test_missing_bm_dependency_does_not_fall_back (tests.test_knowledge_distribution.ReadinessBoundaryTests.test_missing_bm_dependency_does_not_fall_back) ... ok
+test_readonly_status_delegates_reconciliation_without_model_calls (tests.test_knowledge_distribution.ReadinessBoundaryTests.test_readonly_status_delegates_reconciliation_without_model_calls) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.385s
+
+OK

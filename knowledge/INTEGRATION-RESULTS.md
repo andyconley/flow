@@ -114,3 +114,16 @@ Use this design for the small local corpus after review, keeping authored search
 and inferred graph separate. Do not claim an accuracy improvement from more
 links, auto-promote local knowledge, or release this larger integration before
 reviewing its storage/provisioning tradeoffs.
+
+
+## Continuation after native ACP review
+
+The branch was safely rebased onto released main `28d828a` (v0.51.2 / merged PR136). The two knowledge commits remain separate and unmerged; quota/release changes were not duplicated.
+
+See `ACP-STATUS.md` for the actual remaining acceptance blocker. The prior wording that a complete production ACP/provider job was simply untested is superseded: it was exercised under local models, exposed real sandbox/environment defects that were repaired, and still did **not** pass the required tool-use task. Readiness is blocked, not established by narrower MCP tests.
+
+The final post-rebase native BM/direct-MCP replay passed all 15 requests, role scoping, real graph traversal and immutable snapshot checks; raw results are in `evidence/final-retrieval.json`. The source/agent inventory is in `COVERAGE.md` and `evidence/coverage.json`: all existing 21 authoritative cards are imported, covering six of 13 roles. Seven roles have no authoritative card corpus; 33 shared standards documents remain distributed standards, not invented expertise cards. No missing authoritative cards were found to import.
+
+The local model request catalog was captured through a temporary transparent loopback proxy, which recorded only tool names/types and model name. It forwarded payloads unchanged and was not added to production. The offered MCP tools appear inside a namespace; the local model did not successfully invoke them. This diagnostic does not prove a namespace-specific root cause, because a short-budget synthetic flat control also failed. No result was upgraded to success from model prose.
+
+Final regression result after the developer-checkout reconciliation fix: **187 tests passed**, with the explicit loopback Git and offline provisioning tests enabled. Final snapshot audit: **21 notes, 21 authored FTS rows, 131 physical/vector chunks, 36 typed graph edges and zero unresolved endpoints**. The changed edge count versus the initial 37-edge generation reflects fresh local inference; authored retrieval ranks remain unchanged. Task-owned model and diagnostic proxy processes were stopped (`evidence/final-cleanup.json`), and all six original raw card source hashes were reverified unchanged.

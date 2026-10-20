@@ -26,6 +26,19 @@ def git_metadata(workspace):
     return sorted({str(Path(path).resolve()) for path in result.stdout.splitlines()})
 
 
+def local_codex_endpoint():
+    """Grant loopback only for an explicitly configured credential-free provider."""
+    import tomllib
+    from urllib.parse import urlparse
+    path=ROOT/'runtime/codex-home/config.toml'
+    if not path.exists():return None
+    config=tomllib.loads(path.read_text());name=config.get('model_provider')
+    row=config.get('model_providers',{}).get(name,{})
+    if row.get('requires_openai_auth') is not False:return None
+    url=urlparse(row.get('base_url',''))
+    if url.scheme!='http' or url.hostname not in ('127.0.0.1','localhost','::1') or url.username or url.password:return None
+    return url.port or 80
+
 def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_command=None):
     workspace, run_dir = Path(workspace).resolve(), Path(run_dir).resolve()
     tools = run_dir/'native-runtime'; tools.mkdir(exist_ok=True)
@@ -40,6 +53,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     debug = ROOT/'runtime'/f'{run_dir.name}-native-claude.debug'
     profile = (ROOT/'runtime/scope.sb').read_text().replace(' (remote ip "localhost:11434")', '')
     profile=re.sub(r'# MANAGED_MUTABLE_START.*?# MANAGED_MUTABLE_END\n','',profile,flags=re.S)
+    local_port=local_codex_endpoint()
     old = f'(allow file-write* (subpath "{ROOT}/runtime") (subpath "{ROOT}/workspaces") (literal "/dev/null"))'
     new = f'(allow file-write* (subpath "{workspace}") (subpath "{ROOT}/runtime/codex-home") (subpath "{ROOT}/runtime/tmp") (literal "{debug}") (literal "/dev/null"))'
     profile = profile.replace(old, new)
@@ -78,11 +92,29 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     for path in git_metadata(workspace):
         profile += '(allow file-read* (subpath '+json.dumps(path)+'))\n'
     profile += '(allow file-write* (regex #"^(/private)?/tmp/claude-[0-9a-f]+-cwd$"))\n'
+    # ACP inherits the MCP definition and starts its own client-side process.
+    # Permit only reads of knowledge/code/cache; query writes stay in per-run tmp.
+    from .knowledge import home as knowledge_home,read as knowledge_read,SHARED
+    kh=knowledge_home();kc=knowledge_read(kh/'settings.json',{})
+    if kc.get('python'):
+        paths=[kh,ROOT/'poc',SHARED]
+        if kc.get('cache'):paths.append(Path(kc['cache']))
+        kp=Path(kc['python']);venv=kp.parent.parent
+        if (venv/'pyvenv.cfg').exists():paths.append(venv.resolve())
+        profile+='\n(allow file-read* '+''.join('(subpath '+json.dumps(str(p.resolve()))+') ' for p in paths)+')\n'
+        profile+='(allow file-read* (literal '+json.dumps(str(kp.resolve()))+'))\n'
     sandbox = tools/'worker.sb'; sandbox.write_text(profile)
+    codex_sandbox=sandbox
+    if local_port:
+        codex_sandbox=tools/'codex-local.sb'
+        codex_profile=profile.replace('(allow network-outbound (remote tcp \"*:443\"))','')
+        codex_profile+='\n(allow network-outbound (remote tcp \"localhost:'+str(local_port)+'\"))\n'
+        codex_sandbox.write_text(codex_profile)
     build(ROOT/'runtime/adapters/node_modules/@agentclientprotocol/codex-acp/dist/index.js',tools/'phase-codex.mjs')
     node = node_binary()
     for name, command in [('codex-acp',f'"{node}" "{tools}/acp_evidence.mjs" "{evidence}" "{tools}/phase-codex.mjs"'),('claude-agent-acp',f'"{ROOT}/runtime/adapters/node_modules/.bin/claude-agent-acp"')]:
-        path=bindir/name;path.write_text(f'#!/bin/sh\nexport GOOSE_PATH_ROOT="{ROOT}/runtime/tmp/native-worker-config"\nexec /usr/bin/sandbox-exec -f "{sandbox}" {command} "$@"\n');path.chmod(0o755)
+        selected_sandbox=codex_sandbox if name=='codex-acp' else sandbox
+        path=bindir/name;path.write_text(f'#!/bin/sh\nexport GOOSE_PATH_ROOT="{ROOT}/runtime/tmp/native-worker-config"\nexec /usr/bin/sandbox-exec -f "{selected_sandbox}" {command} "$@"\n');path.chmod(0o755)
     executable = os.environ.get('FLOW_V2_CLAUDE') or shutil.which('claude') or str(Path.home()/'.local/bin/claude')
     auth_error = json.dumps({'schema_version':1, 'kind':'permission_required',
         'source':'claude_native_auth_preflight', 'error':{'code':'AUTH_REQUIRED',
@@ -92,7 +124,9 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
         +'  umask 077\n  printf "%s\\n" '+shlex.quote(auth_error)+' > '+shlex.quote(str(client_error)+'.tmp')+'\n  /bin/mv '+shlex.quote(str(client_error)+'.tmp')+' '+shlex.quote(str(client_error))+'\n'
         +'  echo "Flow Claude authentication preflight failed; native sign-in is required in its private configuration." >&2\n  exit 77\nfi\n'
         +'exec '+shlex.quote(executable)+' --setting-sources "" --disable-slash-commands --settings \'{"disableAllHooks":true,"enabledPlugins":{},"autoMemoryEnabled":false}\' --max-turns '+str(WORKER_MAX_TURNS)+' --no-session-persistence --debug-file "'+str(debug)+'" "$@"\n');claude.chmod(0o755)
-    env=environment(project=workspace,provider=provider,model=model);env.pop('OLLAMA_HOST',None);env.pop('CLAUDE_CODE_SAFE_MODE',None)
+    env=environment(project=workspace,provider=provider,model=model)
+    if provider!='ollama':env.pop('OLLAMA_HOST',None)
+    env.pop('CLAUDE_CODE_SAFE_MODE',None)
     env.update(PATH=str(bindir)+':'+env['PATH'],CLAUDE_CODE_EXECUTABLE=str(claude),
                FLOW_V2_ACP_EVIDENCE_DIR=str(evidence),
                FLOW_V2_CLIENT_ERROR_FILE=str(client_error),
@@ -101,6 +135,8 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
                HOME=str(home), TMPDIR=str(temporary), TMPPREFIX=str(temporary/'zsh'),
                PYTHONPYCACHEPREFIX=str(home/'pycache'),
                GIT_CONFIG_GLOBAL='/dev/null',GIT_CONFIG_NOSYSTEM='1',GIT_OPTIONAL_LOCKS='0',GOOSE_SUBAGENT_MAX_TURNS=str(WORKER_MAX_TURNS))
+    if local_port and provider in ('codex-acp','chatgpt_codex'):
+        env.update(HTTP_PROXY='http://127.0.0.1:9',HTTPS_PROXY='http://127.0.0.1:9',ALL_PROXY='http://127.0.0.1:9',NO_PROXY='localhost,127.0.0.1,::1')
     if python:
         env['FLOW_V2_PROJECT_PYTHON'] = str(python)
     # macOS login-shell path_helper otherwise moves /usr/bin ahead of the

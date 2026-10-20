@@ -1,5 +1,5 @@
 """Read-only agent tools, last known-good snapshot plus local reconciliation."""
-import threading,time
+import threading,time,os
 from fastmcp import FastMCP
 from .. import knowledge
 root=knowledge.home();stop=threading.Event()
@@ -21,6 +21,6 @@ def traverse_cards(permalink:str,relation_type:str='complements',depth:int=2)->d
     """Follow real typed BM edges FROM containing note, returning authored neighbor content, all time."""
     return knowledge.graph(root,permalink,relation_type,depth)
 if __name__=='__main__':
-    threading.Thread(target=reconcile,daemon=True).start()
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':threading.Thread(target=reconcile,daemon=True).start()
     try:mcp.run(transport='stdio',show_banner=False)
     finally:stop.set()

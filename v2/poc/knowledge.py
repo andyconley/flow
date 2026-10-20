@@ -55,6 +55,9 @@ def backup(root,label):
 def reconcile_shared(root,shared=SHARED):
     manifest=read(shared/'manifest.json');incoming=inventory(shared/'cards')
     if not manifest or manifest.get('schema')!=1 or {n:digest(b) for n,b in incoming.items()}!=manifest['files']:raise ValueError('Shared corpus manifest mismatch')
+    import re
+    if not isinstance(manifest.get('version'),str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*',manifest['version']):raise ValueError('Invalid corpus version')
+    if any(source(b.decode())!=b.decode() for b in incoming.values()):raise ValueError('Shared corpus must contain authored text only')
     (root/'notes').mkdir(parents=True,exist_ok=True)
     local=inventory(root/'notes');base=read(root/'base.json',{'files':{}})['files'];conflicts=[]
     backup(root,'before-fetch')
@@ -113,6 +116,9 @@ def fingerprint(root):
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())
 def status(root):
     state=read(root/'status.json',{'state':'pending','reason':'not processed'})
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')=='1':
+        current=read(root/'CURRENT.json',{})
+        return {**state,'pending':state.get('state')!='ready' or state.get('fingerprint')!=current.get('fingerprint'),'snapshot':current.get('generation'),'reconciliation_owner':'Flow supervisor'}
     try:
         desired=fingerprint(root);current=read(root/'CURRENT.json',{})
         state={**state,'pending':current.get('fingerprint')!=desired,'desired':desired,'snapshot':current.get('generation')}
@@ -128,8 +134,9 @@ def worker_command(root,stage,action,*args):
     cfg=read(root/'settings.json',{})
     python=cfg.get('python')
     if not python or not Path(python).is_file():raise RuntimeError('Knowledge runtime not configured: flow knowledge configure --python /path/to/isolated/python --cache /path/to/cached/embeddings --model qwen3:4b')
-    env=clean_env(root);env.update(FLOW_KNOWLEDGE_HOME=str(root),FLOW_KNOWLEDGE_STAGE=str(stage),FLOW_KNOWLEDGE_MODEL=cfg.get('model','qwen3:4b'),FLOW_KNOWLEDGE_OLLAMA=cfg.get('ollama','http://127.0.0.1:11434'),FLOW_KNOWLEDGE_CACHE=cfg['cache'])
-    log=stage/'worker.log';stage.mkdir(parents=True,exist_ok=True);(root/'home').mkdir(exist_ok=True)
+    scratch=stage if action=='query' else root
+    env=clean_env(scratch);env.update(FLOW_KNOWLEDGE_HOME=str(root),FLOW_KNOWLEDGE_STAGE=str(stage),FLOW_KNOWLEDGE_MODEL=cfg.get('model','qwen3:4b'),FLOW_KNOWLEDGE_OLLAMA=cfg.get('ollama','http://127.0.0.1:11434'),FLOW_KNOWLEDGE_CACHE=cfg['cache'])
+    log=stage/'worker.log';stage.mkdir(parents=True,exist_ok=True);(scratch/'home').mkdir(exist_ok=True)
     with log.open('a') as f:
         child=subprocess.Popen([python,'-m','poc.knowledge_runtime.worker',action,*args],cwd=REPO/'v2',env=env,stdout=f,stderr=f,start_new_session=True)
         write(stage/'worker.json',{'pid':child.pid,'action':action,'state':'running'})
@@ -204,7 +211,8 @@ def snapshot(root):
     return p
 
 def query(root,query,mode='hybrid',role=None):
-    trigger(root);p=snapshot(root)
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
+    p=snapshot(root)
     # Native BM CLI can write initialization metadata; private per-read copy keeps
     # published generations immutable even when multiple agents read concurrently.
     with tempfile.TemporaryDirectory(prefix='flow-knowledge-query-') as t:
@@ -215,7 +223,8 @@ def query(root,query,mode='hybrid',role=None):
 def graph(root,start,kind='complements',depth=2):
     import sqlite3
     if kind not in ('complements','reinforces'):raise ValueError('Unsupported relation type')
-    trigger(root);p=snapshot(root);depth=max(1,min(3,int(depth)))
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
+    p=snapshot(root);depth=max(1,min(3,int(depth)))
     with sqlite3.connect('file:'+str(p/'config/memory.db')+'?mode=ro',uri=True) as c:
         c.row_factory=sqlite3.Row
         edges=c.execute('''WITH RECURSIVE walk(id,depth,path) AS (

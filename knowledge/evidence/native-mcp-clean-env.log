@@ -1,0 +1,5 @@
+[10/20/26 12:30:55] INFO     Starting MCP server 'Flow local    transport.py:241
+                             knowledge' with transport 'stdio'                  
+['knowledge_status', 'search_cards', 'traverse_cards']
+error False
+CallToolResult(content=[TextContent(type='text', text='{"results":[{"title":"Carry hypothesis and fact separately across a handoff","type":"entity","score":-7.772693242989717,"entity":"cards/support-lead--carry-hypothesis-and-fact-separately-across-a-handoff","external_id":"0dccfd1e-1382-4001-89b2-3acce0faaf8f","permalink":"cards/support-lead--carry-hypothesis-and-fact-separately-across-a-handoff","content":"# Carry hypothesis and fact separately across a handoff\\n\\n## Principle\\n\\na label survives a handoff better than the doubt attached to it. The next person receives the hypothesis as a finding and investigates from there instead of from the evidence.\\n\\n## Use when\\n\\nescalating, reassigning, or writing up an unresolved case.\\n\\n## Required behavior\\n\\nthe escalation packet states what was observed, what was reproduced and under what conditions, what is currently believed

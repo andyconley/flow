@@ -78,8 +78,7 @@ conflicts in `base.json`, and saves incoming versions under `incoming/`. Resolve
 conflicts by reviewing/copying the desired file, then fetch again. Local-only files
 are preserved. Shared removals delete only locally unchanged cards.
 
-Each Flow startup and each agent tool read reconciles fingerprints. The tool server
-also checks every two seconds while it is alive. For editing outside a running
+Each Flow startup and each agent tool read reconciles fingerprints. The Flow supervisor also checks every five seconds during a running job. Native ACP tool servers are read-only and delegate reconciliation to that supervisor; standalone non-native server runs may poll every two seconds. For editing outside a running
 Flow session, `flow knowledge watch` provides the same foreground reconciliation
 loop; otherwise the next Flow command/read catches edits. There is no launchd,
 watcher package, filesystem hook, database server or paid API. Pipeline code,
@@ -113,8 +112,7 @@ notes and enqueues a new generation; it does not restore a stale runtime or DB.
 
 ## Agent retrieval
 
-The native Goose parent gets the managed stdio extension; Summon children inherit
-it. Tools are `knowledge_status`, `search_cards` and `traverse_cards`. Keyword,
+The native Goose parent gets an absolute-path managed stdio extension; Summon children inherit it. ACP clients can filter custom environment variables, so the launcher receives the knowledge home explicitly and sets its own module path. Native worker sandbox grants are read-only for knowledge, code and model cache; query writes stay under per-run scratch. Local Codex ACP gets a separate loopback-only sandbox when its own config explicitly chooses a credential-free loopback model; mixed Claude profiles retain their existing permissions. Tools are `knowledge_status`, `search_cards` and `traverse_cards`. Keyword,
 vector and hybrid search use the actual BM implementation through the pinned
 projection shim. Search may specify an exact role. Graph traversal follows actual
 `from_id`/`to_id` typed relations from the containing note and returns authored
@@ -134,3 +132,9 @@ python -m unittest discover -s tests
 The lifecycle tests use a deterministic builder for precise failure/race injection;
 real CocoIndex/model/BM execution and retrieval evidence are documented separately
 in `INTEGRATION-RESULTS.md`. A passing lifecycle unit test is not a live model run.
+
+Coverage of all 13 roles is recorded in `COVERAGE.md`; the 21-card seed covers six roles, not every agent. Missing authoritative cards were not found or invented.
+
+Native ACP/provider readiness is explicitly **blocked**; see `ACP-STATUS.md`. The native sandbox and direct MCP probe pass, but no complete native provider knowledge-use task has passed with the retained local models. Do not treat provisioning or unit success as release qualification.
+
+If offline setup fails, its partial `runtime/` is retained and replacement is refused. Inspect/remove only that failed virtual environment, or provision another isolated environment and configure its Python. Notes, backups and exports must remain intact.

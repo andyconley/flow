@@ -37,6 +37,14 @@ def environment(project=None, provider=None, model=None):
                TMPDIR=str((ROOT/'runtime/tmp').resolve()))
     from .device_context import ollama_environment
     env.update(ollama_environment(project, model, provider))
+    if provider=='ollama':
+        from .knowledge import home,read
+        from urllib.parse import urlparse
+        endpoint=read(home()/'settings.json',{}).get('ollama')
+        if endpoint:
+            parsed=urlparse(endpoint)
+            if parsed.scheme!='http' or parsed.hostname not in ('localhost','127.0.0.1','::1') or parsed.username or parsed.password:raise ValueError('Flow local model endpoint must be unauthenticated loopback')
+            env['OLLAMA_HOST']=endpoint
     return env
 
 
