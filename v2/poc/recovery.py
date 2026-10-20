@@ -33,6 +33,10 @@ def validate_candidate_recovery(state, decision, artifacts):
     for name in ('closure_ref', 'brief_ref'):
         if decision.get(name) != state.get(name):
             raise ArtifactError('Recovery approval must name the exact current '+name)
+    for kind, name in (('closures', 'closure'), ('briefs', 'brief')):
+        leaf, _ = artifacts.leaf(kind, name)
+        if leaf != state.get(name+'_ref'):
+            raise ArtifactError('Recovery requires the exact current '+name+' artifact and checkpoint')
     # Verify the entire evidence chain, including older intents and closures.
     def verify(value):
         if isinstance(value, dict):

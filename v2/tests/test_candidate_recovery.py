@@ -85,6 +85,10 @@ class RecoveryTests(unittest.TestCase):
         path = self.project/self.decision['brief_ref']['path']; path.write_text('{}')
         self.reject()
 
+    def test_stale_checkpoint_closure_is_rejected(self):
+        self.store.publish('closures', 'closure', {'outcome': 'blocked'}, supersedes=self.decision['closure_ref'])
+        self.reject()
+
     def test_operator_lock_rejects_recovery(self):
         with glg.locked(glg.storage(self.project, 'recovery')): self.reject()
 
