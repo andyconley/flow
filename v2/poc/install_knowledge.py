@@ -131,6 +131,9 @@ def provision(root, mode='ask', *, interactive=None, choose=None, model_policy='
         print('Flow knowledge DEFERRED: '+json.dumps(result), file=sys.stderr, flush=True)
         return result
     with k.locked(root):
+        if health['ok']:
+            model,endpoint=model_selection(root)
+            checked_model_digest(root,model,endpoint)
         if health['ok'] and not current:
             k.backup(root, 'before-install-configuration')
             k.write(root/'settings.json', {**candidate, 'model_digest': health['checks']['local_model']['digest']})

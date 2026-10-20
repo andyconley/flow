@@ -98,6 +98,12 @@ class KnowledgeGateTests(KnowledgeGateFixture, unittest.TestCase):
         self.model.return_value='unexpected-digest'
         with self.assertRaises(gate.ModelIdentityMismatch):gate.resolve_model_mode(self.root,'download','download')
         self.online.assert_not_called()
+    def test_cached_healthy_assets_do_not_bypass_expected_model_identity(self):
+        k.write(self.root/'settings.json',{'model':'qwen3:4b','python':sys.executable})
+        self.model.return_value='unexpected-digest'
+        with self.assertRaises(gate.ModelIdentityMismatch):gate.provision(self.root,'offline')
+        self.online.assert_not_called();self.process.assert_not_called()
+
     def test_existing_explicit_local_model_digest_is_preserved(self):
         k.write(self.root/'settings.json',{'model':'qwen3:4b','model_digest':'explicit-local-digest'})
         self.model.return_value='explicit-local-digest'
