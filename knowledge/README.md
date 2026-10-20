@@ -37,7 +37,8 @@ an audited initial snapshot before activating the new Flow runtime.
 
 ```sh
 flow update                           # reuse assets, otherwise ask on a terminal
-flow update --knowledge download      # explicit unattended download consent
+flow update --knowledge download      # dependency/embedding consent; model may ask
+flow update --knowledge download --knowledge-model download --non-interactive # separate chat-weight consent
 flow update --knowledge offline       # reuse verified installed assets; never acquire
 flow update --knowledge defer         # deliberately install with knowledge deferred
 flow update --non-interactive         # reuse healthy assets or fail without prompting
@@ -47,13 +48,14 @@ flow knowledge status
 The same flags work with `install-flow.sh install` and the public `install.sh`
 bootstrap. When piping bootstrap into Bash, consent uses an existing controlling terminal
 (`/dev/tty`); it never reads the shell script as an answer. Without a terminal, pass
-`bash -s -- --knowledge download` or `--knowledge defer` explicitly. JSON and
+`bash -s -- --knowledge download --knowledge-model download --non-interactive`
+for separate explicit dependency and model consent, or `--knowledge defer`.
+Omit model-download consent to require an already provisioned extraction model. JSON and
 `--non-interactive` runs never prompt; missing assets without explicit policy fail
 before runtime activation. `--check` is metadata-only and does not provision.
 A no-op update still completes deferred/missing knowledge provisioning.
 
-**After this correction is released — transition from v0.52.0:** that installed updater predates this gate and cannot
-execute it on its first upgrade. Use the current public bootstrap with an explicit
+**After this correction is released — transition from v0.52.0/v0.52.1:** v0.52.0 predates the integrated gate; v0.52.1 detaches the prompt worker from its terminal. These installed updaters cannot execute the corrected foreground prompt on their first upgrade. Use the current public bootstrap with an explicit
 knowledge policy for this one transition; it uses the new installer over the existing
 installation and preserves durable notes/configuration. An old `flow update` alone
 cannot retroactively prompt/provision. Future updates use the integrated gate.
@@ -63,8 +65,9 @@ snapshot (if any) and a resume command `flow update --knowledge download`.
 Fresh deferred knowledge cannot serve agent tasks until provisioned; existing
 known-good snapshots remain available. No fallback search is substituted.
 Missing extraction chat weights cause a clear failure with exact Ollama commands;
-Flow never pulls them. Retry the same install/update command after satisfying the
-requirement, or explicitly defer. Verified acquired assets remain cached.
+Interactive install/update offers separate model download/defer/cancel consent.
+Unattended chat-weight acquisition requires `--knowledge-model download` as well as
+`--knowledge download`; otherwise satisfy the prerequisite manually or explicitly defer. Verified acquired assets remain cached.
 
 Provisioning failures preserve the previous runtime, authored notes, settings and
 snapshot. Backups include the mutable knowledge transaction; unexpected manual
@@ -107,7 +110,8 @@ Other platform/build selections can vary. Embedding files add 67,179,163 bytes
 (about 67 MB). Verified completed profiles can be reused with 128 MiB free.
 Python 3.12 is required; the managed Flow interpreter is selected by default.
 `--python /path/to/python3.12` can select a matching architecture explicitly.
-No Ollama chat weights are downloaded by Flow. Existing setup selections are
+Advanced setup never acquires chat weights. Normal install/update can acquire only
+the selected extraction model with separate explicit model consent. Existing setup selections are
 preserved unless `--model` or `--ollama` is explicitly supplied.
 
 Flow reuses an already running unauthenticated loopback Ollama server when the
@@ -115,8 +119,10 @@ requested extraction model is installed. The initial extraction default is
 `qwen3:4b`. If unavailable, setup exits nonzero with `assets_ready: true`, retains
 all verified assets and the prior configuration, and prints exact `ollama serve`
 and `ollama pull` commands for the selected endpoint/model. Provision that model
-explicitly, then rerun the same Flow setup command. Flow never starts Ollama,
-changes its model store, expands credentials, or changes the agent provider/model.
+explicitly, then rerun the same Flow setup command. Flow never starts Ollama, expands credentials, or changes the coding-agent provider/model.
+Only a separately consented installer model pull changes the local model store;
+Ollama retains resumable/shared downloads independently of runtime rollback;
+failures or cancellation do not delete its cached model data.
 The extraction model and the qualified ACP agent model (`gpt-oss:20b`) serve
 different roles. Choosing extraction does not select the agent provider.
 
@@ -261,3 +267,31 @@ This performs a fresh installation transaction around the current durable knowle
 rather than restoring the older knowledge backup. Deferral is visible and does not
 provision missing assets. Select a compatible supported release and inspect
 `flow knowledge status` afterward. There is no force-rollback flag.
+
+
+Piped-bootstrap consent is read by the foreground installer from its controlling
+terminal before the provisioning worker starts a new session. The worker receives
+the selected dependency and separate model policies. Without a terminal, ask mode fails
+without inferring approval; use an explicit noninteractive policy. This preserves
+worker cancellation tracking without trying to read a terminal from a detached
+process.
+
+
+Install/update checks the selected local extraction model before acquiring missing
+knowledge dependencies or embeddings. If it is absent or Ollama is unavailable,
+the installer prints the exact selected model/endpoint and optional user-invoked
+Ollama setup commands and a separate download/defer/cancel choice. It pulls no chat
+weights without that separate approval. Explicit deferral remains available. The final summary names the currently selected Flow version on
+both success and failure; a provisioning failure with an unchanged runtime pointer
+means the previous Flow version remains active. Downloaded assets alone do not mean
+runtime activation succeeded.
+
+
+Known extraction identity/size evidence is stored in `extraction-models.json`.
+The recorded `qwen3:4b` digest is 359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7,
+matching the existing isolated extraction audit and the official catalog observed
+2026-10-20. This is not a claim that all Qwen variants honor thinking-off or that
+Qwen passed the coding-agent ACP final contract. Existing explicit local digest
+selections win. Unexpected installed/acquired digest changes fail before dependency
+acquisition; no alias/default is silently replaced. Unknown profile sizes are labeled
+unknown; streamed Ollama progress reports exact layer totals when available.

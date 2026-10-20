@@ -22,6 +22,7 @@ class KnowledgeGateFixture:
         self.online_patch=patch.object(gate,'online',return_value={'configured':True});self.online=self.online_patch.start();self.addCleanup(self.online_patch.stop)
         self.process_patch=patch.object(k,'process',return_value={'state':'ready','pending':False,'snapshot':'audited'});self.process=self.process_patch.start();self.addCleanup(self.process_patch.stop)
         self.output=contextlib.redirect_stderr(io.StringIO());self.output.__enter__();self.addCleanup(self.output.__exit__,None,None,None)
+        model=patch.object(k,'local_model_digest',return_value=k.read(k.SHARED/'extraction-models.json')['models']['qwen3:4b']['digest']);self.model=model.start();self.addCleanup(model.stop)
     def configured(self):
         k.write(self.root/'settings.json',{'python':sys.executable,'model':'preserve-extraction','ollama':'http://127.0.0.1:11435'})
         with k.locked(self.root):k.reconcile_shared(self.root)
@@ -59,11 +60,44 @@ class KnowledgeGateTests(KnowledgeGateFixture, unittest.TestCase):
         self.online.assert_called_once_with(self.root,sys.executable,'preserve-extraction','http://127.0.0.1:11435')
     def test_missing_model_fails_without_claiming_ready_or_processing(self):
         self.online.return_value={'configured':False,'assets_ready':True,'required_model_setup':{'commands':['fixture Ollama requirement']}}
-        with self.assertRaisesRegex(ValueError,'chat weights were not downloaded'):gate.provision(self.root,'download')
+        with self.assertRaisesRegex(ValueError,'Local extraction model unavailable after provisioning'):gate.provision(self.root,'download')
         self.process.assert_not_called()
     def test_failed_or_pending_snapshot_is_not_install_success(self):
         self.process.return_value={'state':'failed','pending':True}
         with self.assertRaisesRegex(ValueError,'did not become ready'):gate.provision(self.root,'download')
+
+    def test_missing_selected_model_stops_before_expensive_acquisition(self):
+        self.configured();self.doctor.return_value={'ok':False}
+        self.model.side_effect=ValueError('Configured local model not installed')
+        with self.assertRaisesRegex(ValueError,'before knowledge dependency/embedding acquisition') as error:
+            gate.provision(self.root,'download')
+        self.online.assert_not_called();self.process.assert_not_called()
+        self.assertIn('ollama pull preserve-extraction',str(error.exception))
+        self.assertIn('--knowledge defer',str(error.exception))
+        self.assertEqual('preserve-extraction',k.read(self.root/'settings.json')['model'])
+
+    def test_first_install_missing_model_stops_before_any_asset_acquisition(self):
+        self.model.side_effect=ValueError('Configured local model not installed')
+        with self.assertRaisesRegex(ValueError,'Selected model: qwen3:4b') as error:
+            gate.provision(self.root,'download')
+        self.assertIn('--knowledge-model download',str(error.exception))
+        self.assertIn('2497293931 bytes',str(error.exception))
+        self.online.assert_not_called();self.process.assert_not_called()
+        self.assertFalse((self.root/'settings.json').exists())
+
+    def test_known_default_size_is_displayed_and_identity_drift_cannot_pull(self):
+        profile=gate.model_profile(self.root,'qwen3:4b')
+        detail=gate.model_requirement('qwen3:4b','http://127.0.0.1:11434','missing',profile)
+        self.assertIn('2497293931 bytes',detail)
+        self.assertIn(profile['digest'],detail)
+        self.model.return_value='unexpected-digest'
+        with self.assertRaises(gate.ModelIdentityMismatch):gate.resolve_model_mode(self.root,'download','download')
+        self.online.assert_not_called()
+    def test_existing_explicit_local_model_digest_is_preserved(self):
+        k.write(self.root/'settings.json',{'model':'qwen3:4b','model_digest':'explicit-local-digest'})
+        self.model.return_value='explicit-local-digest'
+        self.assertEqual(('download','offline'),gate.resolve_model_mode(self.root,'download','download'))
+        self.assertEqual('explicit-local-digest',k.read(self.root/'settings.json')['model_digest'])
 
 
 class KnowledgeTransactionFixture:
@@ -201,6 +235,15 @@ class KnowledgeCLISelectionTests(unittest.TestCase):
             self.assertEqual(0,managed.main(['update','--check','--json']))
             install.assert_not_called()
 
+    def test_separate_model_policy_is_explicit_and_noninteractive_never_asks(self):
+        manifest={'version':'v-fixture','source_sha':'a'*40,'supported_targets':['Darwin-arm64']}
+        for flags,policy in [([], 'ask'),(['--json'],'offline'),(['--non-interactive'],'offline'),(['--non-interactive','--knowledge-model','download'],'download')]:
+            with self.subTest(flags=flags),patch.object(managed,'supported'),patch.object(managed,'latest',return_value=(manifest,{})),patch.object(managed,'install_release',return_value={'knowledge':{'state':'fixture'}}) as install,patch.object(managed,'provision_knowledge') as worker,contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(0,managed.main(['update',*flags]))
+                install.call_args.kwargs['knowledge_runner']('release','root','download')
+                self.assertEqual(policy,worker.call_args.kwargs['model_policy'])
+
+
 class KnowledgeBusyTests(KnowledgeTransactionFixture, unittest.TestCase):
     def test_busy_writer_rejects_update_before_snapshot_or_mutation(self):
         self.seed('Before.\n')
@@ -310,6 +353,37 @@ class KnowledgeLegacyTargetTests(KnowledgeTransactionFixture, unittest.TestCase)
         self.assertEqual('Preserve local authored note.\n',(self.store/'notes/local.md').read_text())
         self.assertEqual('known-good',k.read(self.store/'CURRENT.json')['generation'])
         self.assertEqual('preserve-runtime',k.read(self.store/'settings.json')['python'])
+
+
+class KnowledgeActivationSummaryTests(KnowledgeTransactionFixture, unittest.TestCase):
+    def invoke(self,manifest,runner):
+        real_install=managed.install_release
+        def isolated(home,target,**kwargs):
+            return real_install(home,target,bundle=self.fixture.bundle,preparer=self.fixture.prepare,
+                                knowledge_mode=kwargs['knowledge_mode'],knowledge_runner=runner)
+        out=io.StringIO();err=io.StringIO()
+        with patch.object(managed,'supported'),patch.object(managed,'latest',return_value=(manifest,{})),patch.object(managed,'install_release',side_effect=isolated),contextlib.redirect_stdout(out),contextlib.redirect_stderr(err):
+            try:code=managed.main(['update','--home',str(self.fixture.home),'--knowledge','defer','--json'])
+            except SystemExit as error:code=error.code
+        return code,out.getvalue(),err.getvalue()
+    def test_success_and_noop_report_selected_version(self):
+        for outcome in ('activated','unchanged'):
+            code,out,err=self.invoke(self.fixture.manifest,lambda *a:{'state':'deferred','ready':False})
+            self.assertEqual(0,code,err)
+            result=json.loads(out)
+            self.assertEqual(outcome,result['activation']['outcome'])
+            self.assertEqual('v0.51.0',result['activation']['current_version'])
+            self.assertIn('active version v0.51.0; knowledge deferred',err)
+    def test_failure_reports_actual_unchanged_version_including_fresh_install(self):
+        target={**self.fixture.manifest,'version':'v0.53.0','source_sha':'b'*40}
+        def fail(*args):raise ValueError('Local extraction model prerequisite unmet')
+        for active in ('none','v0.51.0'):
+            if active!='none':self.run_install(lambda *a:{'state':'ready'})
+            code,out,err=self.invoke(target,fail)
+            self.assertEqual(1,code)
+            self.assertIn('requested v0.53.0; active version '+active,err)
+            self.assertIn('Runtime selection unchanged',err)
+            self.assertEqual('',out)
 
 
 if __name__=='__main__':unittest.main()

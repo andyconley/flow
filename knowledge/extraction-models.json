@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "models": {
+    "qwen3:4b": {
+      "digest": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7",
+      "download_bytes": 2497293931,
+      "source": "https://ollama.com/library/qwen3:4b",
+      "observed_on": "2026-10-20",
+      "qualification": "Existing isolated21-card CocoIndex extraction audit; not coding-agent or general model qualification"
+    }
+  }
+}
