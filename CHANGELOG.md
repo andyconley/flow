@@ -2,6 +2,21 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+### Highlights
+
+- Opt-in setup --download; 21 cards/6 roles. Managed edits autoindex; external edits catch up next use or optional watcher. Qualified: readonly local gpt-oss:20b ACP only; full fresh acquisition untested. See knowledge/README.md.
+
+
+## [0.52.0](https://github.com/andyconley/flow/compare/v0.51.2...v0.52.0) (2026-10-20)
+
+### Features
+
+* add durable local knowledge and managed retrieval ([3249b5a](https://github.com/andyconley/flow/commit/3249b5a7044ccc14c2347a44845c197dff97496c))
+
+### Bug Fixes
+
+* preserve agent providers during knowledge-enabled launches ([839b769](https://github.com/andyconley/flow/commit/839b76953e0a28234e825ea729e3efacdf469116))
+
 ## [0.51.2](https://github.com/andyconley/flow/compare/v0.51.1...v0.51.2) (2026-10-20)
 
 ### Bug Fixes
