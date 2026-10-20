@@ -2,6 +2,14 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.51.2](https://github.com/andyconley/flow/compare/v0.51.1...v0.51.2) (2026-10-20)
+
+### Bug Fixes
+
+* accept HTTP whitespace around quota header numbers ([20b10c9](https://github.com/andyconley/flow/commit/20b10c99df2558ae33177a63c08ad6e8b33fac2c))
+* handle secondary quota responses without retry headers ([48befe2](https://github.com/andyconley/flow/commit/48befe2b950ad25558b6367c995f3250cdae64ae))
+* honor GitHub quota resets and preserve safe diagnostics ([659b265](https://github.com/andyconley/flow/commit/659b265f09a9c650934d6e6593bacda7d565d2f4))
+
 ## [0.51.1](https://github.com/andyconley/flow/compare/v0.51.0...v0.51.1) (2026-10-20)
 
 ### Bug Fixes
