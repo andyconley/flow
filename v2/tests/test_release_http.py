@@ -102,6 +102,14 @@ class ReleaseHttpTests(unittest.TestCase):
                 self.get(self.failure(status))
         self.assertEqual(self.sleeps, [])
 
+    def test_secondary_limit_without_retry_headers_uses_bounded_fallback(self):
+        error = self.failure(X_RateLimit_Remaining=57)
+        error = urllib.error.HTTPError(self.request.full_url, 403, 'Forbidden', error.headers,
+            io.BytesIO(json.dumps({'message': 'You have exceeded a secondary rate limit. PRIVATE_CONTEXT'}).encode()))
+        self.get(error, io.BytesIO(b'{}'))
+        self.assertEqual(self.sleeps, [60])
+        self.assertNotIn('PRIVATE_CONTEXT', self.stderr.getvalue())
+
     def test_invalid_headers_body_reason_and_credentials_are_not_logged(self):
         self.request.add_header('Authorization', 'Bearer PRIVATE_TOKEN')
         rows = []

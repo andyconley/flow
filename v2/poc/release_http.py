@@ -70,8 +70,21 @@ def github_json(request, *, evidence=None):
                 waits.append(retry_date - now + 1)
             if reset is not None and remaining == 0:
                 waits.append(reset - now + 1)
+            body_limited = False
+            if error.code == 403 and remaining != 0 and retry_after is None and retry_date is None:
+                # Secondary limits can leave primary quota available and omit
+                # Retry-After. Inspect only GitHub's bounded JSON message for
+                # classification; never retain or echo the body/message.
+                try:
+                    raw = error.read(8193)
+                    payload = json.loads(raw) if len(raw) <= 8192 else {}
+                    message = payload.get('message', '') if isinstance(payload, dict) else ''
+                    body_limited = isinstance(message, str) and message.startswith((
+                        'API rate limit exceeded', 'You have exceeded a secondary rate limit'))
+                except (ValueError, OSError):
+                    pass
             limited = error.code == 429 or (error.code == 403 and (
-                remaining == 0 or retry_after is not None or retry_date is not None))
+                remaining == 0 or retry_after is not None or retry_date is not None or body_limited))
             # Missing or already expired guidance: GitHub's secondary-limit
             # fallback is at least one minute, with bounded exponential backoff.
             wait = math.ceil(max(waits)) if waits else 60 * 2 ** (attempt - 1)
