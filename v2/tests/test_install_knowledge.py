@@ -261,4 +261,17 @@ class KnowledgeBootstrapConsentTests(KnowledgeGateFixture, unittest.TestCase):
         self.online.assert_not_called()
 
 
+class KnowledgePriorManualEditTests(KnowledgeTransactionFixture, unittest.TestCase):
+    def test_same_version_update_does_not_accept_earlier_edits_for_rollback(self):
+        self.seed('Before.\n');(self.store/'notes/deleted.md').write_text('Retain user deletion.\n')
+        self.run_install(lambda *a:{'state':'ready'})
+        (self.store/'notes/local.md').write_text('User edit before no-op update.\n')
+        (self.store/'notes/deleted.md').unlink()
+        (self.store/'added-config.json').write_text('{"user":true}')
+        self.assertFalse(self.run_install(lambda *a:{'state':'ready'})['changed'])
+        with self.assertRaisesRegex(ValueError,'Knowledge edits prevent rollback'):managed.rollback(self.fixture.home)
+        self.assertEqual('User edit before no-op update.\n',(self.store/'notes/local.md').read_text())
+        self.assertFalse((self.store/'notes/deleted.md').exists());self.assertTrue((self.store/'added-config.json').exists())
+
+
 if __name__=='__main__':unittest.main()

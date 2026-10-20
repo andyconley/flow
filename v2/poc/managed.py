@@ -369,10 +369,16 @@ def install_release(home, manifest, *, urls=None, bundle=None, preparer=prepare_
                 knowledge=knowledge_runner(current,root,knowledge_mode)
                 if (root/'install.json').exists():
                     receipt=json.loads((root/'install.json').read_text())
-                    finalized=finalize_knowledge(root,knowledge_backup,receipt.get('knowledge_backup'))
-                    receipt['knowledge_preserved_manual']=finalized['manual']
-                    receipt['knowledge_after']=finalized['inventory']
-                    write(root/'install.json',receipt)
+                    before={str(p.relative_to(knowledge_backup)):sha(p) for p in knowledge_backup.rglob('*') if p.is_file()}
+                    if before!=receipt.get('knowledge_after',before):
+                        # A no-op runtime update must not reclassify earlier user
+                        # edits/deletions as installer-owned rollback state.
+                        print('Knowledge changed since installation; rollback remains guarded against replacing those edits.',file=sys.stderr)
+                    else:
+                        finalized=finalize_knowledge(root,knowledge_backup,receipt.get('knowledge_backup'))
+                        receipt['knowledge_preserved_manual']=finalized['manual']
+                        receipt['knowledge_after']=finalized['inventory']
+                        write(root/'install.json',receipt)
                 return {'version':manifest['version'],'changed':False,'runtime':str(current),'knowledge':knowledge}
             quiescent(root/'state/artifacts'); migrate_state(home,root)
             with tempfile.TemporaryDirectory(prefix='download-',dir=root) as temporary:
