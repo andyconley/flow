@@ -33,7 +33,7 @@ def prerequisite_version(name, required, remedy):
         raise ValueError(f'{name}: missing executable on PATH. Required: {required}. {remedy}')
     try:
         result = subprocess.run([path,'--version'],text=True,capture_output=True,check=True,timeout=10)
-    except (OSError,subprocess.SubprocessError) as error:
+    except (OSError,subprocess.SubprocessError,UnicodeError) as error:
         detail = (f'exit {error.returncode}: '+(error.stderr or error.stdout or str(error))) if isinstance(error,subprocess.CalledProcessError) else str(error)
         raise ValueError(f'{name} at {path}: cannot read version ({str(detail).strip()[:512]}). '
                          f'Required: {required}. {remedy}') from error

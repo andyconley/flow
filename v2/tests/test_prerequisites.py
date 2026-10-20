@@ -82,7 +82,8 @@ class PrerequisiteTests(unittest.TestCase):
         self.fails_before_mutation('cannot read version','exit 7','fixture loader failure',str(self.bin/'node'),'nvm use 24')
 
     def test_unreadable_or_hung_node_is_actionable(self):
-        for error in (PermissionError('fixture permission denied'),subprocess.TimeoutExpired('node --version',10)):
+        for error in (PermissionError('fixture permission denied'),subprocess.TimeoutExpired('node --version',10),
+                      UnicodeDecodeError('utf-8',b'\xff',0,1,'invalid start byte')):
             with patch.object(managed.subprocess,'run',side_effect=error):
                 self.fails_before_mutation('cannot read version',str(self.bin/'node'),'exactly 24.x','then retry')
 
