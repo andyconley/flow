@@ -4,6 +4,18 @@ Production support is Apple Silicon macOS 15+, Python 3.12 and Node.js 24/npm.
 No Windows, Linux or Intel Mac release artifact is claimed. Runtime deployment
 metadata is not live provider qualification. No Rust is needed by consumers.
 
+The installer and `flow update` require **exactly Node.js 24.x**, not 24 or newer.
+They use `node` and `npm` from the invoking shell's PATH and probe both before
+release discovery or managed preparation. Successful probes show versions and
+paths on stderr; JSON output remains on stdout. Missing, broken or unsupported
+executables produce an actionable error without changing the selected install.
+Select Node 24 using your existing version manager (for example, `nvm use 24`),
+or install it with your preferred installer/manager (`nvm install 24` if using
+nvm). Ensure `npm --version` succeeds, then retry. Flow never installs or switches
+system Node/npm automatically. `FLOW_V2_NODE` does not override this prerequisite
+check. The one-time bootstrap fetches metadata and a temporary tagged checkout
+before this check; `flow rollback` bypasses it.
+
 ## Existing legacy/source-bound installations
 
 Finish active operations, retain partial edits, and run once:

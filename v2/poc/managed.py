@@ -18,6 +18,30 @@ import uuid
 
 REPOSITORY = 'andyconley/flow'
 ASSETS = ('flow-code.tar.gz','python-wheels.tar.gz','goose-macos-arm64.gz','goose-macos-arm64.json')
+NODE_HELP = ('Select Node.js 24 in this shell using your existing version manager '
+             '(for example, nvm use 24). If absent, install Node.js 24 with your '
+             'preferred installer or manager (for example, nvm install 24). '
+             'Ensure node and npm are on PATH, then retry. Flow does not install or switch Node automatically.')
+NPM_HELP = ('Repair or reinstall npm for your selected Node.js 24 installation using '
+            'the same installer or version manager. Ensure npm is on PATH and '
+            'npm --version succeeds, then retry. Flow does not install npm automatically.')
+
+
+def prerequisite_version(name, required, remedy):
+    path = shutil.which(name)
+    if not path:
+        raise ValueError(f'{name}: missing executable on PATH. Required: {required}. {remedy}')
+    try:
+        result = subprocess.run([path,'--version'],text=True,capture_output=True,check=True,timeout=10)
+    except (OSError,subprocess.SubprocessError) as error:
+        detail = (f'exit {error.returncode}: '+(error.stderr or error.stdout or str(error))) if isinstance(error,subprocess.CalledProcessError) else str(error)
+        raise ValueError(f'{name} at {path}: cannot read version ({str(detail).strip()[:512]}). '
+                         f'Required: {required}. {remedy}') from error
+    version = result.stdout.strip()
+    if not re.fullmatch(r'v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?',version):
+        raise ValueError(f'{name} at {path}: unrecognized version output {version[:512]!r}. '
+                         f'Required: {required}. {remedy}')
+    return path,version
 
 
 def sha(path):
@@ -36,9 +60,15 @@ def supported():
         raise ValueError('Supported installation target: Apple Silicon macOS 15 or later. No local-build or legacy fallback.')
     if sys.version_info[:2] != (3,12):
         raise ValueError('Managed Flow requires Python 3.12; select FLOW_V2_PYTHON=python3.12')
-    node = shutil.which('node')
-    if not node or int(subprocess.check_output([node,'--version'],text=True).strip().lstrip('v').split('.')[0]) != 24:
-        raise ValueError('Managed Flow requires Node.js 24 and npm')
+    node,version = prerequisite_version('node','Node.js exactly 24.x',NODE_HELP)
+    detected = f'Detected Node.js {version} at {node}; required exactly 24.x.'
+    if int(version.lstrip('v').split('.')[0]) != 24:
+        raise ValueError(detected+' '+NODE_HELP)
+    try:
+        npm,npm_version = prerequisite_version('npm','working npm for Node.js 24',NPM_HELP)
+    except ValueError as error:
+        raise ValueError(detected+' '+str(error)) from error
+    print(f'{detected} Detected npm {npm_version} at {npm}.',file=sys.stderr)
 
 
 def latest(repository=REPOSITORY, tag=None):
