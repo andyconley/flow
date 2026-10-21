@@ -112,7 +112,7 @@ class ProviderPreflightTests(unittest.TestCase):
 
     def test_selected_worker_digest_is_rechecked_and_exact_failure_preserved(self):
         from poc.implementation_profiles import fingerprint
-        selected={'name':'fast','provider':'ollama','model':'gpt-oss:20b','endpoint':'http://127.0.0.1:11434','context_tokens':32768,'output_tokens':-1,'condenser_max_tokens':None,'model_digest':'a'*64}
+        selected={'name':'fast','provider':'ollama','model':'gpt-oss:20b','endpoint':'http://127.0.0.1:11434','context_tokens':32768,'output_tokens':-1,'condenser_max_tokens':28672,'model_digest':'a'*64}
         selected['sha256']=fingerprint(selected)
         self.recipe('lead-developer','ollama','gpt-oss:20b')
         env={**self.env,'FLOW_V2_IMPLEMENTATION_PROFILE':json.dumps(selected),'FLOW_V2_LOCAL_PREFLIGHT_SCOPE':'/fixture/readiness-only.sb'}
@@ -127,7 +127,7 @@ class ProviderPreflightTests(unittest.TestCase):
 
     def test_cloud_alias_cannot_replace_previously_local_worker(self):
         from poc.implementation_profiles import fingerprint
-        selected={'name':'fast','provider':'ollama','model':'gpt-oss:20b','endpoint':'http://127.0.0.1:11434','context_tokens':32768,'output_tokens':-1,'model_digest':'a'*64}
+        selected={'name':'fast','provider':'ollama','model':'gpt-oss:20b','endpoint':'http://127.0.0.1:11434','context_tokens':32768,'output_tokens':-1,'condenser_max_tokens':28672,'model_digest':'a'*64}
         selected['sha256']=fingerprint(selected)
         self.recipe('lead-developer','ollama','gpt-oss:20b')
         env={**self.env,'FLOW_V2_IMPLEMENTATION_PROFILE':json.dumps(selected)}

@@ -20,7 +20,7 @@ class ProfileTests(unittest.TestCase):
         self.root=Path(self.temp.name);self.user=self.root/'.flow/user';self.user.mkdir(parents=True)
         self.project=self.root/'project';self.project.mkdir()
         self.runtime=self.user/'runtime.toml'
-        self.runtime.write_text('[profiles.correct]\nkind="local"\nmodel="ollama_chat/qwen3.8:27b-q4_K_M"\nbase_url="http://127.0.0.1:11434"\nmax_input_tokens=32768\nmax_output_tokens=-1\ncondenser_max_tokens=28672\n[profiles.fast]\nkind="local"\nmodel="ollama_chat/gpt-oss:20b"\nbase_url="http://127.0.0.1:11434"\nmax_input_tokens=32768\nmax_output_tokens=-1\n[profiles.codex]\nkind="codex"\n[profiles.claude]\nkind="claude"\n')
+        self.runtime.write_text('[profiles.correct]\nkind="local"\nmodel="ollama_chat/qwen3.8:27b-q4_K_M"\nbase_url="http://127.0.0.1:11434"\nmax_input_tokens=32768\nmax_output_tokens=-1\ncondenser_max_tokens=28672\n[profiles.fast]\nkind="local"\nmodel="ollama_chat/gpt-oss:20b"\nbase_url="http://127.0.0.1:11434"\nmax_input_tokens=32768\nmax_output_tokens=-1\ncondenser_max_tokens=28672\n[profiles.codex]\nkind="codex"\n[profiles.claude]\nkind="claude"\n')
         self.patch=patch('poc.knowledge.local_model_digest',return_value='a'*64);self.mock=self.patch.start();self.addCleanup(self.patch.stop)
 
     def selected(self,name='correct'):return profiles.resolve(self.project,name,self.root)
@@ -144,3 +144,42 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Persistent Goose output override'):
             profiles.apply_environment({'GOOSE_PATH_ROOT':str(goose)},selected,'chatgpt_codex','native')
         self.assertEqual(config.read_bytes(),before)
+
+    def test_omitted_threshold_is_rejected_even_with_persistent_default(self):
+        self.runtime.write_text(self.runtime.read_text().replace('condenser_max_tokens=28672\n',''))
+        goose=self.root/'goose';goose.mkdir();(goose/'config.yaml').write_text('GOOSE_AUTO_COMPACT_THRESHOLD: 0.5\n')
+        with self.assertRaisesRegex(ValueError,'explicit condenser_max_tokens'):
+            self.selected()
+
+    def test_frozen_threshold_overrides_later_persistent_and_environment_values(self):
+        selected=self.selected();goose=self.root/'goose';goose.mkdir()
+        stored=goose/'config.yaml';stored.write_text('GOOSE_AUTO_COMPACT_THRESHOLD: 0.5\n')
+        env=profiles.apply_environment({'GOOSE_PATH_ROOT':str(goose),'GOOSE_AUTO_COMPACT_THRESHOLD':'0.1'},selected,'chatgpt_codex','native')
+        self.assertEqual(env['GOOSE_AUTO_COMPACT_THRESHOLD'],'0.875')
+        stored.write_text('GOOSE_AUTO_COMPACT_THRESHOLD: 0.95\n')
+        self.assertEqual(profiles.apply_environment(env,selected,'chatgpt_codex','native')['GOOSE_AUTO_COMPACT_THRESHOLD'],'0.875')
+
+    def test_real_launch_command_retains_developer_only_for_local_implementation(self):
+        from poc import goose_job
+        from poc.contracts import task_input_digest
+        class Captured(RuntimeError):pass
+        (self.root/'runtime').mkdir()
+        for index,selected in enumerate([None,self.selected(),self.selected('codex')]):
+            state={'task':'fixture','workspace':str(self.project),'project_context':'approved','job_id':'launch-'+str(index)}
+            if selected:state['implementation_profile_digest']=selected['sha256']
+            state['inputs']=task_input_digest(state['task'],self.project,state['project_context'])
+            job=goose_job.GooseJob(provider='chatgpt_codex',model='gpt-5.6-sol',role_bundle=ROOT/'role-bundle',implementation_profile=selected)
+            captured=[]
+            def launch(command,**kwargs):captured.append(command);raise Captured('No process submitted by this fixture')
+            with patch.object(goose_job,'ROOT',self.root),patch('poc.knowledge_tools.require_ready'),patch('poc.knowledge_tools.attach',side_effect=lambda command,env:(command,env)),patch('poc.native_runtime.prepare',return_value=(self.root/'scope.sb',{})),patch('poc.provider_preflight.check',return_value={'passed':True}),patch('poc.goose_job.subprocess.Popen',side_effect=launch),self.assertRaises(Captured):
+                job._run_impl(state,'implement','fixture prompt')
+            self.assertEqual('developer' in captured[0],bool(selected and selected['provider']=='ollama'))
+
+    def test_explicit_worker_selection_requires_selected_role_without_direct_edits(self):
+        from poc.goose_job import GooseJob
+        job=GooseJob(role_bundle=ROOT/'role-bundle',implementation_profile=self.selected())
+        with patch.object(job,'_run',return_value={'status':'blocked','reason':'fixture'}) as run:
+            job.implement({'task':'fixture','workspace':str(self.project)})
+        prompt=run.call_args.args[2]
+        self.assertIn('source lead-developer using its frozen implementation profile',prompt)
+        self.assertIn('Do not edit directly or override its provider/model',prompt)

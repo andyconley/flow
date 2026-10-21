@@ -24,7 +24,8 @@ def validate(snapshot):
         if type(row['context_tokens']) is not int or row['context_tokens']<1:raise ValueError('Implementation context must be positive')
         if type(row['output_tokens']) is not int or row['output_tokens'] not in {-1} and row['output_tokens']<1:raise ValueError('Invalid implementation output setting')
         condenser=row.get('condenser_max_tokens')
-        if condenser is not None and (type(condenser) is not int or not 0<condenser<row['context_tokens']):raise ValueError('Invalid implementation compaction threshold')
+        if type(condenser) is not int or not 0<condenser<row['context_tokens']:
+            raise ValueError('Implementation profiles require explicit condenser_max_tokens within context; mutable Goose defaults are not frozen')
     return snapshot
 
 

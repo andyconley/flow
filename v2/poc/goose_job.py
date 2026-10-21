@@ -78,7 +78,10 @@ class GooseJob:
    record['native_client_error_file'] = native_env.get('FLOW_V2_CLIENT_ERROR_FILE')
    record['project_python'] = str(python) if python else None
    cmd=cmd[3:];cmd[0]=str(goose_binary())
-   position=cmd.index('developer');del cmd[position-1:position+1]
+   # Summon inherits session extensions, not recipe.extensions. Local workers
+   # need the developer extension retained on their parent session.
+   if not selected or selected['provider']!='ollama':
+    position=cmd.index('developer');del cmd[position-1:position+1]
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
    env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
    cmd[cmd.index('--max-turns')+1]='8'
@@ -217,11 +220,14 @@ Research/planning authority only. No implementation, install, deployment, new lo
 
  def _role_operation(self,s,kind):
   roles=[p.stem for p in (self.role_bundle/'recipes').glob('*.yaml')]
+  implementation_instruction='Delegate actual implementation, normally using lead-developer, and consume its result.'
+  if self.implementation_profile:
+   implementation_instruction='Delegate actual implementation to source lead-developer using its frozen implementation profile. Do not edit directly or override its provider/model. Consume the worker result.'
   prompt=f"""You are Goose's implementation coordinator. Use the converted role recipes available through summon; select appropriate roles and configured providers yourself. Available roles: {', '.join(sorted(roles))}.
 Approved task: {s['task']}
 Workspace: {s['workspace']}
 Project context: {s.get('project_context','')}
-Operation: {kind}. {'Delegate actual implementation, normally using lead-developer, and consume its result.' if kind=='implement' else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.'}
+Operation: {kind}. {implementation_instruction if kind=='implement' else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.'}
 Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. Use the delegate parameters object only when refining a role assignment; preserve the approved scope. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
 Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
