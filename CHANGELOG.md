@@ -4,6 +4,17 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Explicit worker profiles and open-ended local output. Qualification used a deterministic coordinator; private Claude ACP needs sign-in. Publishing does not activate installs or model defaults.
+
+
+## [0.53.0](https://github.com/andyconley/flow/compare/v0.52.2...v0.53.0) (2026-10-21)
+
+### Features
+
+* select frozen local implementation worker profiles ([#145](https://github.com/andyconley/flow/issues/145)) ([94fa8d7](https://github.com/andyconley/flow/commit/94fa8d710b53f8b097102990ba1cf7efd289166f))
+
+### Highlights
+
 - Fix piped-installer consent, separate local model download approval, report activation clearly, and reject extraction-model drift. Prompt and small-wheel transfer verified; full fresh acquisition remains untested.
 - Fix piped-installer prompts and add separate local model download consent with size/digest checks. Install/update reports the active version. Prompt/small-wheel transfer verified; full fresh acquisition remains untested.
 
