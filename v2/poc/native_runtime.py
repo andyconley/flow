@@ -45,7 +45,7 @@ def local_codex_endpoint():
     return (urlparse(info[1]).port or 80) if info else None
 
 
-def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_command=None,namespace_endpoint=None):
+def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_command=None,namespace_endpoint=None,implementation_profile=None):
     workspace, run_dir = Path(workspace).resolve(), Path(run_dir).resolve()
     tools = run_dir/'native-runtime'; tools.mkdir(exist_ok=True)
     bindir = tools/'bin'; bindir.mkdir(exist_ok=True)
@@ -135,6 +135,8 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
         +'exec '+shlex.quote(executable)+' --setting-sources "" --disable-slash-commands --settings \'{"disableAllHooks":true,"enabledPlugins":{},"autoMemoryEnabled":false}\' --max-turns '+str(WORKER_MAX_TURNS)+' --no-session-persistence --debug-file "'+str(debug)+'" "$@"\n');claude.chmod(0o755)
     env=environment(project=workspace,provider=provider,model=model)
     if provider!='ollama':env.pop('OLLAMA_HOST',None)
+    from .implementation_profiles import apply_environment
+    env=apply_environment(env,implementation_profile,provider,model)
     env.pop('CLAUDE_CODE_SAFE_MODE',None)
     env.update(PATH=str(bindir)+':'+env['PATH'],CLAUDE_CODE_EXECUTABLE=str(claude),
                FLOW_V2_ACP_EVIDENCE_DIR=str(evidence),
@@ -163,4 +165,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
         (home/name).write_text(startup)
     env['ZDOTDIR'] = str(home)
     # The coordinator needs its own state; only its native worker subtree is sandboxed above.
+    from .implementation_profiles import preflight_scope
+    local_scope=preflight_scope(sandbox,tools,implementation_profile)
+    if local_scope:env['FLOW_V2_LOCAL_PREFLIGHT_SCOPE']=str(local_scope)
     return sandbox, env

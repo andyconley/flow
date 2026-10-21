@@ -134,7 +134,7 @@ def write_bundle(destination, composed, provider, model=None, responsibility="im
     return agent_path, recipe_path
 
 
-def bind_bundle(source, destination, task, project_context):
+def bind_bundle(source, destination, task, project_context, implementation_profile=None):
     """Bind approved inputs as defaults in an attempt-local copy, never templates."""
     import shutil
     import uuid
@@ -143,6 +143,9 @@ def bind_bundle(source, destination, task, project_context):
     if destination.is_relative_to(source):
         raise ValueError('Attempt-local role bundle must be outside the source bundle')
     shutil.copytree(source, destination)
+    if implementation_profile:
+        from .implementation_profiles import bind
+        bind(destination,implementation_profile)
     defaults = {'task': task, 'project_context': project_context}
     class BundleDumper(yaml.SafeDumper):
         pass

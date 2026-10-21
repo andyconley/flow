@@ -11,7 +11,7 @@ def store(path,data):
  tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(data,indent=2));tmp.replace(path)
 
 class GooseJob:
- def __init__(self,model='llama3.1:8b',timeout=1200,provider='ollama',native_boundary=False,role_bundle=None,namespace_compat=None):self.role_bundle=Path(role_bundle).resolve() if role_bundle else ROOT/'role-bundle';self.model=model;self.timeout=timeout;self.provider=provider;self.native_boundary=native_boundary;self.namespace_compat=namespace_compat
+ def __init__(self,model='llama3.1:8b',timeout=1200,provider='ollama',native_boundary=False,role_bundle=None,namespace_compat=None,implementation_profile=None):self.implementation_profile=implementation_profile;self.role_bundle=Path(role_bundle).resolve() if role_bundle else ROOT/'role-bundle';self.model=model;self.timeout=timeout;self.provider=provider;self.native_boundary=native_boundary;self.namespace_compat=namespace_compat
  def _run(self,s,kind,prompt,provider_override=None):
   from .knowledge import home as knowledge_home,read
   enabled=self.namespace_compat if self.namespace_compat is not None else read(knowledge_home()/'native-transport.json',{}).get('namespace_compat',False)
@@ -28,6 +28,11 @@ class GooseJob:
    return self._run_impl(s,kind,prompt,provider_override,namespace_endpoint=bridge.endpoint,namespace_audit=str(audit))
  def _run_impl(self,s,kind,prompt,provider_override=None,namespace_endpoint=None,namespace_audit=None):
   provider=provider_override or self.provider
+  from .implementation_profiles import validate as validate_profile
+  try:validate_profile(self.implementation_profile)
+  except ValueError as error:return {'status':'scope_required','submitted':False,'reason':str(error)}
+  if kind in {'implement','review'} and self.implementation_profile and s.get('implementation_profile_digest')!=self.implementation_profile['sha256']:
+   return {'status':'scope_required','submitted':False,'reason':'Implementation profile differs from approved work configuration'}
   if s['inputs']!=task_input_digest(s['task'],s['workspace'],s.get('project_context','')):return {'status':'scope_required' if self.role_bundle else 'blocked','reason':'approved task/check inputs changed'}
   budget=min(self.timeout,max(0,s['deadline']-time.time())) if self.role_bundle and s.get('deadline') is not None else self.timeout
   if budget<=0:return {'status':'blocked','reason':'Approved workflow time budget exhausted; no execution submitted'}
@@ -44,6 +49,7 @@ class GooseJob:
   try:python = select(s['workspace'], s.get('check_command'))
   except ValueError as error:return {'status':'scope_required','reason':str(error)}
   record={'output':str(p.with_suffix('.jsonl')),'stderr':str(p.with_suffix('.stderr')),'status':'uncertain','inputs':s['inputs'],'workspace':s['workspace'],'started':time.time(),'kind':kind}
+  if kind=='implement' and self.implementation_profile:record['implementation_profile']=self.implementation_profile
   if namespace_audit:record['namespace_wire_audit']=namespace_audit
   # Publish the uncertain native intent only after readiness checks succeed.
   instructions=ROOT/'runtime'/f'{s["job_id"]}-{kind}-{index}.md';instructions.write_text(prompt)
@@ -53,14 +59,17 @@ class GooseJob:
   if self.role_bundle:
    from .native_runtime import prepare
    from .role_renderer import bind_bundle
+   selected=self.implementation_profile if kind=='implement' else None
    role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles-{time.time_ns()}',
                              s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
-                             s.get('project_context',''))
+                             s.get('project_context',''),implementation_profile=selected)
    options={'provider':provider,'model':self.model,'check_command':s.get('check_command')}
+   if selected:options['implementation_profile']=selected
    if namespace_endpoint:options['namespace_endpoint']=namespace_endpoint
-   profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
    from .provider_preflight import check as provider_check,PreflightError
-   try:record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'))
+   try:
+    profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
+    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'))
    except PreflightError as error:
     return {'status':error.status,'reason':str(error),'source':'provider_preflight','submitted':False}
    except (OSError,ValueError,KeyError) as error:

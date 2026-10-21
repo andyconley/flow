@@ -57,7 +57,8 @@ class NativeHarness:
             from .goose_job import GooseJob
             setup()
             self.job = GooseJob(provider=self.options['provider'], model=self.options['model'],
-                                timeout=self.options['budget_seconds'], role_bundle=ROOT / 'role-bundle')
+                                timeout=self.options['budget_seconds'], role_bundle=ROOT / 'role-bundle',
+                                implementation_profile=self.options.get('implementation_profile'))
         if state is not None:
             self.job.timeout=state.get('budget_seconds', self.options['budget_seconds'])
         return self.job
@@ -218,7 +219,8 @@ def summarize(snapshot, artifacts):
                     'instruction': 'Inspect the exact candidate and evidence; choose an explicit new budget (1–86400 seconds) before approving. Recovery permits independent checks and fresh review only.',
                     'command': shlex.join(['flow', '--project', str(artifacts.project), '--work', str(values.get('work_id')),
                                            'resume', '--decision-file', 'DECISION.json'])}
-    return {'work_id': values.get('work_id'), 'phase': values.get('lifecycle_phase'),
+    return {'work_id': values.get('work_id'),
+            'implementation_profile':values.get('runtime_options',{}).get('implementation_profile'), 'phase': values.get('lifecycle_phase'),
             'delivery_phase': values.get('phase'), 'outcome': values.get('outcome'),
             'termination': 'intentional-stop' if intentional else 'blocked' if blocked else None,
             'blocker': {'stage': stage, 'reason': reason, 'result': detail} if blocked else None,
@@ -252,6 +254,7 @@ def main(argv=None):
     create.add_argument('--predecessor-revision', help='Exact current predecessor closure revision; required with --predecessor-work')
     create.add_argument('--provider', default='chatgpt_codex')
     create.add_argument('--model', default='gpt-5.6-sol')
+    create.add_argument('--implementation-profile', help='Freeze a runtime profile for the implementation worker; coordinator and independent reviewer remain separately configured')
     create.add_argument('--budget-seconds', type=int, default=600)
     brief = sub.add_parser('brief'); brief.add_argument('--file', required=True, type=Path)
     assign = sub.add_parser('assign'); assign.add_argument('--stage', required=True, choices=STAGES)
@@ -348,6 +351,10 @@ def main(argv=None):
                 if old:
                     parser.error('Work item already exists; inspect status or resume it')
                 options = {'provider': args.provider, 'model': args.model, 'budget_seconds': args.budget_seconds}
+                if args.implementation_profile:
+                    from .implementation_profiles import resolve as resolve_profile, apply_environment
+                    options['implementation_profile']=resolve_profile(project,args.implementation_profile)
+                    apply_environment({},options['implementation_profile'],args.provider,args.model)
             else:
                 if not old:
                     parser.error(missing_checkpoint)
@@ -356,6 +363,8 @@ def main(argv=None):
             saved = graph.get_state(config, subgraphs=True)
             if args.command == 'create':
                 context = resolve(project)
+                if options.get('implementation_profile'):
+                    context['implementation_profile']=options['implementation_profile']
                 if args.predecessor_work:
                     from .predecessor import validated_predecessor
                     predecessor_dir = storage(project, args.predecessor_work)

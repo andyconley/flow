@@ -31,6 +31,7 @@ def build(artifacts, harness, checker):
                               'work_id': s['work_id'], 'request': s.get('request'),
                               'brief_ref': brief_ref, 'brief': brief,
                               'proposed_budget_seconds': s.get('budget_seconds', 600),
+                              'implementation_profile': s.get('runtime_options',{}).get('implementation_profile'),
                               'budget_policy': s.get('budget_policy', 'legacy-wall-clock'),
                               'context_ref': s['context_ref'], 'shaping_refs': s.get('shaping_refs', {}),
                               'shaping_assignments': s.get('shaping_assignment_refs', {}),
@@ -99,6 +100,7 @@ def build(artifacts, harness, checker):
                 'reason': decision.get('reason', ''), 'supersedes_decision': decision.get('supersedes_decision'),
                 'budget_seconds': s.get('budget_seconds', 600) if action == 'approve' else None,
                 'budget_policy': s.get('budget_policy', 'legacy-wall-clock') if action == 'approve' else None,
+                **({'implementation_profile':s['runtime_options']['implementation_profile']} if action=='approve' and s.get('runtime_options',{}).get('implementation_profile') else {}),
                 'authority': 'implementation' if action == 'approve' else 'stage-only' if action == 'approve-stage' else 'stop'})
             update = {'decision_refs': [*decisions, ref], 'lifecycle_phase': 'approved' if action == 'approve' else 'stopped' if action == 'stop' else 'awaiting-approval' if s.get('brief_ref') else 'shaping'}
             if action == 'approve':
@@ -147,11 +149,18 @@ def build(artifacts, harness, checker):
         decision = artifacts.read(s['approval_ref'])['payload']
         if decision['action'] != 'approve' or decision['target_ref'] != s['brief_ref']:
             raise ArtifactError('Implementation requires approval of this exact brief')
+        selected=s.get('runtime_options',{}).get('implementation_profile')
+        from .implementation_profiles import validate as validate_profile
+        validate_profile(selected)
+        if selected and (decision.get('implementation_profile')!=selected or context.get('implementation_profile')!=selected):
+            raise ArtifactError('Implementation profile changed after proposal/approval; create a new work item')
         task = json.dumps(brief, indent=2, ensure_ascii=False)
         source_refs = {'brief_ref': s['brief_ref'], 'approval_ref': s['approval_ref'],
                        'context_ref': s['context_ref'], 'shaping_refs': s.get('shaping_refs', {})}
         project_context = render(context) + '\nControlled input references:\n' + json.dumps(source_refs, indent=2)
-        return {'task': task, 'project_context': project_context, 'check_command': brief['check_command'],
+        if selected:project_context+='\nApproved implementation profile: '+json.dumps(selected,sort_keys=True)
+        return {**({'implementation_profile_digest':selected['sha256']} if selected else {}),
+                'task': task, 'project_context': project_context, 'check_command': brief['check_command'],
                 'inputs': task_input_digest(task, s['workspace'], project_context),
                 'approved': task_input_digest(task, s['workspace'], project_context),
                 'job_id': s['job_id'], 'deadline': time.time() + s.get('budget_seconds', 600),

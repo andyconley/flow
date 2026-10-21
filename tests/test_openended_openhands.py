@@ -28,11 +28,14 @@ class OpenHandsProjectionTests(unittest.TestCase):
         server=HTTPServer(('127.0.0.1',0),Handler)
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
-            provider={'kind':'local','model':'ollama_chat/fixture','base_url':f'http://127.0.0.1:{server.server_port}','max_input_tokens':16384,'max_output_tokens':-1}
-            llm=local_llm(Selection('lead-developer','local',provider,ROOT,{},{}))
-            llm.completion(messages=[Message(role='user',content=[TextContent(text='test')])])
-            wire=next(body for path,body in captured if path=='/api/chat')
-            self.assertEqual(wire['options']['num_predict'],-1)
-            self.assertEqual(wire['options']['num_ctx'],16384)
+            for context in (16384,None):
+                provider={'kind':'local','model':'ollama_chat/fixture','base_url':f'http://127.0.0.1:{server.server_port}','max_output_tokens':-1}
+                if context:provider['max_input_tokens']=context
+                llm=local_llm(Selection('lead-developer','local',provider,ROOT,{},{}))
+                llm.completion(messages=[Message(role='user',content=[TextContent(text='test')])])
+                wire=next(body for path,body in reversed(captured) if path=='/api/chat')
+                self.assertEqual(wire['options']['num_predict'],-1)
+                if context:self.assertEqual(wire['options']['num_ctx'],context)
+                else:self.assertNotIn('num_ctx',wire['options'])
         finally:
             server.shutdown();server.server_close();thread.join()
