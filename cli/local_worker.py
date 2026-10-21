@@ -21,10 +21,8 @@ from local_machine import load_local_machine, check_local_compatibility
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MAX_RESPONSE_BYTES = 131072
-# Structured verifier output is judged by Flow's evaluator, which owns the
-# size limit. The adapter retains up to the ledger's response ceiling.
-STRUCTURED_VERIFIER_OUTPUT_BYTES = 64 * 1024
-STRUCTURED_VERIFIER_NUM_PREDICT = 1024
+# Compatibility constant: default local generation is open-ended.
+STRUCTURED_VERIFIER_NUM_PREDICT = -1
 
 
 def _bounded_output(value: str, limit: int = 4096) -> str:
@@ -75,8 +73,8 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     check_local_compatibility(profile or machine, model=envelope['model'], machine=machine)
     if profile and timeout_seconds is None:
         timeout_seconds = profile['request_timeout_seconds']
-    output_limit = (profile['output_tokens'] * 8 if profile else
-                    STRUCTURED_VERIFIER_OUTPUT_BYTES if structured_verifier else 4096)
+    output_limit = ((profile['context_tokens'] if profile['output_tokens'] == -1 else profile['output_tokens']) * 8 if profile else
+                    machine['context_tokens'] * 8)
     response_limit = max(MAX_RESPONSE_BYTES, output_limit * 2)
     started = time.monotonic()
     def observed(event):
@@ -101,7 +99,7 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
     request_body = {'model': envelope['model'], 'stream': False, 'think': False,
                     'messages': messages, 'options': {
                         'num_ctx': machine['context_tokens'],
-                        'num_predict': min(machine['output_tokens'], STRUCTURED_VERIFIER_NUM_PREDICT if structured_verifier else 256)}}
+                        'num_predict': machine['output_tokens']}}
     if profile:
         request_body['options'] = {'num_ctx': profile['context_tokens'],
             'num_predict': profile['output_tokens'], 'temperature': 0, 'seed': 42}
@@ -112,7 +110,7 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
         # UTF-8 bytes are a conservative token upper bound across arbitrary
         # source languages; no optimistic characters-per-token assumption.
         bound = len(request_preview) + 512
-        allowance = profile['context_tokens']-profile['output_tokens']-profile['context_reserve']
+        allowance = profile['context_tokens']-max(0, profile['output_tokens'])-profile['context_reserve']
         if bound > allowance:
             observed({'type': 'context_denied', 'bound': bound, 'allowance': allowance})
             raise ContractError('local worker exceeds conservative context reserve; no send')
@@ -229,7 +227,11 @@ def call_local(envelope: dict[str, Any], *, transport: Callable[..., Any] | None
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise RuntimeError("Ollama returned invalid usage")
             usage[key] = value
-    text = _bounded_output(text, output_limit)
+    if (profile or machine)['output_tokens'] == -1:
+        if len(text.encode('utf-8')) > output_limit:
+            raise RuntimeError('Ollama response exceeds context-derived transport safety limit; no truncation')
+    else:
+        text = _bounded_output(text, output_limit)
     return {"schema_version": 1, "status": "completed", "provider": "ollama",
             "model": reported_model if structured_verifier else envelope["model"], "physical_call": True,
             "evidence_level": "flow_observed_local_http_response",

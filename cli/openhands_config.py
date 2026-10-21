@@ -146,6 +146,8 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
             raise RuntimeConfigurationError("local model must use openai/, ollama/, or ollama_chat/ with an explicit self-hosted endpoint")
         for name in ("max_input_tokens", "max_output_tokens", "condenser_max_tokens"):
             value = provider.get(name)
+            if name == "max_output_tokens" and type(value) is int and value == -1 and model.startswith(("ollama/", "ollama_chat/")):
+                continue
             if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
                 raise RuntimeConfigurationError(f"{name} must be a positive integer")
         key_env = provider.get("api_key_env")

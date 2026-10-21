@@ -4,6 +4,7 @@ os.environ.setdefault("LANGGRAPH_STRICT_MSGPACK","true")
 from typing import TypedDict
 
 class State(TypedDict,total=False):
+ implementation_profile_digest:str
  brief_ref:dict
  context_ref:dict
  approval_ref:dict

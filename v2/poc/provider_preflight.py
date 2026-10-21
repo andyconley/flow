@@ -84,13 +84,26 @@ def check(bundle, provider, model, profile, env, deadline=None):
             if '://' not in endpoint:
                 endpoint = 'http://'+endpoint
             try:
-                result = subprocess.run(['/usr/bin/sandbox-exec', '-f', str(profile),
+                result = subprocess.run(['/usr/bin/sandbox-exec', '-f', env.get('FLOW_V2_LOCAL_PREFLIGHT_SCOPE',str(profile)),
                                          '/usr/bin/curl', '--fail', '--silent', '--show-error',
                                          '--max-time', str(timeout), endpoint+'/api/tags'],
                                         env=env, capture_output=True, text=True, timeout=timeout)
                 if result.returncode:
                     raise ValueError('endpoint check failed')
-                names = {item.get('name') for item in json.loads(result.stdout).get('models', [])}
+                models=json.loads(result.stdout).get('models', [])
+                names = {item.get('name') for item in models}
+                implementation=json.loads(env.get('FLOW_V2_IMPLEMENTATION_PROFILE','null'))
+                if implementation and selected_model==implementation['model']:
+                    from .implementation_profiles import validate
+                    validate(implementation)
+                    matched=[item for item in models if item.get('name')==selected_model or item.get('name')==selected_model+':latest']
+                    if any(item.get('remote_host') or item.get('remote_model') for item in matched):
+                        raise PreflightError('scope_required','Implementation worker requires downloaded local weights, not a cloud alias')
+                    observed={item.get('digest') for item in matched}
+                    if observed!={implementation['model_digest']}:
+                        raise PreflightError('scope_required','Implementation model digest changed since work creation; create a new work item')
+            except PreflightError:
+                raise
             except (OSError, ValueError, subprocess.TimeoutExpired) as error:
                 raise PreflightError('scope_required', 'Configured Ollama endpoint is unavailable in the native sandbox: '+endpoint) from error
             if selected_model not in names and selected_model+':latest' not in names:

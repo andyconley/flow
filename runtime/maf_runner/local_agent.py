@@ -84,7 +84,7 @@ async def main() -> None:
                     raise RuntimeError('Local client did not project sealed model/context/output; no send')
                 bound = (previous['prompt_tokens'] + max(0, len(raw)-previous['http_bytes'])+512
                          if previous else len(raw)+512)
-                allowance = config['num_ctx']-config['num_predict']-config.get('context_reserve', 2048)
+                allowance = config['num_ctx']-max(0, config['num_predict'])-config.get('context_reserve', 2048)
                 if bound > allowance:
                     emit({'type': 'context_denied', 'bound': bound, 'allowance': allowance})
                     raise RuntimeError('Retained session exceeds conservative context reserve; no send')

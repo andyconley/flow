@@ -83,7 +83,7 @@ class LocalAgentSession:
     def __init__(self, *, assignment_id: str, instructions: str, model: str,
                  runtime_python: str, artifact_dir: Path, tools: list[str],
                  source_root: Path | None = None, num_ctx: int = 12288,
-                 num_predict: int = 2048, request_timeout: float = 600,
+                 num_predict: int = -1, request_timeout: float = 600,
                  turn_timeout: float = 2400, max_iterations: int | None = 40,
                  max_function_calls: int | None = 80, context_reserve: int = 1024, observer: Callable | None = None,
                  resource_monitor_factory: Callable | None = None):

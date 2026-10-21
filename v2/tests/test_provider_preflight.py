@@ -109,3 +109,28 @@ class ProviderPreflightTests(unittest.TestCase):
         with patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],0,'{"models":[]}')):
             with self.assertRaisesRegex(PreflightError,'no pull or provider switching'):
                 check(self.bundle,'ollama','tiny',self.profile,self.env)
+
+    def test_selected_worker_digest_is_rechecked_and_exact_failure_preserved(self):
+        from poc.implementation_profiles import fingerprint
+        selected={'name':'fast','provider':'ollama','model':'gpt-oss:20b','endpoint':'http://127.0.0.1:11434','context_tokens':32768,'output_tokens':-1,'condenser_max_tokens':28672,'model_digest':'a'*64}
+        selected['sha256']=fingerprint(selected)
+        self.recipe('lead-developer','ollama','gpt-oss:20b')
+        env={**self.env,'FLOW_V2_IMPLEMENTATION_PROFILE':json.dumps(selected),'FLOW_V2_LOCAL_PREFLIGHT_SCOPE':'/fixture/readiness-only.sb'}
+        for digest,passes in [('a'*64,True),('b'*64,False)]:
+            def run(command,**kwargs):
+                self.assertEqual(command[2],'/fixture/readiness-only.sb')
+                return subprocess.CompletedProcess(command,0,json.dumps({'models':[{'name':'gpt-oss:20b','digest':digest}]}))
+            with patch('poc.provider_preflight.subprocess.run',side_effect=run):
+                if passes:self.assertTrue(check(self.bundle,'ollama','gpt-oss:20b',self.profile,env)['passed'])
+                else:
+                    with self.assertRaisesRegex(PreflightError,'digest changed'):check(self.bundle,'ollama','gpt-oss:20b',self.profile,env)
+
+    def test_cloud_alias_cannot_replace_previously_local_worker(self):
+        from poc.implementation_profiles import fingerprint
+        selected={'name':'fast','provider':'ollama','model':'gpt-oss:20b','endpoint':'http://127.0.0.1:11434','context_tokens':32768,'output_tokens':-1,'condenser_max_tokens':28672,'model_digest':'a'*64}
+        selected['sha256']=fingerprint(selected)
+        self.recipe('lead-developer','ollama','gpt-oss:20b')
+        env={**self.env,'FLOW_V2_IMPLEMENTATION_PROFILE':json.dumps(selected)}
+        tags={'models':[{'name':'gpt-oss:20b','digest':'a'*64,'remote_host':'https://cloud.invalid'}]}
+        with patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],0,json.dumps(tags))):
+            with self.assertRaisesRegex(PreflightError,'cloud alias'):check(self.bundle,'ollama','gpt-oss:20b',self.profile,env)

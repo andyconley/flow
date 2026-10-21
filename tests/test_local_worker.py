@@ -66,12 +66,12 @@ class StructuredVerifierAdapterTests(unittest.TestCase):
     def call(self, response, *, structured):
         return call_local(ENVELOPE, transport=lambda _: response, structured_verifier=structured)
 
-    def test_ordinary_calls_keep_existing_refusals_and_bound(self):
+    def test_ordinary_calls_keep_refusals_without_silent_truncation(self):
         with self.assertRaisesRegex(RuntimeError, "empty response"):
             self.call(payload(""), structured=False)
         with self.assertRaisesRegex(RuntimeError, "different model"):
             self.call(payload("ok", model="other"), structured=False)
-        self.assertEqual(len(self.call(payload("x" * 5000), structured=False)["output"]), 4096)
+        self.assertEqual(len(self.call(payload("x" * 5000), structured=False)["output"]), 5000)
 
     def test_received_empty_content_is_a_completed_observation(self):
         result = self.call(payload(""), structured=True)
@@ -87,7 +87,7 @@ class StructuredVerifierAdapterTests(unittest.TestCase):
         result = self.call(payload(text), structured=True)
         self.assertEqual(result["output"], text)
         self.assertEqual(result["output_sha256"], hashlib.sha256(text.encode()).hexdigest())
-        self.assertEqual(len(self.call(payload("x" * 70000), structured=True)["output"]), 64 * 1024)
+        self.assertEqual(len(self.call(payload("x" * 70000), structured=True)["output"]), 70000)
 
 
 class RetainedProfileWorkerTests(unittest.TestCase):
@@ -99,7 +99,7 @@ class RetainedProfileWorkerTests(unittest.TestCase):
                 return _Response(json.dumps(payload('x' * 5000)).encode())
         with patch('local_worker.urllib.request.build_opener', return_value=Opener()):
             result = call_local(ENVELOPE, local_agent_profile={}, observer=events.append)
-        self.assertEqual(sent[0][0]['options'], {'num_ctx': 12288, 'num_predict': 2048, 'temperature': 0, 'seed': 42})
+        self.assertEqual(sent[0][0]['options'], {'num_ctx': 12288, 'num_predict': -1, 'temperature': 0, 'seed': 42})
         self.assertEqual(sent[0][1], 600)
         self.assertEqual(len(result['output']), 5000)
         self.assertEqual([event['type'] for event in events], ['model_request', 'model_send', 'model_response'])
@@ -171,7 +171,7 @@ class NativeConversationTransportTests(unittest.TestCase):
         observed=next(event for event in events if event['type']=='model_request')
         self.assertEqual(observed['request'],body)
         self.assertEqual(body['options']['num_ctx'],12288)
-        self.assertEqual(body['options']['num_predict'],2048)
+        self.assertEqual(body['options']['num_predict'],-1)
         self.assertEqual(body['messages'][1]['content'],messages[0]['content'])
 
     def test_native_conversation_is_profile_only_and_validated_before_io(self):
