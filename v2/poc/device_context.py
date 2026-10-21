@@ -77,7 +77,10 @@ def ollama_environment(project=None, model=None, provider=None):
         # Goose's Ollama provider maps this to num_ctx AND its context resolver.
         result['GOOSE_INPUT_LIMIT'] = str(value['context_tokens'])
     if provider == 'ollama' and type(value['output_tokens']) is int and (value['output_tokens'] == -1 or value['output_tokens'] > 0):
-        result['GOOSE_MAX_TOKENS'] = str(value['output_tokens'])
+        # The shipped Goose validator rejects -1. Omitting its output override
+        # preserves Ollama's open-ended default for non-canonical local models.
+        if value['output_tokens'] > 0:
+            result['GOOSE_MAX_TOKENS'] = str(value['output_tokens'])
         if value['context_tokens'] and value['legacy_condenser_tokens']:
             ratio = value['legacy_condenser_tokens']/value['context_tokens']
             if 0 < ratio < 1:

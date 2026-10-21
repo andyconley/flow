@@ -59,7 +59,7 @@ class AdapterProjectionTests(unittest.TestCase):
             user=Path(d)/'.flow/user'; user.mkdir(parents=True)
             (user/'runtime.toml').write_text('[profiles.local]\nkind="local"\nmodel="ollama_chat/fixture"\nmax_input_tokens=12288\nmax_output_tokens=-1\ncondenser_max_tokens=10240\n')
             local=device_context.ollama_environment(Path(d),'fixture','ollama')
-            self.assertEqual(local['GOOSE_MAX_TOKENS'],'-1')
+            self.assertNotIn('GOOSE_MAX_TOKENS',local)
             self.assertEqual(local['GOOSE_INPUT_LIMIT'],'12288')
             self.assertAlmostEqual(float(local['GOOSE_AUTO_COMPACT_THRESHOLD']),10240/12288)
             self.assertNotIn('GOOSE_MAX_TOKENS', device_context.ollama_environment(Path(d),'fixture','claude'))
