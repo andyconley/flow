@@ -4,7 +4,7 @@ from flowtoml import read_toml
 from execution_contracts import ContractError
 
 DEFAULTS = {'context_tokens': 12288, 'max_context_tokens': 16384,
-            'output_tokens': 2048, 'context_reserve': 1024, 'model': ''}
+            'output_tokens': -1, 'context_reserve': 1024, 'model': ''}
 
 
 def load_local_machine(path=None):
@@ -14,10 +14,12 @@ def load_local_machine(path=None):
         raise ContractError('local_machine settings contain unsupported fields')
     result = {**DEFAULTS, **settings}
     for field in ('context_tokens', 'max_context_tokens', 'output_tokens', 'context_reserve'):
+        if field == 'output_tokens' and type(result[field]) is int and result[field] == -1:
+            continue
         if type(result[field]) is not int or result[field] < 1:
             raise ContractError('local_machine '+field+' must be a positive integer')
     if (result['context_tokens'] > result['max_context_tokens']
-            or result['output_tokens']+result['context_reserve'] >= result['context_tokens']
+            or max(0, result['output_tokens'])+result['context_reserve'] >= result['context_tokens']
             or not isinstance(result['model'], str)):
         raise ContractError('local_machine context/output/reserve or model is invalid')
     return result

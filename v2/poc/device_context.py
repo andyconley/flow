@@ -59,7 +59,8 @@ def settings(project=None, model=None, home=None):
         context = None
     if context and valid(machine.get('max_context_tokens')) and context > machine['max_context_tokens']:
         warnings.append('Profile context exceeds declared device capacity; inspect the profile/device settings. No usage gate or automatic clamp was added')
-    outputs = {row.get('max_output_tokens') for row in candidates.values() if valid(row.get('max_output_tokens'))}
+    valid_output = lambda value: type(value) is int and (value == -1 or value > 0)
+    outputs = {row.get('max_output_tokens') for row in candidates.values() if valid_output(row.get('max_output_tokens'))}
     condensers = {row.get('condenser_max_tokens') for row in candidates.values() if valid(row.get('condenser_max_tokens'))}
     return {'context_tokens': context, 'source': source, 'profiles': list(candidates),
             'output_tokens': next(iter(outputs)) if len(outputs) == 1 else machine.get('output_tokens'),
@@ -75,7 +76,7 @@ def ollama_environment(project=None, model=None, provider=None):
     if value['context_tokens']:
         # Goose's Ollama provider maps this to num_ctx AND its context resolver.
         result['GOOSE_INPUT_LIMIT'] = str(value['context_tokens'])
-    if provider == 'ollama' and type(value['output_tokens']) is int and value['output_tokens'] > 0:
+    if provider == 'ollama' and type(value['output_tokens']) is int and (value['output_tokens'] == -1 or value['output_tokens'] > 0):
         result['GOOSE_MAX_TOKENS'] = str(value['output_tokens'])
         if value['context_tokens'] and value['legacy_condenser_tokens']:
             ratio = value['legacy_condenser_tokens']/value['context_tokens']

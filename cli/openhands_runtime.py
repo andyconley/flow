@@ -137,6 +137,10 @@ def local_llm(selection: Selection):
     if key_env and not key:
         raise RuntimeConfigurationError(f"self-hosted credential variable {key_env} is unset")
     llm_options = {name: provider[name] for name in ("max_input_tokens", "max_output_tokens", "reasoning_effort") if name in provider}
+    if llm_options.get("max_output_tokens") == -1:
+        # SDK output budgets require positive integers; native Ollama options below
+        # override its transformed wire generation default without enlarging context.
+        llm_options.pop("max_output_tokens")
     llm = LLM(model=provider["model"], base_url=provider["base_url"], api_key=key,
               usage_id=f"flow-{selection.role}", **llm_options)
     if provider["model"].startswith(("ollama/", "ollama_chat/")) and provider.get("max_input_tokens"):
