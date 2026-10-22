@@ -7,17 +7,17 @@
   "sdk": "15.4",
   "version": "1.55.0",
   "archive": "goose-macos-arm64.gz",
-  "archive_size": 32712179,
-  "archive_sha256": "9760cad44b55dee90e51bee128d0dfa569d064836094e593649030b396419c16",
-  "binary_size": 107450312,
-  "binary_sha256": "738a7f90867d915799dcae630b7f7d06f20ed9126b29326441a1fc4caf3c2835",
+  "archive_size": 32648534,
+  "archive_sha256": "67d0bb91c949c90ea34783673b7901dfd0f128f9fda244ca437688b8eb215f11",
+  "binary_size": 107311048,
+  "binary_sha256": "3d1b5e08ba8d92d2ec0fbfba96e7e7b995da733c331b2e27a5be03d4ef60c6e2",
   "source_lock": {
     "repository": "https://github.com/aaif-goose/goose.git",
     "version": "1.55.0",
     "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
     "integration_commit_reference": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
     "patch": "goose-native.patch",
-    "patch_sha256": "f0445bad5ec6a94f9df59d12d6686c69a7850755f92234e6478f0aa6c8778f67",
+    "patch_sha256": "4b1882769dec48e54fe4167fbf08026180ff3be319fe1439c9125f1589f18d72",
     "build_package": "goose-cli",
     "features": [
       "scheduler",
@@ -36,7 +36,7 @@
     "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
     "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)"
   ],
-  "build_kind": "isolated-Studio-pinned-source-build/noninteractive-auth-frozen-provider-pool-and-shadow-guards",
+  "build_kind": "isolated-Studio-pinned-source-build/verified-dispatch-bytes-operation-preflight",
   "rust_toolchain": "1.99.0",
   "build_command": [
     "cargo",
@@ -69,6 +69,10 @@
     {
       "binary_sha256": "d678ef8c81daa42dcaee5b6a1471850384984937539d1318d04d00ec9121cab3",
       "binary_size": 107441240
+    },
+    {
+      "binary_sha256": "738a7f90867d915799dcae630b7f7d06f20ed9126b29326441a1fc4caf3c2835",
+      "binary_size": 107450312
     }
   ]
 }

@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import yaml
-from poc.implementation_profiles import fingerprint,validate,bind,apply_environment,allowed_sources
+from poc.implementation_profiles import fingerprint,validate,bind,apply_environment,allowed_sources,recipe_bindings
 
 
 def member(name,provider,model):
@@ -46,6 +46,17 @@ class ImplementationPoolTests(unittest.TestCase):
             for selected in row['profiles']:
                 settings=yaml.safe_load((recipes/('implement-'+selected['name']+'.yaml')).read_text())['settings']
                 self.assertEqual(settings,{'goose_provider':selected['provider'],'goose_model':selected['model']})
+
+    def test_recipe_bindings_are_detached_from_mutable_files(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle=Path(tmp);(bundle/'recipes').mkdir();path=bundle/'recipes/approved.yaml'
+            original=b'provider: approved\nmodel: approved\ntask: frozen\n';path.write_bytes(original)
+            binding=recipe_bindings(bundle,['approved'])
+            self.assertEqual(binding,{'approved':{'sha256':hashlib.sha256(original).hexdigest(),'bytes':len(original)}})
+            path.write_bytes(b'provider: different\nmodel: changed\ntask: replaced\n')
+            self.assertEqual(binding['approved']['sha256'],hashlib.sha256(original).hexdigest())
+            self.assertNotEqual(recipe_bindings(bundle,['approved']),binding)
 
     def test_native_pool_rejected_without_silent_fallback(self):
         with self.assertRaisesRegex(ValueError,'require a Goose coordinator'):

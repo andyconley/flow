@@ -113,6 +113,18 @@ def allowed_sources(snapshot,operation):
     return ['implement-'+row['name'] for row in snapshot['profiles']]+['quality-reviewer']
 
 
+def recipe_bindings(bundle,sources):
+    """Operator-owned, out-of-band binding of exactly the generated recipe bytes."""
+    result={}
+    for name in sources:
+        if not re.fullmatch(r'[A-Za-z0-9_-]+',name):raise ValueError('Invalid bound source')
+        path=Path(bundle)/'recipes'/(name+'.yaml')
+        if path.is_symlink() or not path.is_file():raise ValueError('Bound recipe must be a regular generated file')
+        content=path.read_bytes()
+        result[name]={'sha256':hashlib.sha256(content).hexdigest(),'bytes':len(content)}
+    return result
+
+
 def bind(bundle,snapshot):
     """Change only the attempt-local implementation recipe, preserving review."""
     validate(snapshot)

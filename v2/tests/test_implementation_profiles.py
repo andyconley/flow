@@ -175,6 +175,28 @@ class ProfileTests(unittest.TestCase):
                 job._run_impl(state,'implement','fixture prompt')
             self.assertEqual('developer' in captured[0],bool(selected and selected['provider']=='ollama'))
 
+    def test_pool_review_preflight_and_launch_share_exact_bound_sources(self):
+        from poc import goose_job
+        from poc.contracts import task_input_digest
+        class Captured(RuntimeError):pass
+        (self.root/'runtime').mkdir()
+        selected=profiles.resolve_pool(self.project,['correct','codex'],self.root)
+        state={'task':'fixture','workspace':str(self.project),'project_context':'approved','job_id':'pool-review',
+               'implementation_profile_digest':selected['sha256']}
+        state['inputs']=task_input_digest(state['task'],self.project,state['project_context'])
+        job=goose_job.GooseJob(provider='chatgpt_codex',model='gpt-5.6-sol',role_bundle=ROOT/'role-bundle',implementation_profile=selected)
+        def launch(command,**kwargs):
+            env=kwargs['env'];self.assertEqual(json.loads(env['FLOW_V2_ROLE_SOURCES']),['quality-reviewer'])
+            bindings=json.loads(env['FLOW_V2_FROZEN_RECIPE_BINDINGS'])
+            self.assertEqual(set(bindings),{'quality-reviewer'})
+            path=Path(env['GOOSE_RECIPE_PATH'])/'quality-reviewer.yaml'
+            import hashlib
+            self.assertEqual(bindings['quality-reviewer'],{'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size})
+            raise Captured()
+        with patch.object(goose_job,'ROOT',self.root),patch('poc.knowledge_tools.require_ready'),patch('poc.knowledge_tools.attach',side_effect=lambda command,env:(command,env)),patch('poc.native_runtime.prepare',return_value=(self.root/'scope.sb',{})),patch('poc.provider_preflight.check',return_value={'passed':True}) as check,patch('poc.goose_job.subprocess.Popen',side_effect=launch),self.assertRaises(Captured):
+            job._run_impl(state,'review','fixture prompt')
+        self.assertEqual(check.call_args.kwargs['sources'],['quality-reviewer'])
+
     def test_explicit_worker_selection_requires_selected_role_without_direct_edits(self):
         from poc.goose_job import GooseJob
         job=GooseJob(role_bundle=ROOT/'role-bundle',implementation_profile=self.selected())

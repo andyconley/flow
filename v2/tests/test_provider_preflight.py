@@ -64,6 +64,27 @@ class ProviderPreflightTests(unittest.TestCase):
         with self.assertRaises(PreflightError):
             check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
 
+    def test_review_ignores_unavailable_unused_providers(self):
+        self.recipe('quality-reviewer','claude-acp','opus')
+        self.recipe('unused-codex','codex-acp','unavailable')
+        self.recipe('unused-ollama','ollama','unavailable:local')
+        self.recipe('unused-unsupported','no-safe-provider','unavailable')
+        self.env.pop('CODEX_PATH')
+        def run(command,**kwargs):
+            self.assertEqual(command[3],self.env['FLOW_V2_CLAUDE_BINARY'])
+            return subprocess.CompletedProcess(command,0,'{"loggedIn":true}')
+        with patch('poc.provider_preflight.subprocess.run',side_effect=run) as calls:
+            result=check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env,sources=['quality-reviewer'])
+        self.assertEqual(calls.call_count,1)
+        self.assertEqual({r['provider'] for r in result['providers']},{'chatgpt_codex','claude-acp'})
+        self.assertEqual(planned(self.bundle,'chatgpt_codex','gpt',['quality-reviewer']),[('chatgpt_codex','gpt'),('claude-acp','opus')])
+
+    def test_missing_or_invalid_allowed_source_fails_before_auth(self):
+        for sources in ([],['../outside'],['missing'],['same','same']):
+            with patch('poc.provider_preflight.subprocess.run') as run:
+                with self.assertRaises(PreflightError):check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env,sources=sources)
+                run.assert_not_called()
+
     def test_all_bound_roles_and_coordinator_checked_before_dispatch(self):
         self.recipe('implement', 'codex-acp', 'gpt')
         self.recipe('review', 'claude-acp', 'opus')

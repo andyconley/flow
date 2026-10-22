@@ -6,6 +6,7 @@ They use the same per-operation environment and sandbox as the native workers.
 import json
 import datetime
 import stat
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -20,9 +21,16 @@ class PreflightError(ValueError):
         super().__init__(reason)
 
 
-def planned(bundle, provider, model):
+def planned(bundle, provider, model, sources=None):
     providers = {(provider, model)}
-    for path in sorted((Path(bundle)/'recipes').glob('*.yaml')):
+    recipes=Path(bundle)/'recipes'
+    if sources is not None:
+        if not sources or len(set(sources))!=len(sources) or any(not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_-]+',name) for name in sources):
+            raise PreflightError('scope_required','Invalid operation source allowlist')
+        paths=[recipes/(name+'.yaml') for name in sorted(sources)]
+        if any(not path.is_file() for path in paths):raise PreflightError('scope_required','Operation source is missing from its bound bundle')
+    else:paths=sorted(recipes.glob('*.yaml'))
+    for path in paths:
         recipe = yaml.safe_load(path.read_text())
         settings = recipe.get('settings', {}) if isinstance(recipe, dict) else {}
         selected = settings.get('goose_provider')
@@ -68,12 +76,12 @@ def goose_auth_readiness(env, minimum_valid_seconds=60):
     return 'Goose private OAuth cache structurally ready; '+('noninteractive refresh required at dispatch' if needs_refresh else 'access expiry is current')+'; remote authorization is checked at dispatch'
 
 
-def check(bundle, provider, model, profile, env, deadline=None, *, workspace=None):
+def check(bundle, provider, model, profile, env, deadline=None, *, workspace=None, sources=None):
     """No model invocation or workspace writes. Successful checks are observations only."""
     rows = []
     limit = min(deadline, time.time()+30) if deadline is not None else time.time()+30
     authenticated = set()
-    for selected, selected_model in planned(bundle, provider, model):
+    for selected, selected_model in planned(bundle, provider, model, sources):
         remaining = limit-time.time()
         if remaining <= 0:
             raise PreflightError('blocked', 'Provider readiness budget exhausted before execution; no coordinator was submitted')

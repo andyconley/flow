@@ -68,13 +68,22 @@ class GooseJob:
    role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles-{time.time_ns()}',
                              s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
                              s.get('project_context',''),implementation_profile=selected)
+   operation_sources=sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml'))
+   pool=bool(self.implementation_profile and self.implementation_profile['provider']=='pool')
+   if pool and kind in {'implement','review'}:
+    from .implementation_profiles import allowed_sources
+    operation_sources=allowed_sources(self.implementation_profile,kind)
+   bound_bindings=None
+   if pool:
+    from .implementation_profiles import recipe_bindings
+    bound_bindings=recipe_bindings(role_bundle,operation_sources)
    options={'provider':provider,'model':self.model,'check_command':s.get('check_command')}
    if selected:options['implementation_profile']=selected
    if namespace_endpoint:options['namespace_endpoint']=namespace_endpoint
    from .provider_preflight import check as provider_check,PreflightError
    try:
     profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
-    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'),workspace=s['workspace'])
+    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'),workspace=s['workspace'],sources=operation_sources)
    except PreflightError as error:
     return {'status':error.status,'reason':str(error),'source':'provider_preflight','submitted':False}
    except (OSError,ValueError,KeyError) as error:
@@ -88,12 +97,12 @@ class GooseJob:
    if not selected or selected['provider'] not in {'ollama','pool'}:
     position=cmd.index('developer');del cmd[position-1:position+1]
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
-   env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
-   if self.implementation_profile and self.implementation_profile['provider']=='pool':
+   env['FLOW_V2_ROLE_SOURCES']=json.dumps(operation_sources)
+   record['allowed_sources']=operation_sources
+   if pool:
     env['FLOW_V2_FROZEN_PROVIDER_POOL']='1'
-    if kind in {'implement','review'}:
-     from .implementation_profiles import allowed_sources
-     env['FLOW_V2_ROLE_SOURCES']=json.dumps(allowed_sources(self.implementation_profile,kind))
+    env['FLOW_V2_FROZEN_RECIPE_BINDINGS']=json.dumps(bound_bindings,sort_keys=True)
+    record['frozen_recipe_bindings']=bound_bindings
    cmd[cmd.index('--max-turns')+1]='8'
   if s.get('response_schema'):
    native_contract='\n\nFINAL response: exactly one JSON document matching this schema; no prose, headings or Markdown fences. '+('Do not call final_output; it is not a native tool. ' if provider.endswith('-acp') else '')+'Schema: '+json.dumps(s['response_schema'],sort_keys=True)

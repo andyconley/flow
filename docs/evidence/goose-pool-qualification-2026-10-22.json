@@ -224,10 +224,18 @@
     "Autonomous provider choice observed for Codex; Qwen, GPT-OSS and Claude coding paths are explicitly controlled singleton-pool coverage.",
     "Independent reviewer remains a separate fixed Claude Opus role, in fresh sessions.",
     "Some workers used coordinator-provided retrieved guidance rather than directly querying; exact query counts are recorded. No graph traversal or causal ablation was performed.",
-    "GPT-OSS initially claimed success without editing; coordinator checks caught it. Its fresh implementation has an unscored generator-input edge case outside the frozen list tests.",
+    "GPT-OSS initially claimed success without editing; coordinator checks caught it. Its fresh implementation has an unscored generator-input edge case not covered by frozen list tests. The brief does not explicitly exclude generators; input-container contract coverage is underspecified and generator support is not established.",
     "Successful expired-token refresh was not forced live; mocked refresh failure proves no OAuth fallback and cache preservation.",
     "Native model names are requested aliases, not immutable vendor-weight identities.",
     "Installed Flow v0.53.0 remains unchanged; this candidate has not been merged, released or activated."
   ],
-  "remaining_blockers": []
+  "remaining_blockers": [],
+  "subsequent_independent_review": {
+    "reviewed_commit": "2fa6599b203b0d0f16c8c7c43fde0b0d00937e92",
+    "findings": [
+      "P1 in-place recipe content changes not bound at dispatch",
+      "P1 review preflight requires unused implementation providers"
+    ],
+    "status": "Original runs preserved as-run; fixes and fresh qualification recorded separately. Original remaining_blockers is historical, not current readiness."
+  }
 }
