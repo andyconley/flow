@@ -20,12 +20,12 @@ Choose ChatGPT Codex and complete the browser sign-in. Configure may also write 
 
 ## Explicit authorization to choose workers
 
-A new work item may freeze a pool of existing named runtime profiles:
+A new work item may freeze a pool of existing named runtime profiles. The command below requires this candidate or a future release containing it; installed v0.53.0 does not have --implementation-pool. The tested fixture explicitly selected native models in its project profiles (pool-codex: codex / gpt-5.6-sol; pool-claude: claude / sonnet); production native profile settings were preserved:
 
 ```sh
 flow --project /absolute/project --work example create \
   --brief-file /absolute/brief.json \
-  --implementation-pool codex claude local-correctness local-fast
+  --implementation-pool pool-codex pool-claude local-correctness local-fast
 ```
 
 The profile names must exist. Creation resolves their exact provider/model settings and installed local model digests. The entire pool participates in the existing immutable approval snapshot. This is mutually exclusive with `--implementation-profile`. Existing single-profile work remains single-profile and cannot acquire a pool by resume or configuration edits.
