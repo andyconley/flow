@@ -2,21 +2,22 @@
   "schema_version": 1,
   "platform": "Darwin",
   "architecture": "arm64",
-  "minimum_macos": "11.0",
-  "sdk": "26.4",
+  "minimum_macos": "15.0",
+  "deployment_target": "15.0",
+  "sdk": "15.4",
   "version": "1.55.0",
   "archive": "goose-macos-arm64.gz",
-  "archive_size": 51167028,
-  "archive_sha256": "41136b409ef3c6b8e01f54d87d36060d15f7b85b121dd66027209e1e85dee9f7",
-  "binary_size": 252874344,
-  "binary_sha256": "3ce9c3aa715e9e67bb85bc7384d9199db639a3e99f2b62ffce2c080f463b6142",
+  "archive_size": 32648534,
+  "archive_sha256": "67d0bb91c949c90ea34783673b7901dfd0f128f9fda244ca437688b8eb215f11",
+  "binary_size": 107311048,
+  "binary_sha256": "3d1b5e08ba8d92d2ec0fbfba96e7e7b995da733c331b2e27a5be03d4ef60c6e2",
   "source_lock": {
     "repository": "https://github.com/aaif-goose/goose.git",
     "version": "1.55.0",
     "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
     "integration_commit_reference": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
     "patch": "goose-native.patch",
-    "patch_sha256": "a1cf00413949b78c022d7de8145d4cf120609cba3ce2825c13d15bea6cff0054",
+    "patch_sha256": "cf409f8392ab17d6821ebe622b0baec0ddf0949a24be54158606a75dc24e2825",
     "build_package": "goose-cli",
     "features": [
       "scheduler",
@@ -24,40 +25,54 @@
       "rustls-tls"
     ]
   },
-  "source_integration_commit": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
-  "build_profile": "debug",
-  "transformation": "Locked offline debug build; deterministic gzip (mtime=0, no filename); no stripping, relinking or post-build signing",
   "dynamic_libraries": [
-    "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.50.119)",
-    "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 4424.1.255)",
-    "\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1965.4.5)",
-    "\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4424.1.255)",
+    "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2575.50.26)",
+    "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 3423.0.0)",
+    "\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1889.4.8)",
+    "\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 3423.0.0)",
     "\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)",
-    "\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.101.4)",
-    "\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1405.100.8)",
+    "\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61439.101.1)",
+    "\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1351.101.1)",
     "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
-    "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)"
+    "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)"
   ],
-  "provenance_basis": "Built in an isolated Studio source checkout at source_integration_commit; full-index diff from base_commit exactly equals shipped patch. Copied Rust toolchain/build cache used offline, with original source/build/install state preserved. Includes Flow role-source enforcement and synthetic ACP command completion regressions. Local provenance, not a signed or reproducible build attestation.",
-  "previous_binaries": [
-    {
-      "binary_size": 252884216,
-      "binary_sha256": "7530c1ff8cdf0d8e68a74ed9b72d20aa38bbdeae6a5e041fb4794a91dbfd8beb"
-    }
-  ],
-  "previous_artifact_metadata": "goose-macos-arm64-v0.50.json",
+  "build_kind": "isolated-Studio-pinned-source-build/verified-dispatch-bytes-operation-preflight",
+  "rust_toolchain": "1.99.0",
   "build_command": [
     "cargo",
     "build",
+    "--release",
+    "--locked",
     "-p",
     "goose-cli",
     "--bin",
     "goose",
     "--no-default-features",
     "--features",
-    "scheduler,tree-sitter,rustls-tls",
-    "--locked",
-    "--offline"
+    "scheduler,tree-sitter,rustls-tls"
   ],
-  "rust_version": "1.99.0"
+  "qualification": "Offline binary/recipe/consumer checks on Apple Silicon macOS; no live provider qualification",
+  "runner": {
+    "system": "Darwin",
+    "architecture": "arm64",
+    "macos": "26.6"
+  },
+  "previous_binaries": [
+    {
+      "binary_size": 252884216,
+      "binary_sha256": "7530c1ff8cdf0d8e68a74ed9b72d20aa38bbdeae6a5e041fb4794a91dbfd8beb"
+    },
+    {
+      "binary_sha256": "3ce9c3aa715e9e67bb85bc7384d9199db639a3e99f2b62ffce2c080f463b6142",
+      "binary_size": 252874344
+    },
+    {
+      "binary_sha256": "d678ef8c81daa42dcaee5b6a1471850384984937539d1318d04d00ec9121cab3",
+      "binary_size": 107441240
+    },
+    {
+      "binary_sha256": "738a7f90867d915799dcae630b7f7d06f20ed9126b29326441a1fc4caf3c2835",
+      "binary_size": 107450312
+    }
+  ]
 }

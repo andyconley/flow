@@ -19,9 +19,72 @@ class ProviderPreflightTests(unittest.TestCase):
         self.env = {'HOME':str(self.home), 'CODEX_HOME':str(self.home/'codex'),
                     'CODEX_PATH':'/fixture/codex', 'FLOW_V2_CLAUDE_BINARY':'/fixture/claude',
                     'CLAUDE_CONFIG_DIR':str(self.home/'claude'), 'PATH':'/fixture/bin'}
+        self.env['GOOSE_PATH_ROOT']=str(self.home/'goose')
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        cache.parent.mkdir(parents=True)
+        cache.write_text(json.dumps({'access_token':'fixture-only','refresh_token':'fixture-only','expires_at':'2099-01-01T00:00:00Z'}))
+        cache.chmod(0o600)
         self.profile = self.root/'worker.sb'
     def recipe(self, name, provider, model):
-        (self.bundle/'recipes'/(name+'.yaml')).write_text(yaml.safe_dump({'settings':{'goose_provider':provider,'goose_model':model}}))
+        (self.bundle/'recipes'/(name+'.yaml')).write_text(yaml.safe_dump({'instructions':'fixture role','settings':{'goose_provider':provider,'goose_model':model}}))
+    def test_goose_missing_cache_does_not_consult_native_codex(self):
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        cache.unlink()
+        with patch('poc.provider_preflight.subprocess.run') as run:
+            with self.assertRaisesRegex(PreflightError, 'Goose chatgpt_codex'):
+                check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+            run.assert_not_called()
+
+    def test_goose_cache_survives_changed_home_without_credential_copy(self):
+        env={**self.env,'HOME':str(self.root/'other-home')}
+        with patch('poc.provider_preflight.subprocess.run') as run:
+            row=check(self.bundle,'chatgpt_codex','gpt',self.profile,env)
+            run.assert_not_called()
+        self.assertIn('Goose private OAuth',row['providers'][0]['readiness'])
+        self.assertFalse(Path(env['HOME']).exists())
+
+    def test_expired_goose_cache_with_refresh_is_not_a_new_login_requirement(self):
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        cache.write_text(json.dumps({'access_token':'fixture-only','refresh_token':'fixture-only','expires_at':'2000-01-01T00:00:00Z'}))
+        before=cache.read_bytes()
+        with patch('poc.provider_preflight.subprocess.run') as run:
+            row=check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+            run.assert_not_called()
+        self.assertIn('noninteractive refresh required',row['providers'][0]['readiness'])
+        self.assertEqual(cache.read_bytes(),before)
+
+    def test_goose_invalid_cache_blocks_without_secret_disclosure(self):
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        for contents in ('not-json', '{}', '{"access_token":"SECRET","refresh_token":"SECRET","expires_at":"malformed-date"}'):
+            cache.write_text(contents)
+            with self.assertRaises(PreflightError) as error:
+                check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+            self.assertNotIn('SECRET',str(error.exception))
+        cache.chmod(0o644)
+        with self.assertRaises(PreflightError):
+            check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+
+    def test_review_ignores_unavailable_unused_providers(self):
+        self.recipe('quality-reviewer','claude-acp','opus')
+        self.recipe('unused-codex','codex-acp','unavailable')
+        self.recipe('unused-ollama','ollama','unavailable:local')
+        self.recipe('unused-unsupported','no-safe-provider','unavailable')
+        self.env.pop('CODEX_PATH')
+        def run(command,**kwargs):
+            self.assertEqual(command[3],self.env['FLOW_V2_CLAUDE_BINARY'])
+            return subprocess.CompletedProcess(command,0,'{"loggedIn":true}')
+        with patch('poc.provider_preflight.subprocess.run',side_effect=run) as calls:
+            result=check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env,sources=['quality-reviewer'])
+        self.assertEqual(calls.call_count,1)
+        self.assertEqual({r['provider'] for r in result['providers']},{'chatgpt_codex','claude-acp'})
+        self.assertEqual(planned(self.bundle,'chatgpt_codex','gpt',['quality-reviewer']),[('chatgpt_codex','gpt'),('claude-acp','opus')])
+
+    def test_missing_or_invalid_allowed_source_fails_before_auth(self):
+        for sources in ([],['../outside'],['missing'],['same','same']):
+            with patch('poc.provider_preflight.subprocess.run') as run:
+                with self.assertRaises(PreflightError):check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env,sources=sources)
+                run.assert_not_called()
+
     def test_all_bound_roles_and_coordinator_checked_before_dispatch(self):
         self.recipe('implement', 'codex-acp', 'gpt')
         self.recipe('review', 'claude-acp', 'opus')
@@ -36,6 +99,26 @@ class ProviderPreflightTests(unittest.TestCase):
             result = check(self.bundle, 'chatgpt_codex', 'gpt', self.profile, self.env, time.time()+60)
         self.assertTrue(result['passed']); self.assertEqual(len(result['providers']),4)
         self.assertEqual(calls.call_count,2)  # account checks dedup; models remain explicit
+    def test_auth_uses_workspace_and_claude_only_real_home(self):
+        self.recipe('worker', 'codex-acp', 'gpt')
+        self.recipe('review', 'claude-acp', 'opus')
+        workspace=self.root/'approved';workspace.mkdir()
+        env={**self.env,'FLOW_V2_CLAUDE_USER_HOME':'/fixture/real-user'}
+        before=dict(env)
+        def run(command, **kwargs):
+            self.assertEqual(kwargs['cwd'],workspace)
+            self.assertEqual(command[:3],['/usr/bin/sandbox-exec','-f',str(self.profile)])
+            effective=kwargs['env']
+            self.assertEqual(effective['HOME'], '/fixture/real-user' if command[3]=='/fixture/claude' else env['HOME'])
+            self.assertEqual(effective['CLAUDE_CONFIG_DIR'],env['CLAUDE_CONFIG_DIR'])
+            self.assertEqual(effective['CODEX_HOME'],env['CODEX_HOME'])
+            return subprocess.CompletedProcess(command,0,'{"loggedIn":true}')
+        with patch('poc.provider_preflight.subprocess.run',side_effect=run) as calls:
+            check(self.bundle,'chatgpt_codex','gpt',self.profile,env,workspace=workspace)
+        self.assertEqual(calls.call_count,2)
+        self.assertEqual(env,before)
+        self.assertFalse((self.home/'codex/auth.json').exists())
+
     def test_unsigned_review_provider_blocks_even_when_implementation_signed_in(self):
         self.recipe('implement', 'codex-acp', 'gpt'); self.recipe('review','claude-acp','opus')
         with patch('poc.provider_preflight.subprocess.run', return_value=subprocess.CompletedProcess([],0,'{"loggedIn":false}')):
@@ -85,12 +168,13 @@ class ProviderPreflightTests(unittest.TestCase):
         state={'task':'approved','workspace':str(workspace),'project_context':'','job_id':'preflight'}
         state['inputs']=task_input_digest('approved',workspace)
         job=goose_job.GooseJob(provider='codex-acp',role_bundle=self.bundle)
-        with patch.object(goose_job,'ROOT',self.root), patch('poc.knowledge_tools.require_ready'), \
+        with patch.object(goose_job,'ROOT',self.root), patch('poc.goose_job.goose_binary',return_value=Path('/fixture/goose')), patch('poc.knowledge_tools.require_ready'), \
                 patch('poc.native_runtime.prepare',return_value=(self.profile,self.env)), \
-                patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],1,'')), \
+                patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],1,'')) as readiness, \
                 patch('poc.goose_job.subprocess.Popen') as launch:
             result=job._run_impl(state,'implement','approved prompt')
             retried=job._run_impl(state,'implement','approved prompt')
+        self.assertEqual(readiness.call_args.kwargs['cwd'],str(workspace))
         self.assertEqual(retried['status'],'permission_required')
         self.assertEqual(result['status'],'permission_required');self.assertFalse(result['submitted'])
         launch.assert_not_called()

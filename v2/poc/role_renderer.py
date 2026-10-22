@@ -158,6 +158,10 @@ def bind_bundle(source, destination, task, project_context, implementation_profi
         kh=knowledge_home()
         if (kh/'settings.json').exists() and (kh/'CURRENT.json').exists():
             recipe['instructions']+='\n\nMaintained knowledge: retrieve current card guidance through search_cards and traverse_cards when relevant. The maintained Markdown corpus is authoritative for card content; inline expertise excerpts are compatibility seed snapshots. Preserve role responsibilities and project instructions. Inferred edges are suggestions, not policy, and do not extend a card beyond its role/applicability. Report unavailable tools explicitly; do not substitute stale excerpts as current retrieved evidence.'
+        if recipe.get('settings',{}).get('goose_provider','').endswith('-acp'):
+            # Native ACP ignores Goose's system prompt: carry the actual bound
+            # assignment and schema in the delegated native user prompt.
+            recipe['prompt']=recipe['instructions']+'\n\nYou are the already-delegated role. Execute only this approved role with your own tools, without nested delegation. Return exactly one JSON document matching: '+json.dumps(recipe.get('response',{}).get('json_schema',{'type':'object'}),sort_keys=True)
         literals = {}
         for parameter in recipe.get('parameters', []):
             if parameter['key'] in defaults:

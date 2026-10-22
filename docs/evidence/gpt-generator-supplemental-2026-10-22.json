@@ -1,0 +1,91 @@
+{
+  "at": "2026-10-22T10:48:28.931382+00:00",
+  "scope": "Direct deterministic supplemental check only; frozen tests/evidence unchanged; no model inference or code fix",
+  "expectation": "For this supplemental check, a fresh one-shot iterable should normalize the same strings to the same ordered list as a list input. This does not retrospectively change the frozen contract or scores.",
+  "fixtures": [
+    {
+      "fixture": "final_repair_qualification",
+      "path": "/Users/andyconley/Documents/Codex/2026-10-20/task-3/installed-flow-qualification-20261022/dispatch-repair-fixture-gpt/tags.py",
+      "sha256": "c7ff0deac3531e99f5436d76c970df0cec04458be7c243e4172954013b8df12d",
+      "tests": [
+        {
+          "values": [
+            " welding ",
+            "welding",
+            "robotics"
+          ],
+          "expected_for_supplemental_behavior": [
+            "welding",
+            "robotics"
+          ],
+          "list_actual": [
+            "welding",
+            "robotics"
+          ],
+          "fresh_generator_actual": [
+            "welding",
+            "robotics"
+          ],
+          "list_pass": true,
+          "generator_pass": true
+        },
+        {
+          "values": [
+            "a"
+          ],
+          "expected_for_supplemental_behavior": [
+            "a"
+          ],
+          "list_actual": [
+            "a"
+          ],
+          "fresh_generator_actual": [
+            "a"
+          ],
+          "list_pass": true,
+          "generator_pass": true
+        }
+      ]
+    },
+    {
+      "fixture": "earlier_generator_finding",
+      "path": "/Users/andyconley/Documents/Codex/2026-10-20/task-3/installed-flow-qualification-20261022/goose-pool-gpt-fixture-v2/tags.py",
+      "sha256": "3bbf6ab69b3254c395630e41afcfb3b9616c6e61e5532699d962bcebe6aeefaa",
+      "tests": [
+        {
+          "values": [
+            " welding ",
+            "welding",
+            "robotics"
+          ],
+          "expected_for_supplemental_behavior": [
+            "welding",
+            "robotics"
+          ],
+          "list_actual": [
+            "welding",
+            "robotics"
+          ],
+          "fresh_generator_actual": [],
+          "list_pass": true,
+          "generator_pass": false
+        },
+        {
+          "values": [
+            "a"
+          ],
+          "expected_for_supplemental_behavior": [
+            "a"
+          ],
+          "list_actual": [
+            "a"
+          ],
+          "fresh_generator_actual": [],
+          "list_pass": true,
+          "generator_pass": false
+        }
+      ]
+    }
+  ],
+  "cause": "Earlier fixture iterates once for validation, then iterates the exhausted generator again for normalization. Final repair-qualification fixture first materializes non-list iterables with list(tags), then normalizes them."
+}

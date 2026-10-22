@@ -73,6 +73,9 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     home = tools/'home'; home.mkdir(exist_ok=True)
     temporary = tools/'tmp'; temporary.mkdir(exist_ok=True)
     evidence = tools/'acp-evidence'; evidence.mkdir(mode=0o700, exist_ok=True); evidence.chmod(0o700)
+    # macOS native keychain discovery depends on the real user HOME.
+    # Keep only Claude on that HOME; private config, scratch and sandbox stay fixed.
+    claude_user_home = Path.home()
     claude_config = (ROOT/'runtime/claude-home').resolve()
     claude_config.mkdir(mode=0o700, exist_ok=True); claude_config.chmod(0o700)
     client_error = tools/f'claude-auth-{uuid.uuid4().hex}.json'
@@ -128,7 +131,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
     auth_error = json.dumps({'schema_version':1, 'kind':'permission_required',
         'source':'claude_native_auth_preflight', 'error':{'code':'AUTH_REQUIRED',
         'message':'Claude authentication preflight failed in the private Flow configuration. Complete native sign-in with CLAUDE_CONFIG_DIR='+str(claude_config)+' before explicitly resuming; no login or credential copying was attempted.'}})
-    claude=tools/'claude';claude.write_text('#!/bin/sh\nexport HOME='+shlex.quote(str(home))+'\nexport CLAUDE_CONFIG_DIR='+shlex.quote(str(claude_config))+'\nunset CLAUDE_CODE_SAFE_MODE\n'
+    claude=tools/'claude';claude.write_text('#!/bin/sh\nexport HOME='+shlex.quote(str(claude_user_home))+'\nexport CLAUDE_CONFIG_DIR='+shlex.quote(str(claude_config))+'\nunset CLAUDE_CODE_SAFE_MODE\n'
         +'if ! '+shlex.quote(executable)+' --setting-sources "" auth status --json >/dev/null 2>&1; then\n'
         +'  umask 077\n  printf "%s\\n" '+shlex.quote(auth_error)+' > '+shlex.quote(str(client_error)+'.tmp')+'\n  /bin/mv '+shlex.quote(str(client_error)+'.tmp')+' '+shlex.quote(str(client_error))+'\n'
         +'  echo "Flow Claude authentication preflight failed; native sign-in is required in its private configuration." >&2\n  exit 77\nfi\n'
@@ -142,6 +145,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
                FLOW_V2_ACP_EVIDENCE_DIR=str(evidence),
                FLOW_V2_CLIENT_ERROR_FILE=str(client_error),
                CLAUDE_CONFIG_DIR=str(claude_config), FLOW_V2_CLAUDE_BINARY=executable,
+               FLOW_V2_CLAUDE_USER_HOME=str(claude_user_home),
                CLAUDE_CODE_TMPDIR=str(scratch),
                HOME=str(home), TMPDIR=str(temporary), TMPPREFIX=str(temporary/'zsh'),
                PYTHONPYCACHEPREFIX=str(home/'pycache'),

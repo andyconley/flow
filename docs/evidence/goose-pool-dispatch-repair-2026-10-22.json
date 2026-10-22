@@ -1,0 +1,710 @@
+{
+  "code_commit": "1c73eeb137ba93533079dfbfe78bbc96ea7dd98a",
+  "repairs": [
+    "operator-generated allowed recipe content bound by SHA256 and length; actual dispatch parses same verified read",
+    "provider preflight limited to operation source allowlist"
+  ],
+  "binary_sha256": "3d1b5e08ba8d92d2ec0fbfba96e7e7b995da733c331b2e27a5be03d4ef60c6e2",
+  "patch_sha256": "4b1882769dec48e54fe4167fbf08026180ff3be319fe1439c9125f1589f18d72",
+  "python_regression": {
+    "tests": 368,
+    "skipped": 3,
+    "status": "passed",
+    "log": "/Users/andyconley/Documents/Codex/2026-10-20/task-3/installed-flow-qualification-20261022/dispatch-repair-python-tests.log"
+  },
+  "rust_regression": {
+    "tests": 3,
+    "status": "passed",
+    "log": "/Users/andyconley/Documents/Codex/2026-10-20/task-3/installed-flow-qualification-20261022/goose-pool-shadow-regressions.log"
+  },
+  "source_audit": {
+    "base": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
+    "patch_sha256": "4b1882769dec48e54fe4167fbf08026180ff3be319fe1439c9125f1589f18d72",
+    "files": 29,
+    "mismatches": []
+  },
+  "cases": [
+    {
+      "work": "dispatch-repair-auto",
+      "controlled_route_coverage": false,
+      "terminal_outcome": "reviewed-and-ready",
+      "classification": null,
+      "test_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "independent_check_passes": [
+        true
+      ],
+      "stages": {
+        "implement": {
+          "status": "completed",
+          "elapsed_seconds": 111.15224599838257,
+          "dispatches": [
+            {
+              "call_id": "call_10ce2f2851c34237bfedd3464eab36b2",
+              "arguments": {
+                "source": "implement-pool-codex",
+                "instructions": "Implement the approved normalize_tags task now, editing only tags.py, and run the exact frozen test command. I selected the approved Codex worker (codex-acp / gpt-5.6-sol) because this is a tightly scoped Python correctness change and keeping Claude separate provides the required independent private review. Consume this retrieved authored guidance: search_cards (role omitted) returned \u201cPlan in proportion to risk\u201d and \u201cDefine a test oracle with a concrete example\u201d; apply it by making only the small reversible tags.py change and treating each frozen example/output plus the TypeError path as the concrete oracle. Do not edit tests or any other file. Report the edit and exact test result."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_32",
+              "actual_provider": "codex-acp",
+              "actual_model": "gpt-5.6-sol",
+              "parent_session_id": "20261022_31",
+              "foreground_subagent": true
+            },
+            {
+              "call_id": "call_1bfb8e310aed488ca75a6135a8518d4f",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "Perform the required fresh independent private Claude review of the current candidate. Review only; do not edit anything. Candidate revision is exactly 7e4d1dd54a57d1af4ac0ecc1806b9342c3609c30f97dbf9c2ac4a0f1c3ab0dd8. Inspect tags.py and unchanged frozen test_tags.py, run the exact command /opt/homebrew/bin/python3.12 -m unittest -v test_tags.py, verify scope and behavior, and return approve or request_changes with findings and test evidence. This review must be independent of the implementation worker."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_33",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_31",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [
+            {
+              "call_id": "call_662dccd9e0ee4e8499248d75d10f0281",
+              "arguments": {
+                "query": "test oracle reversible delivery implementation validation frozen tests minimal scoped change",
+                "mode": "hybrid",
+                "role": null
+              },
+              "status": "success",
+              "returned_cards": [
+                {
+                  "title": "Plan in proportion to risk",
+                  "entity": "cards/lead-developer--plan-in-proportion-to-risk"
+                },
+                {
+                  "title": "Plan a reversible delivery path",
+                  "entity": "cards/lead-developer--plan-a-reversible-delivery-path"
+                },
+                {
+                  "title": "Define a test oracle with a concrete example",
+                  "entity": "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+                },
+                {
+                  "title": "Evidence-led triage",
+                  "entity": "cards/support-lead--evidence-led-triage"
+                },
+                {
+                  "title": "Premortem a change before it rolls",
+                  "entity": "cards/sre--premortem-a-change-before-it-rolls"
+                }
+              ]
+            }
+          ],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "sonnet",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "codex-acp",
+                "model": "gpt-5.6-sol",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "ollama",
+                "model": "gpt-oss:20b",
+                "readiness": "configured endpoint and installed model"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.8:27b-q4_K_M",
+                "readiness": "configured endpoint and installed model"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        },
+        "review": {
+          "status": "completed",
+          "elapsed_seconds": 99.6256639957428,
+          "dispatches": [
+            {
+              "call_id": "call_28863fbb9c0f43a5a73a0dbf862bc97f",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "Perform a fresh, independent review of the actual candidate for the approved task. Inspect the workspace and tags.py, verify scope (only tags.py changed and frozen test_tags.py unchanged), independently run the exact frozen command `/opt/homebrew/bin/python3.12 -m unittest -v test_tags.py`, and assess every acceptance requirement relevant to the candidate. Do not edit or silently fix anything. Verify/report candidate revision exactly `d782f5db634efabf99b965754efc5c36c1b4d609b58e7648956a6ad4e78ef66e`. Return an approve/request_changes recommendation, concrete findings, exact test result/exit evidence, and any limitations or blockers. This must be a fresh private Claude review as configured by the converted role."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_35",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_34",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        }
+      }
+    },
+    {
+      "work": "dispatch-repair-qwen",
+      "controlled_route_coverage": true,
+      "terminal_outcome": "blocked",
+      "classification": "Infrastructure: coordinator server_is_overloaded before worker dispatch; no Qwen inference; preserved separately from quality and planned fresh retry.",
+      "test_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "independent_check_passes": [],
+      "stages": {
+        "implement": {
+          "status": "blocked",
+          "elapsed_seconds": 3.1706621646881104,
+          "dispatches": [],
+          "knowledge_searches": [],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.8:27b-q4_K_M",
+                "readiness": "configured endpoint and installed model"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        }
+      }
+    },
+    {
+      "work": "dispatch-repair-gpt",
+      "controlled_route_coverage": true,
+      "terminal_outcome": "reviewed-and-ready",
+      "classification": null,
+      "test_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "independent_check_passes": [
+        true
+      ],
+      "stages": {
+        "implement": {
+          "status": "completed",
+          "elapsed_seconds": 103.38435506820679,
+          "dispatches": [
+            {
+              "call_id": "call_3d5ec3a7f34f4f618b0c5cc14520ee75",
+              "arguments": {
+                "source": "implement-local-fast",
+                "instructions": "Implement the approved normalize_tags task now. You are the sole implementation worker and may edit only tags.py; do not alter tests or any other file. Run the exact frozen check command after editing and report what changed and actual results. Coordinator selected this recipe because it is the only approved implementation source (Ollama gpt-oss:20b) and the change is small, local, reversible, and fully covered. An actual cross-role knowledge search returned authored cards \u201cPlan in proportion to risk\u201d and \u201cDefine a test oracle with a concrete example\u201d; concretely apply them by keeping the implementation narrowly scoped and using the seven frozen tests\u2019 representative inputs/expected outputs\u2014including TypeError\u2014as the behavioral oracle. Do not delegate or change configuration."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_38",
+              "actual_provider": "ollama",
+              "actual_model": "gpt-oss:20b",
+              "parent_session_id": "20261022_37",
+              "foreground_subagent": true
+            },
+            {
+              "call_id": "call_a27a8b09d27040e188eccf87f8f352da",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "Perform a fresh independent private review of the implementation candidate; do not edit any files. Candidate revision: d4164474b14ad0d484b0dff5ffd129a09903fa48cecbd60533254dc8b7903abc (SHA-256 of the tags.py git diff). Inspect the actual workspace diff and scope, then run the exact frozen command `/opt/homebrew/bin/python3.12 -m unittest -v test_tags.py`. Review against every approved behavior: strip, Unicode casefold, empty removal, stable first-occurrence deduplication, new-list/no mutation, and TypeError for each non-string element. Confirm test_tags.py and all non-scope files are unchanged. Return approve or request_changes, findings, actual test results, and include candidate_revision exactly as supplied. Do not delegate, edit, publish, or change configuration."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_39",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_37",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [
+            {
+              "call_id": "call_c1af1dfb1e404fcf8765809b72e3a3c8",
+              "arguments": {
+                "query": "test oracle reversible delivery implementation verify frozen tests review",
+                "mode": "hybrid",
+                "role": null
+              },
+              "status": "success",
+              "returned_cards": [
+                {
+                  "title": "Plan in proportion to risk",
+                  "entity": "cards/lead-developer--plan-in-proportion-to-risk"
+                },
+                {
+                  "title": "Plan a reversible delivery path",
+                  "entity": "cards/lead-developer--plan-a-reversible-delivery-path"
+                },
+                {
+                  "title": "Define a test oracle with a concrete example",
+                  "entity": "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+                },
+                {
+                  "title": "Evidence-led triage",
+                  "entity": "cards/support-lead--evidence-led-triage"
+                },
+                {
+                  "title": "Ask for the last occurrence, not a description",
+                  "entity": "cards/support-lead--ask-for-the-last-occurrence-not-a-description"
+                }
+              ]
+            }
+          ],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "ollama",
+                "model": "gpt-oss:20b",
+                "readiness": "configured endpoint and installed model"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        },
+        "review": {
+          "status": "completed",
+          "elapsed_seconds": 86.69386696815491,
+          "dispatches": [
+            {
+              "call_id": "call_c6d405beb5754d3a8145129bb19382f4",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "In a fresh review session, inspect the actual current candidate for the approved normalize_tags task. Independently verify scope/diff and run the exact frozen test command `/opt/homebrew/bin/python3.12 -m unittest -v test_tags.py`. Do not edit or silently fix any file. Report approve or request_changes, concrete findings, exact test results, whether only tags.py differs, and compute/verify the candidate revision if the Flow defines how. Treat candidate revision supplied by the parent as bc6c235504900f194e4ed65a1cff63e2fecabce2e8e180f54169c79ea3c10f08."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_41",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_40",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [
+            {
+              "call_id": "call_44b25c7ca4b54d84a49f64dd5a2fb99f",
+              "arguments": {
+                "query": "test oracle reversible delivery implementation verify frozen tests review",
+                "mode": "hybrid",
+                "role": null
+              },
+              "status": "success",
+              "returned_cards": [
+                {
+                  "title": "Plan in proportion to risk",
+                  "entity": "cards/lead-developer--plan-in-proportion-to-risk"
+                },
+                {
+                  "title": "Plan a reversible delivery path",
+                  "entity": "cards/lead-developer--plan-a-reversible-delivery-path"
+                },
+                {
+                  "title": "Define a test oracle with a concrete example",
+                  "entity": "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+                },
+                {
+                  "title": "Evidence-led triage",
+                  "entity": "cards/support-lead--evidence-led-triage"
+                },
+                {
+                  "title": "Ask for the last occurrence, not a description",
+                  "entity": "cards/support-lead--ask-for-the-last-occurrence-not-a-description"
+                }
+              ]
+            }
+          ],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        }
+      }
+    },
+    {
+      "work": "dispatch-repair-claude",
+      "controlled_route_coverage": true,
+      "terminal_outcome": "reviewed-and-ready",
+      "classification": null,
+      "test_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "independent_check_passes": [
+        true
+      ],
+      "stages": {
+        "implement": {
+          "status": "completed",
+          "elapsed_seconds": 80.55802989006042,
+          "dispatches": [
+            {
+              "call_id": "call_8c7a70b2d5d64cdd922093e6aff6b1a2",
+              "arguments": {
+                "source": "implement-pool-claude",
+                "instructions": "Implement the approved normalize_tags task, editing only tags.py. Run the frozen check command. The sole approved implementation source is this Claude Sonnet profile, selected because it is the only approved pool choice and is suitable for the small Python change. Knowledge retrieval actually returned the authored cards \u201cPlan in proportion to risk\u201d and \u201cDefine a test oracle with a concrete example\u201d; apply them concretely by keeping this local reversible one-file change concise and using observable frozen-test outcomes (including invalid-element failure behavior) as the proof oracle. Report files changed and exact test results; do not alter tests or configuration."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_43",
+              "actual_provider": "claude-acp",
+              "actual_model": "sonnet",
+              "parent_session_id": "20261022_42",
+              "foreground_subagent": true
+            },
+            {
+              "call_id": "call_a63a05901fa1468a89d63e73f2042d70",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "Perform a fresh independent private review of the current candidate for the approved normalize_tags task. Candidate baseline revision is 9537d0babe7a542914c08411966c4ff17a9bca3e and the candidate is the current uncommitted tags.py diff. Inspect scope, correctness, and frozen tests; do not edit any files. Confirm whether all acceptance behavior is met and report exact test results and any findings. Review only this candidate."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_44",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_42",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [
+            {
+              "call_id": "call_b9aec8389af44584b8b29f8f012f0134",
+              "arguments": {
+                "query": "test oracle reversible delivery implementation verification independent review",
+                "mode": "hybrid",
+                "role": null
+              },
+              "status": "success",
+              "returned_cards": [
+                {
+                  "title": "Plan in proportion to risk",
+                  "entity": "cards/lead-developer--plan-in-proportion-to-risk"
+                },
+                {
+                  "title": "Plan a reversible delivery path",
+                  "entity": "cards/lead-developer--plan-a-reversible-delivery-path"
+                },
+                {
+                  "title": "Define a test oracle with a concrete example",
+                  "entity": "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+                },
+                {
+                  "title": "Discount the failure mode you saw most recently",
+                  "entity": "cards/support-lead--discount-the-failure-mode-you-saw-most-recently"
+                },
+                {
+                  "title": "Elicit past behavior, not stated intent",
+                  "entity": "cards/business-analyst--elicit-past-behavior-not-stated-intent"
+                }
+              ]
+            }
+          ],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "sonnet",
+                "readiness": "native account status"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        },
+        "review": {
+          "status": "completed",
+          "elapsed_seconds": 79.55888819694519,
+          "dispatches": [
+            {
+              "call_id": "call_de26665d564f4c0da2a11769b6e09c5a",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "Fresh independent review of the actual candidate for the approved task. Inspect the current workspace and candidate, verify scope (only tags.py should be modified), independently run the exact frozen check command, assess every required normalize_tags behavior, and report approve/request_changes with concrete findings. Do not edit or silently fix any file. Preserve actual failures or limitations. Candidate revision to review: 43e37f37cd7b6fcf9829ed2e9547714304d1e156a7e8f5d5919db4c5461b7492."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_46",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_45",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [
+            {
+              "call_id": "call_187c3d5d89e94d76a3a60ae4f95724aa",
+              "arguments": {
+                "query": "test oracle reversible delivery implementation verification independent review",
+                "mode": "hybrid",
+                "role": null
+              },
+              "status": "success",
+              "returned_cards": [
+                {
+                  "title": "Plan in proportion to risk",
+                  "entity": "cards/lead-developer--plan-in-proportion-to-risk"
+                },
+                {
+                  "title": "Plan a reversible delivery path",
+                  "entity": "cards/lead-developer--plan-a-reversible-delivery-path"
+                },
+                {
+                  "title": "Define a test oracle with a concrete example",
+                  "entity": "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+                },
+                {
+                  "title": "Discount the failure mode you saw most recently",
+                  "entity": "cards/support-lead--discount-the-failure-mode-you-saw-most-recently"
+                },
+                {
+                  "title": "Elicit past behavior, not stated intent",
+                  "entity": "cards/business-analyst--elicit-past-behavior-not-stated-intent"
+                }
+              ]
+            }
+          ],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        }
+      }
+    },
+    {
+      "work": "dispatch-repair-qwen-retry",
+      "controlled_route_coverage": true,
+      "terminal_outcome": "reviewed-and-ready",
+      "classification": null,
+      "test_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "independent_check_passes": [
+        true
+      ],
+      "stages": {
+        "implement": {
+          "status": "completed",
+          "elapsed_seconds": 182.36111998558044,
+          "dispatches": [
+            {
+              "call_id": "call_1435c8f061834d7985dc3092937a0c5a",
+              "arguments": {
+                "source": "implement-local-correctness",
+                "instructions": "Implement the approved normalize_tags task now. Only edit tags.py; do not edit tests or any other file. Inspect the existing code/tests, make the minimal implementation, and run the exact frozen check command. Report files changed and exact test result. Knowledge guidance retrieved by the coordinator says this is a local reversible covered change, so keep the change concise, and use concrete observable test outcomes as the oracle."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_48",
+              "actual_provider": "ollama",
+              "actual_model": "qwen3.8:27b-q4_K_M",
+              "parent_session_id": "20261022_47",
+              "foreground_subagent": true
+            },
+            {
+              "call_id": "call_57aaa6e15525440e9fa59494f4566fa0",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "Independently review the candidate implementation for the approved task. Candidate revision: 8bb0eb1bdb59e9c8e56e6eb57a7697a3d57cb4c6e4f36d4b46c535519e6de924. Inspect tags.py and unchanged frozen test_tags.py, run the exact check command, assess correctness and scope, and return approve/request_changes with findings. Do not modify any files. Treat the candidate revision exactly as supplied in your report."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_49",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_47",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [
+            {
+              "call_id": "call_4e1af4214a574ce896a7f56cce8eb41d",
+              "arguments": {
+                "query": "test oracle reversible delivery implementation validation frozen tests independent review",
+                "mode": "hybrid",
+                "role": null
+              },
+              "status": "success",
+              "returned_cards": [
+                {
+                  "title": "Plan in proportion to risk",
+                  "entity": "cards/lead-developer--plan-in-proportion-to-risk"
+                },
+                {
+                  "title": "Plan a reversible delivery path",
+                  "entity": "cards/lead-developer--plan-a-reversible-delivery-path"
+                },
+                {
+                  "title": "Define a test oracle with a concrete example",
+                  "entity": "cards/test-engineer--define-a-test-oracle-with-a-concrete-example"
+                },
+                {
+                  "title": "Evidence-led triage",
+                  "entity": "cards/support-lead--evidence-led-triage"
+                },
+                {
+                  "title": "Elicit past behavior, not stated intent",
+                  "entity": "cards/business-analyst--elicit-past-behavior-not-stated-intent"
+                }
+              ]
+            }
+          ],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.8:27b-q4_K_M",
+                "readiness": "configured endpoint and installed model"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        },
+        "review": {
+          "status": "completed",
+          "elapsed_seconds": 69.45714497566223,
+          "dispatches": [
+            {
+              "call_id": "call_e144a453bfa34c17be81ba0223214027",
+              "arguments": {
+                "source": "quality-reviewer",
+                "instructions": "In a fresh review session, independently inspect the actual candidate in the approved workspace for candidate revision 547d6feaaa6d249d4f106414bb0b7950e9e9cc209e409b59cfc93e1a954629d4. Run the exact frozen command `/opt/homebrew/bin/python3.12 -m unittest -v test_tags.py`, verify scope (only tags.py edited and test_tags.py unchanged), assess normalize_tags against the approved goal, and do not modify or fix any files. Preserve and report any failures or limitations. Return an approve/request_changes recommendation with concrete test evidence."
+              },
+              "tool_status": "success",
+              "child_session_id": "20261022_51",
+              "actual_provider": "claude-acp",
+              "actual_model": "opus",
+              "parent_session_id": "20261022_50",
+              "foreground_subagent": true
+            }
+          ],
+          "knowledge_searches": [],
+          "preflight": {
+            "passed": true,
+            "providers": [
+              {
+                "provider": "chatgpt_codex",
+                "model": "gpt-5.6-sol",
+                "readiness": "Goose private OAuth cache structurally ready; access expiry is current; remote authorization is checked at dispatch"
+              },
+              {
+                "provider": "claude-acp",
+                "model": "opus",
+                "readiness": "native account status"
+              }
+            ],
+            "limitations": "Account/configuration readiness does not guarantee quota, remote model availability or later authorization."
+          }
+        }
+      }
+    }
+  ],
+  "preservation": {
+    "at": "2026-10-22T06:15:02.048077+00:00",
+    "production_runtime_unchanged": true,
+    "goose_config_unchanged": true,
+    "production_knowledge_unchanged": true,
+    "knowledge_files_checked": 23,
+    "changed_knowledge_names": [],
+    "installed_current": "/Users/andyconley/.flow/v2/releases/v0.53.0-94fa8d710b53-85c6b967",
+    "installed_goose_sha256": "e07d4c3771351af306117ee4db069c3c09e4588859e55f6606f28cbd23833318",
+    "free_gib": 46.64,
+    "loaded_models": {
+      "models": []
+    },
+    "installed_version": "Flow v0.53.0 (v2 Goose/LangGraph)"
+  },
+  "limitations": [
+    "One small task, seven frozen list tests; route integration evidence, not a model quality ranking.",
+    "Singleton route coverage is controlled, distinct from four-member autonomous selection.",
+    "Input-container contract coverage is underspecified; generators are not explicitly excluded and support is not established. No frozen tests or scores were changed."
+  ],
+  "independent_review": {
+    "reviewed_commit": "9f42f4bc86852f3f4c433eae92ba6198db04feb9",
+    "base": "94fa8d710b53f8b097102990ba1cf7efd289166f",
+    "outcome": "No remaining substantive defects found; both prior P1 findings explicitly closed.",
+    "exit": 0,
+    "raw_report": "/Users/andyconley/Documents/Codex/2026-10-20/task-3/installed-flow-qualification-20261022/dispatch-repair-independent-review.md",
+    "report_sha256": "6f28a5fe31aab99c9a40df74b420fe10d9424b2f434819c3711aba38d1bae7db",
+    "limitations": "Read-only source/evidence review; tests and live workflows not rerun by reviewer. One autonomous Codex selection, singleton other route coverage, one small list-tested fixture; generator contract underspecified."
+  },
+  "raw_evidence_directory": "/Users/andyconley/Documents/Codex/2026-10-20/task-3/installed-flow-qualification-20261022"
+}

@@ -4,7 +4,7 @@
   "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
   "integration_commit_reference": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
   "patch": "goose-native.patch",
-  "patch_sha256": "a1cf00413949b78c022d7de8145d4cf120609cba3ce2825c13d15bea6cff0054",
+  "patch_sha256": "cf409f8392ab17d6821ebe622b0baec0ddf0949a24be54158606a75dc24e2825",
   "build_package": "goose-cli",
   "features": [
     "scheduler",

@@ -1,0 +1,241 @@
+{
+  "tested_code_commit": "5e46ca2a75b90bedf0d824e73727db2a2f607159",
+  "implementation_commit": "cb9014982fa74428b1ea0f8d338f8f7e92a9021c",
+  "goose": {
+    "version": "1.55.0",
+    "binary_sha256": "738a7f90867d915799dcae630b7f7d06f20ed9126b29326441a1fc4caf3c2835",
+    "source_lock": {
+      "repository": "https://github.com/aaif-goose/goose.git",
+      "version": "1.55.0",
+      "base_commit": "2bcb8583a18a0623eb78c9ed845d597ed99fae48",
+      "integration_commit_reference": "7c755c3dedb17a4b0f3c0c75f2684fddb534e890",
+      "patch": "goose-native.patch",
+      "patch_sha256": "f0445bad5ec6a94f9df59d12d6686c69a7850755f92234e6478f0aa6c8778f67",
+      "build_package": "goose-cli",
+      "features": [
+        "scheduler",
+        "tree-sitter",
+        "rustls-tls"
+      ]
+    },
+    "sdk": "15.4",
+    "deployment_target": "15.0"
+  },
+  "regressions": {
+    "python_run": 364,
+    "python_skipped": 3,
+    "python_passed": true,
+    "rust_auth_passed": 2,
+    "rust_pool_passed": 2
+  },
+  "cases": [
+    {
+      "work": "goose-pool-autonomous-2",
+      "mode": "real autonomous choice from four approved profiles",
+      "outcome": "reviewed-and-ready",
+      "implementation": {
+        "child_session_id": "20261022_8",
+        "actual_provider": "codex-acp",
+        "actual_model": "gpt-5.6-sol",
+        "parent_session_id": "20261022_7",
+        "foreground_subagent": true
+      },
+      "source": "implement-pool-codex",
+      "review": {
+        "child_session_id": "20261022_11",
+        "actual_provider": "claude-acp",
+        "actual_model": "opus",
+        "parent_session_id": "20261022_10",
+        "foreground_subagent": true
+      },
+      "independent_tests_passed": 7,
+      "frozen_tests_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "tags_sha256": "12f718cf9745306646e027e675256d1298723ccfd97627b28c4ba94fc48fbbf5",
+      "tracked_changes": [
+        "tags.py"
+      ],
+      "stage_elapsed_seconds": {
+        "implement": 120.41,
+        "review": 68.77
+      },
+      "coordinator_search_counts": {
+        "implement": 1,
+        "review": 0
+      },
+      "child_search_counts": {
+        "20261022_11": 1,
+        "20261022_8": 1,
+        "20261022_9": 1
+      },
+      "all_scopes_quiescent": true
+    },
+    {
+      "work": "goose-pool-coverage-qwen-1",
+      "mode": "controlled route coverage",
+      "outcome": "reviewed-and-ready",
+      "implementation": {
+        "child_session_id": "20261022_13",
+        "actual_provider": "ollama",
+        "actual_model": "qwen3.8:27b-q4_K_M",
+        "parent_session_id": "20261022_12",
+        "foreground_subagent": true
+      },
+      "source": "implement-local-correctness",
+      "review": {
+        "child_session_id": "20261022_16",
+        "actual_provider": "claude-acp",
+        "actual_model": "opus",
+        "parent_session_id": "20261022_15",
+        "foreground_subagent": true
+      },
+      "independent_tests_passed": 7,
+      "frozen_tests_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "tags_sha256": "6aa7ed463a4f7caf2e0894d67f81d4db201931d0cdf8c0aa15127e6baaa3200d",
+      "tracked_changes": [
+        "tags.py"
+      ],
+      "stage_elapsed_seconds": {
+        "implement": 277.63,
+        "review": 56.87
+      },
+      "coordinator_search_counts": {
+        "implement": 1,
+        "review": 0
+      },
+      "child_search_counts": {
+        "20261022_13": 0,
+        "20261022_14": 1,
+        "20261022_16": 1
+      },
+      "all_scopes_quiescent": true
+    },
+    {
+      "work": "goose-pool-coverage-gpt-2",
+      "mode": "controlled route coverage",
+      "outcome": "reviewed-and-ready",
+      "implementation": {
+        "child_session_id": "20261022_22",
+        "actual_provider": "ollama",
+        "actual_model": "gpt-oss:20b",
+        "parent_session_id": "20261022_21",
+        "foreground_subagent": true
+      },
+      "source": "implement-local-fast",
+      "review": {
+        "child_session_id": "20261022_25",
+        "actual_provider": "claude-acp",
+        "actual_model": "opus",
+        "parent_session_id": "20261022_24",
+        "foreground_subagent": true
+      },
+      "independent_tests_passed": 7,
+      "frozen_tests_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "tags_sha256": "3bbf6ab69b3254c395630e41afcfb3b9616c6e61e5532699d962bcebe6aeefaa",
+      "tracked_changes": [
+        "tags.py"
+      ],
+      "stage_elapsed_seconds": {
+        "implement": 94.92,
+        "review": 65.36
+      },
+      "coordinator_search_counts": {
+        "implement": 1,
+        "review": 1
+      },
+      "child_search_counts": {
+        "20261022_22": 0,
+        "20261022_23": 0,
+        "20261022_25": 0
+      },
+      "all_scopes_quiescent": true
+    },
+    {
+      "work": "goose-pool-coverage-claude-1",
+      "mode": "controlled route coverage",
+      "outcome": "reviewed-and-ready",
+      "implementation": {
+        "child_session_id": "20261022_27",
+        "actual_provider": "claude-acp",
+        "actual_model": "sonnet",
+        "parent_session_id": "20261022_26",
+        "foreground_subagent": true
+      },
+      "source": "implement-pool-claude",
+      "review": {
+        "child_session_id": "20261022_30",
+        "actual_provider": "claude-acp",
+        "actual_model": "opus",
+        "parent_session_id": "20261022_29",
+        "foreground_subagent": true
+      },
+      "independent_tests_passed": 7,
+      "frozen_tests_sha256": "1bd8db3268fc6004b676243466d2ad6d136e5117e9ef0e1c0fa1fd7da81ee7c6",
+      "tags_sha256": "01e615a823804caa2349ced629679b83d0ad8aced651f2ab80eabe6b7e1270a3",
+      "tracked_changes": [
+        "tags.py"
+      ],
+      "stage_elapsed_seconds": {
+        "implement": 72.76,
+        "review": 64.34
+      },
+      "coordinator_search_counts": {
+        "implement": 1,
+        "review": 0
+      },
+      "child_search_counts": {
+        "20261022_27": 0,
+        "20261022_28": 0,
+        "20261022_30": 1
+      },
+      "all_scopes_quiescent": true
+    }
+  ],
+  "local_model_digests": {
+    "qwen3.8:27b-q4_K_M": "25b843619e944cd0ae6069f94ff4e5e26a16e109ccbc0a66a0f05979ed70098e",
+    "gpt-oss:20b": "f38aa0c53da5f8c49d08c43a99df24ff53167fe68e24664a7777288e7656fdfe"
+  },
+  "preservation": {
+    "production_runtime_unchanged": true,
+    "goose_config_unchanged": true,
+    "production_knowledge_unchanged": true,
+    "production_knowledge_files_checked": 23,
+    "ollama_version": {
+      "version": "0.40.6"
+    },
+    "loaded_models": {
+      "models": []
+    },
+    "free_gib": 47.0,
+    "installed_goose_sha256": "e07d4c3771351af306117ee4db069c3c09e4588859e55f6606f28cbd23833318",
+    "installed_goose_matches_release": true
+  },
+  "preserved_attempts": [
+    {
+      "work": "goose-pool-autonomous-1",
+      "outcome": "reviewed-and-ready but knowledge use not qualified; role-list mismatch recovered; fixed and fresh run preserved"
+    },
+    {
+      "work": "goose-pool-coverage-gpt-1",
+      "outcome": "blocked by coordinator network error after GPT false-completion was caught and corrected; all processes inspected quiescent before fresh fixture"
+    }
+  ],
+  "limitations": [
+    "One seven-test list-input fixture, not a new model-quality ranking or optimal-router evaluation.",
+    "Autonomous provider choice observed for Codex; Qwen, GPT-OSS and Claude coding paths are explicitly controlled singleton-pool coverage.",
+    "Independent reviewer remains a separate fixed Claude Opus role, in fresh sessions.",
+    "Some workers used coordinator-provided retrieved guidance rather than directly querying; exact query counts are recorded. No graph traversal or causal ablation was performed.",
+    "GPT-OSS initially claimed success without editing; coordinator checks caught it. Its fresh implementation has an unscored generator-input edge case not covered by frozen list tests. The brief does not explicitly exclude generators; input-container contract coverage is underspecified and generator support is not established.",
+    "Successful expired-token refresh was not forced live; mocked refresh failure proves no OAuth fallback and cache preservation.",
+    "Native model names are requested aliases, not immutable vendor-weight identities.",
+    "Installed Flow v0.53.0 remains unchanged; this candidate has not been merged, released or activated."
+  ],
+  "remaining_blockers": [],
+  "subsequent_independent_review": {
+    "reviewed_commit": "2fa6599b203b0d0f16c8c7c43fde0b0d00937e92",
+    "findings": [
+      "P1 in-place recipe content changes not bound at dispatch",
+      "P1 review preflight requires unused implementation providers"
+    ],
+    "status": "Original runs preserved as-run; fixes and fresh qualification recorded separately. Original remaining_blockers is historical, not current readiness."
+  }
+}

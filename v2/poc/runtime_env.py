@@ -31,7 +31,7 @@ def environment(project=None, provider=None, model=None):
     env = {key: value for key, value in os.environ.items() if key in ['PATH','USER','LOGNAME','SHELL','LANG','LC_ALL','TERM','SSL_CERT_FILE']}
     env.update(HOME=str((ROOT/'runtime/home').resolve()), GOOSE_PATH_ROOT=str((ROOT/'runtime/goose-home').resolve()),
                GOOSE_DISABLE_KEYRING='1', GOOSE_MODE='auto',
-               GOOSE_TELEMETRY_ENABLED='false', LANGSMITH_TRACING='false', LANGGRAPH_STRICT_MSGPACK='true',
+               GOOSE_TELEMETRY_ENABLED='false', GOOSE_CHATGPT_CODEX_NONINTERACTIVE='1', LANGSMITH_TRACING='false', LANGGRAPH_STRICT_MSGPACK='true',
                CODEX_HOME=str((ROOT/'runtime/codex-home').resolve()), CODEX_PATH=str(ROOT/'runtime/adapters/node_modules/.bin/codex'),
                PATH=str(Path(node_binary()).parent)+':'+str(ROOT/'runtime/bin')+':'+str(ROOT/'runtime/adapters/node_modules/.bin')+':'+env.get('PATH',''),
                TMPDIR=str((ROOT/'runtime/tmp').resolve()))

@@ -1,4 +1,4 @@
-"""Run the attempt-local implementation recipe through the released Goose binary."""
+"""Run the frozen implementation recipe through a provenance-verified Goose binary."""
 import hashlib,http.server,json,os,subprocess,tempfile,threading,unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,8 +9,10 @@ ROOT=Path(__file__).resolve().parents[1]
 class WorkerWireTests(unittest.TestCase):
     def test_actual_worker_recipe_selects_both_models_without_output_caps(self):
         binary=os.environ.get('FLOW_TEST_RELEASE_GOOSE')
-        if not binary:self.skipTest('set FLOW_TEST_RELEASE_GOOSE to verified v0.52.2 Goose')
-        with Path(binary).open('rb') as stream:self.assertEqual(hashlib.file_digest(stream,'sha256').hexdigest(),'e07d4c3771351af306117ee4db069c3c09e4588859e55f6606f28cbd23833318')
+        if not binary:self.skipTest('set FLOW_TEST_RELEASE_GOOSE to a verified Goose build')
+        from poc.goose_artifact import metadata
+        permitted={metadata(ROOT)['binary_sha256'],'e07d4c3771351af306117ee4db069c3c09e4588859e55f6606f28cbd23833318'}
+        with Path(binary).open('rb') as stream:self.assertIn(hashlib.file_digest(stream,'sha256').hexdigest(),permitted)
         captured=[]
         class Handler(http.server.BaseHTTPRequestHandler):
             def log_message(self,*args):pass

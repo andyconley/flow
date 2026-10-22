@@ -1,4 +1,4 @@
-"""One job boundary, never dispatch individual workers. External intents reconcile first."""
+"""One operator boundary with frozen native role capabilities; reconcile intents first."""
 import json,os,signal,subprocess,time,hashlib,sys
 from pathlib import Path
 from .runtime_env import ROOT,environment,scoped,goose_binary,WORKER_MAX_TURNS
@@ -13,6 +13,11 @@ def store(path,data):
 class GooseJob:
  def __init__(self,model='llama3.1:8b',timeout=1200,provider='ollama',native_boundary=False,role_bundle=None,namespace_compat=None,implementation_profile=None):self.implementation_profile=implementation_profile;self.role_bundle=Path(role_bundle).resolve() if role_bundle else ROOT/'role-bundle';self.model=model;self.timeout=timeout;self.provider=provider;self.native_boundary=native_boundary;self.namespace_compat=namespace_compat
  def _run(self,s,kind,prompt,provider_override=None):
+  self._delegation=None
+  try:return self._run_owned(s,kind,prompt,provider_override)
+  finally:
+   if self._delegation:self._delegation.close()
+ def _run_owned(self,s,kind,prompt,provider_override=None):
   from .knowledge import home as knowledge_home,read
   enabled=self.namespace_compat if self.namespace_compat is not None else read(knowledge_home()/'native-transport.json',{}).get('namespace_compat',False)
   if not enabled or (provider_override or self.provider)!='codex-acp':return self._run_impl(s,kind,prompt,provider_override)
@@ -63,13 +68,22 @@ class GooseJob:
    role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles-{time.time_ns()}',
                              s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
                              s.get('project_context',''),implementation_profile=selected)
+   operation_sources=sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml'))
+   pool=bool(self.implementation_profile and self.implementation_profile['provider']=='pool')
+   if pool and kind in {'implement','review'}:
+    from .implementation_profiles import allowed_sources
+    operation_sources=allowed_sources(self.implementation_profile,kind)
+   bound_bindings=None
+   if pool:
+    from .implementation_profiles import recipe_bindings
+    bound_bindings=recipe_bindings(role_bundle,operation_sources)
    options={'provider':provider,'model':self.model,'check_command':s.get('check_command')}
    if selected:options['implementation_profile']=selected
    if namespace_endpoint:options['namespace_endpoint']=namespace_endpoint
    from .provider_preflight import check as provider_check,PreflightError
    try:
     profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
-    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'))
+    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'),workspace=s['workspace'],sources=operation_sources)
    except PreflightError as error:
     return {'status':error.status,'reason':str(error),'source':'provider_preflight','submitted':False}
    except (OSError,ValueError,KeyError) as error:
@@ -80,10 +94,15 @@ class GooseJob:
    cmd=cmd[3:];cmd[0]=str(goose_binary())
    # Summon inherits session extensions, not recipe.extensions. Local workers
    # need the developer extension retained on their parent session.
-   if not selected or selected['provider']!='ollama':
+   if not selected or selected['provider'] not in {'ollama','pool'}:
     position=cmd.index('developer');del cmd[position-1:position+1]
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
-   env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
+   env['FLOW_V2_ROLE_SOURCES']=json.dumps(operation_sources)
+   record['allowed_sources']=operation_sources
+   if pool:
+    env['FLOW_V2_FROZEN_PROVIDER_POOL']='1'
+    env['FLOW_V2_FROZEN_RECIPE_BINDINGS']=json.dumps(bound_bindings,sort_keys=True)
+    record['frozen_recipe_bindings']=bound_bindings
    cmd[cmd.index('--max-turns')+1]='8'
   if s.get('response_schema'):
    native_contract='\n\nFINAL response: exactly one JSON document matching this schema; no prose, headings or Markdown fences. '+('Do not call final_output; it is not a native tool. ' if provider.endswith('-acp') else '')+'Schema: '+json.dumps(s['response_schema'],sort_keys=True)
@@ -95,6 +114,22 @@ class GooseJob:
    else:
     at=cmd.index('--instructions');del cmd[at:at+2]
     cmd+=['--recipe',str(contract_path)]
+  if kind in {'implement','review'} and self.implementation_profile and provider.endswith('-acp'):
+   from .native_delegation import Delegation
+   import shlex
+   selected_role=self.implementation_profile
+   if kind=='review':
+    import yaml
+    from .implementation_profiles import fingerprint
+    settings=yaml.safe_load((role_bundle/'recipes/quality-reviewer.yaml').read_text())['settings']
+    selected_role={'name':'quality-reviewer','provider':settings['goose_provider'],'model':settings['goose_model']};selected_role['sha256']=fingerprint(selected_role)
+   broker=Delegation(s,selected_role,role_bundle,env,goose_binary(),p.parent/('delegation-'+kind+'-'+str(index)),operation=kind)
+   self._delegation=broker
+   proxy=p.parent/'native-runtime/bin/flow-delegation-mcp'
+   proxy.parent.mkdir(parents=True,exist_ok=True)
+   proxy.write_text('#!/bin/sh\nexec '+shlex.join([sys.executable,str(Path(__file__).with_name('delegation_stdio.py')),str(broker.socket)])+'\n');proxy.chmod(0o755)
+   cmd+=['--with-extension',str(proxy)]
+   record['delegation_capability']={'transport':'stdio over existing Unix permission','bound_model':selected_role['model'],'evidence':str(broker.evidence),'caller_overrides':False}
   from .knowledge_tools import attach
   if self.role_bundle:cmd,env=attach(cmd,env)
   from .device_context import settings
@@ -153,8 +188,18 @@ class GooseJob:
    stopped=scope.stop() if alive else None
    record.update(status=boundary['kind'],native_error=boundary,reason=boundary['error'].get('message','Explicit native permission/scope boundary'),exit=code,quiescent=not scope.observe(),stop=stopped,finished=time.time())
    self._observe(record,s,kind,index);store(p,record);return record
+  if code and provider=='chatgpt_codex' and 'Unattended OAuth is disabled' in err.read_text():
+   record.update(status='permission_required',source='goose_auth',submitted=True,reason='Goose chatgpt_codex authentication is unavailable. Complete interactive Goose configure with the same private GOOSE_PATH_ROOT, then explicitly resume. Unattended OAuth was disabled; inspect preserved effects before resuming.',exit=code,quiescent=not alive,finished=time.time())
+   self._observe(record,s,kind,index);store(p,record);return record
   record.update(status='completed' if code==0 and not alive else 'blocked',exit=code,quiescent=not alive,processes=scope.known,alive=list(alive),output=str(output),stderr=str(err),finished=time.time())
+  broker=getattr(self,'_delegation',None)
+  if broker:
+   record['bound_delegation']=dict(broker.result)
+   from .contracts import digest_tree
+   if record['status']=='completed' and (broker.result.get('state')!='completed' or broker.result.get('candidate')!=digest_tree(s['workspace'])):
+    record.update(status='blocked',reason='Required bound role incomplete or candidate changed outside the delegated role')
   if record['status']=='completed' and s.get('response_schema'):
+
    import jsonschema
    try:jsonschema.validate(final_object(output),s['response_schema']);record['response_contract']={'passed':True}
    except (jsonschema.ValidationError,jsonschema.SchemaError) as error:
@@ -221,14 +266,21 @@ Research/planning authority only. No implementation, install, deployment, new lo
  def _role_operation(self,s,kind):
   roles=[p.stem for p in (self.role_bundle/'recipes').glob('*.yaml')]
   implementation_instruction='Delegate actual implementation, normally using lead-developer, and consume its result.'
+  parameter_instruction='Use the delegate parameters object only when refining a role assignment; preserve the approved scope.'
   if self.implementation_profile:
-   implementation_instruction='Delegate actual implementation to source lead-developer using its frozen implementation profile. Do not edit directly or override its provider/model. Consume the worker result.'
+   implementation_instruction=('Use the callable MCP delegate_implementation tool (flow-delegation-mcp) to start the bound lead-developer. Poll delegation_status while running, then consume its completed report. Do not search for a summon shell command or edit directly. ' if self.provider.endswith('-acp') else 'Delegate actual implementation to source lead-developer using its frozen implementation profile. ')+'Do not edit directly or override its provider/model. Consume the worker result.'
+  if self.implementation_profile and self.implementation_profile['provider']=='pool':
+   choices=self.implementation_profile['profiles']
+   parameter_instruction='Task and project_context parameters are frozen defaults. Do not send parameters, provider, model, extensions, working_dir or temperature overrides. Use instructions only to clarify the approved assignment.'
+   implementation_instruction='Choose the best suitable approved implementation source using Goose summon delegate; explain your selection, actually dispatch it, then consume its result. Do not implement yourself. Approved choices: '+json.dumps([{'source':'implement-'+r['name'],'provider':r['provider'],'model':r['model']} for r in choices])+'. Do not override recipe provider/model or task scope.'
+   from .implementation_profiles import allowed_sources
+   roles=allowed_sources(self.implementation_profile,kind)
   prompt=f"""You are Goose's implementation coordinator. Use the converted role recipes available through summon; select appropriate roles and configured providers yourself. Available roles: {', '.join(sorted(roles))}.
 Approved task: {s['task']}
 Workspace: {s['workspace']}
 Project context: {s.get('project_context','')}
-Operation: {kind}. {implementation_instruction if kind=='implement' else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.'}
-Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. Use the delegate parameters object only when refining a role assignment; preserve the approved scope. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
+Operation: {kind}. {implementation_instruction if kind=='implement' else ('Use callable MCP delegate_review to start the fixed private quality-reviewer in a FRESH session. Poll delegation_status until terminal; consume its verdict. Do not perform review yourself.' if self.implementation_profile and self.provider.endswith('-acp') else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.')}
+Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. {parameter_instruction} Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
 Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
 Candidate revision: {s.get('candidate','not yet checked')}
@@ -239,6 +291,16 @@ Return only JSON with outcome, findings (array) and test_results (object). Outco
   if result['status']!='completed':
    return result if kind=='implement' else {'outcome':result['status'],'blocked':True,'passed':False,'candidate':s.get('candidate'),'runtime':result,'reason':result.get('reason','Native review did not complete')}
   value=final_object(result['output'])
+  if self.implementation_profile and self.implementation_profile['provider']=='pool':
+   observed=delegations(result['output'])
+   allowed={('implement-'+r['name']):r for r in self.implementation_profile['profiles']} if kind=='implement' else {'quality-reviewer':{'provider':'claude-acp','model':'opus'}}
+   calls=[row for row in observed if row.get('source') in allowed and row.get('response_observed')]
+   result['approved_pool_dispatches']=[{**row,'frozen_selection':allowed[row['source']]} for row in calls]
+   if not calls:
+    return {'status':'blocked','outcome':'blocked','blocked':True,'passed':False,'reason':'Required Goose pool dispatch/result consumption was not observed','runtime':result}
+  delegated=result.get('bound_delegation',{}).get('report',{})
+  if kind=='review' and delegated and value.get('outcome')=='approve' and delegated.get('verdict')!='approve':
+   return {'outcome':'blocked','blocked':True,'passed':False,'candidate':s.get('candidate'),'reason':'Coordinator approval contradicts independent reviewer verdict','runtime':result}
   outcome=value.get('outcome')
   if outcome not in {'completed','correction','approve','request_changes','permission_required','scope_required','blocked'} or not isinstance(value.get('findings'),list) or not isinstance(value.get('test_results'),dict):
    value={'outcome':'blocked','findings':['Coordinator did not return the required task result.'],'test_results':{}}

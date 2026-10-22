@@ -4,6 +4,9 @@ These checks never infer permission to sign in, copy credentials or switch provi
 They use the same per-operation environment and sandbox as the native workers.
 """
 import json
+import datetime
+import stat
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -18,9 +21,16 @@ class PreflightError(ValueError):
         super().__init__(reason)
 
 
-def planned(bundle, provider, model):
+def planned(bundle, provider, model, sources=None):
     providers = {(provider, model)}
-    for path in sorted((Path(bundle)/'recipes').glob('*.yaml')):
+    recipes=Path(bundle)/'recipes'
+    if sources is not None:
+        if not sources or len(set(sources))!=len(sources) or any(not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_-]+',name) for name in sources):
+            raise PreflightError('scope_required','Invalid operation source allowlist')
+        paths=[recipes/(name+'.yaml') for name in sorted(sources)]
+        if any(not path.is_file() for path in paths):raise PreflightError('scope_required','Operation source is missing from its bound bundle')
+    else:paths=sorted(recipes.glob('*.yaml'))
+    for path in paths:
         recipe = yaml.safe_load(path.read_text())
         settings = recipe.get('settings', {}) if isinstance(recipe, dict) else {}
         selected = settings.get('goose_provider')
@@ -31,10 +41,10 @@ def planned(bundle, provider, model):
     return sorted(providers)
 
 
-def _auth(command, profile, env, timeout, label):
+def _auth(command, profile, env, timeout, label, workspace=None):
     try:
         result = subprocess.run(['/usr/bin/sandbox-exec', '-f', str(profile), *command],
-                                env=env, capture_output=True, text=True, timeout=timeout)
+                                env=env, cwd=workspace or env.get('HOME'), capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise PreflightError('permission_required', label+' readiness check unavailable: '+str(error)) from error
     if result.returncode:
@@ -42,17 +52,43 @@ def _auth(command, profile, env, timeout, label):
     return result.stdout
 
 
-def check(bundle, provider, model, profile, env, deadline=None):
+def goose_auth_readiness(env, minimum_valid_seconds=60):
+    """Observe Goose's own private cache. Never log secrets, refresh, or start OAuth."""
+    root = Path(env.get('GOOSE_PATH_ROOT', ''))
+    if not root.is_absolute():
+        raise PreflightError('scope_required', 'Goose readiness requires an absolute GOOSE_PATH_ROOT')
+    path = root/'config/chatgpt_codex/tokens.json'
+    reason = ('Goose chatgpt_codex authentication is missing, malformed or insecure at '+str(path)+
+              '. Run Goose configure interactively with this GOOSE_PATH_ROOT, then explicitly resume; '
+              'no OAuth, credential copying or provider switching was attempted.')
+    try:
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077:
+            raise ValueError('private regular cache required')
+        data = json.loads(path.read_text())
+        if not all(isinstance(data.get(key), str) and data[key] for key in ('access_token','refresh_token','expires_at')):
+            raise ValueError('incomplete cache')
+        expiry = datetime.datetime.fromisoformat(data['expires_at'].replace('Z','+00:00'))
+        if expiry.tzinfo is None:raise ValueError('expiry timezone is missing')
+        needs_refresh=expiry.timestamp() <= time.time()+minimum_valid_seconds
+    except (OSError, ValueError, TypeError, AttributeError):
+        raise PreflightError('permission_required', reason) from None
+    return 'Goose private OAuth cache structurally ready; '+('noninteractive refresh required at dispatch' if needs_refresh else 'access expiry is current')+'; remote authorization is checked at dispatch'
+
+
+def check(bundle, provider, model, profile, env, deadline=None, *, workspace=None, sources=None):
     """No model invocation or workspace writes. Successful checks are observations only."""
     rows = []
     limit = min(deadline, time.time()+30) if deadline is not None else time.time()+30
     authenticated = set()
-    for selected, selected_model in planned(bundle, provider, model):
+    for selected, selected_model in planned(bundle, provider, model, sources):
         remaining = limit-time.time()
         if remaining <= 0:
             raise PreflightError('blocked', 'Provider readiness budget exhausted before execution; no coordinator was submitted')
         timeout = min(5, remaining)
-        if selected in {'codex-acp', 'chatgpt_codex'}:
+        if selected == 'chatgpt_codex':
+            readiness = goose_auth_readiness(env, minimum_valid_seconds=max(60, remaining))
+        elif selected == 'codex-acp':
             key = 'codex'
             config = Path(env['CODEX_HOME'])/'config.toml'
             settings = tomllib.loads(config.read_text()) if config.exists() else {}
@@ -64,13 +100,14 @@ def check(bundle, provider, model, profile, env, deadline=None):
                 readiness = 'explicit credential-free local configuration; inference availability is checked by the provider at dispatch'
             else:
                 if key not in authenticated:
-                    _auth([env['CODEX_PATH'], 'login', 'status'], profile, env, timeout, 'Codex')
+                    _auth([env['CODEX_PATH'], 'login', 'status'], profile, env, timeout, 'Codex', workspace)
                     authenticated.add(key)
                 readiness = 'native account status'
         elif selected == 'claude-acp':
             if 'claude' not in authenticated:
+                claude_env = {**env, 'HOME':env['FLOW_V2_CLAUDE_USER_HOME']} if env.get('FLOW_V2_CLAUDE_USER_HOME') else env
                 raw = _auth([env['FLOW_V2_CLAUDE_BINARY'], '--setting-sources', '', 'auth', 'status', '--json'],
-                            profile, env, timeout, 'Claude')
+                            profile, claude_env, timeout, 'Claude', workspace)
                 try:
                     logged_in = json.loads(raw).get('loggedIn') is True
                 except (ValueError, AttributeError):
@@ -93,6 +130,11 @@ def check(bundle, provider, model, profile, env, deadline=None):
                 models=json.loads(result.stdout).get('models', [])
                 names = {item.get('name') for item in models}
                 implementation=json.loads(env.get('FLOW_V2_IMPLEMENTATION_PROFILE','null'))
+                pool=json.loads(env.get('FLOW_V2_IMPLEMENTATION_POOL','null'))
+                if pool:
+                    from .implementation_profiles import validate
+                    validate(pool)
+                    implementation=next((r for r in pool['profiles'] if r['provider']=='ollama' and r['model']==selected_model),None)
                 if implementation and selected_model==implementation['model']:
                     from .implementation_profiles import validate
                     validate(implementation)
