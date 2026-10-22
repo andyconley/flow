@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import yaml
-from poc.implementation_profiles import fingerprint,validate,bind,apply_environment
+from poc.implementation_profiles import fingerprint,validate,bind,apply_environment,allowed_sources
 
 
 def member(name,provider,model):
@@ -40,6 +40,8 @@ class ImplementationPoolTests(unittest.TestCase):
             row=pool([member('native','codex-acp','gpt'),member('claude','claude-acp','sonnet')])
             bind(root,row)
             self.assertEqual({p.stem for p in recipes.iterdir()},{'implement-native','implement-claude','quality-reviewer'})
+            self.assertEqual(set(allowed_sources(row,'implement')),{p.stem for p in recipes.iterdir()})
+            self.assertEqual(allowed_sources(row,'review'),['quality-reviewer'])
             self.assertEqual((recipes/'quality-reviewer.yaml').read_text(),'independent')
             for selected in row['profiles']:
                 settings=yaml.safe_load((recipes/('implement-'+selected['name']+'.yaml')).read_text())['settings']

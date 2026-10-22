@@ -91,8 +91,9 @@ class GooseJob:
    env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
    if self.implementation_profile and self.implementation_profile['provider']=='pool':
     env['FLOW_V2_FROZEN_PROVIDER_POOL']='1'
-    if kind=='implement':env['FLOW_V2_ROLE_SOURCES']=json.dumps(['implement-'+r['name'] for r in self.implementation_profile['profiles']])
-    elif kind=='review':env['FLOW_V2_ROLE_SOURCES']=json.dumps(['quality-reviewer'])
+    if kind in {'implement','review'}:
+     from .implementation_profiles import allowed_sources
+     env['FLOW_V2_ROLE_SOURCES']=json.dumps(allowed_sources(self.implementation_profile,kind))
    cmd[cmd.index('--max-turns')+1]='8'
   if s.get('response_schema'):
    native_contract='\n\nFINAL response: exactly one JSON document matching this schema; no prose, headings or Markdown fences. '+('Do not call final_output; it is not a native tool. ' if provider.endswith('-acp') else '')+'Schema: '+json.dumps(s['response_schema'],sort_keys=True)
@@ -263,7 +264,8 @@ Research/planning authority only. No implementation, install, deployment, new lo
    choices=self.implementation_profile['profiles']
    parameter_instruction='Task and project_context parameters are frozen defaults. Do not send parameters, provider, model, extensions, working_dir or temperature overrides. Use instructions only to clarify the approved assignment.'
    implementation_instruction='Choose the best suitable approved implementation source using Goose summon delegate; explain your selection, actually dispatch it, then consume its result. Do not implement yourself. Approved choices: '+json.dumps([{'source':'implement-'+r['name'],'provider':r['provider'],'model':r['model']} for r in choices])+'. Do not override recipe provider/model or task scope.'
-   roles=['implement-'+r['name'] for r in choices]+['quality-reviewer']
+   from .implementation_profiles import allowed_sources
+   roles=allowed_sources(self.implementation_profile,kind)
   prompt=f"""You are Goose's implementation coordinator. Use the converted role recipes available through summon; select appropriate roles and configured providers yourself. Available roles: {', '.join(sorted(roles))}.
 Approved task: {s['task']}
 Workspace: {s['workspace']}

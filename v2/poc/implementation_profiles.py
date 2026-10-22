@@ -104,6 +104,15 @@ def apply_environment(env,snapshot,provider,model):
     return env
 
 
+def allowed_sources(snapshot,operation):
+    """Advertise and permit the same frozen implementation/reviewer recipes."""
+    validate(snapshot)
+    if not snapshot or snapshot['provider']!='pool':raise ValueError('An approved pool is required')
+    if operation=='review':return ['quality-reviewer']
+    if operation!='implement':raise ValueError('Unknown pool operation')
+    return ['implement-'+row['name'] for row in snapshot['profiles']]+['quality-reviewer']
+
+
 def bind(bundle,snapshot):
     """Change only the attempt-local implementation recipe, preserving review."""
     validate(snapshot)

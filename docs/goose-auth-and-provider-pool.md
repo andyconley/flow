@@ -34,7 +34,7 @@ Goose chooses an `implement-<profile>` recipe through its existing Summon delega
 
 Local members currently share one explicit endpoint/context/output/compaction configuration; incompatible transport settings fail before execution. Different local model digests remain independently frozen and checked. No model is pulled during readiness or delivery. The supported pool coordinator is Goose directly; a native ACP coordinator with a pool fails explicitly instead of silently becoming a fixed-profile run.
 
-The independent reviewer remains the separately configured quality-reviewer in a fresh session. Review and independent deterministic checks remain required. Native ACP recipes carry the actual assignment and response schema in the user prompt because ACP does not consume Goose's system prompt. Native sandbox rules are unchanged.
+The quality-reviewer is advertised and callable for optional implementation-stage inspection. The required final independent reviewer remains the separately configured quality-reviewer in a fresh session; an earlier inspection never substitutes for that final review. Review and independent deterministic checks remain required. Native ACP recipes carry the actual assignment and response schema in the user prompt because ACP does not consume Goose's system prompt. Native sandbox rules are unchanged.
 
 ## Evidence boundaries
 
