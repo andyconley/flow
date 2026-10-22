@@ -25,7 +25,9 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertEqual(set(events),{'push','workflow_dispatch'})
         self.assertEqual(events['push'],{'branches':['main']})
         self.assertIsNone(events['workflow_dispatch'])  # No source/version/bypass inputs.
-        self.assertEqual(workflow['concurrency'],{'group':'release','cancel-in-progress':False})
+        self.assertEqual(workflow['concurrency'],{
+            'group':"${{ github.ref == 'refs/heads/main' && 'release' || format('release-rejected-{0}', github.run_id) }}",
+            'cancel-in-progress':False})
         analyze=workflow['jobs']['analyze']
         self.assertEqual(analyze['if'],"github.ref == 'refs/heads/main'")
         checkout=next(step for step in analyze['steps'] if step.get('uses','').startswith('actions/checkout@'))

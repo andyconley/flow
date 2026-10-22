@@ -37,8 +37,9 @@ gh workflow run release.yml --repo andyconley/flow --ref main
 Record the resulting run's exact `headSha` and follow it through public
 verification. The run uses the selected `main` SHA, unchanged semantic version
 selection, all candidate and publication checks, and the existing serialized
-release concurrency group. Other refs skip release analysis and cannot reach
-publication. A queued recovery does not cancel an existing release; if another
+release concurrency group. Other refs use a separate per-run group, skip
+release analysis and cannot reach publication or displace a pending main run.
+A queued recovery does not cancel an existing release; if another
 run published first, normal analysis can produce a green no-release result.
 
 ## Candidate validation failed

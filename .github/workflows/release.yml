@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: release
+  # Rejected refs must not displace a pending main release before jobs skip.
+  group: ${{ github.ref == 'refs/heads/main' && 'release' || format('release-rejected-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
