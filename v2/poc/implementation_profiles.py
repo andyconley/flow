@@ -1,6 +1,7 @@
-"""Explicit, immutable implementation-worker selection; no automatic routing."""
+"""Immutable single-worker profiles or explicitly approved Goose-selectable pools."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import tomllib
 from urllib.parse import urlparse
@@ -15,6 +16,17 @@ def validate(snapshot):
     if not isinstance(snapshot,dict):raise ValueError('Implementation profile must be an object')
     row={k:v for k,v in snapshot.items() if k!='sha256'}
     if snapshot.get('sha256')!=fingerprint(row):raise ValueError('Implementation profile snapshot changed; create a new work item')
+    if row.get('provider') == 'pool':
+        members=row.get('profiles')
+        if not isinstance(members,list) or not members:raise ValueError('Approved worker pool is empty')
+        for member in members:
+            if not isinstance(member,dict) or not re.fullmatch(r'[A-Za-z0-9_-]+',member.get('name','')):raise ValueError('Pool profile names must be safe recipe source names')
+            validate(member)
+            if member['provider']=='pool':raise ValueError('Nested worker pools are not supported')
+        if len({r['name'] for r in members})!=len(members):raise ValueError('Duplicate worker pool names')
+        transports={(r['endpoint'],r['context_tokens'],r['output_tokens'],r['condenser_max_tokens']) for r in members if r['provider']=='ollama'}
+        if len(transports)>1:raise ValueError('Approved local pool members must share explicitly frozen transport/context settings')
+        return snapshot
     if row.get('provider') not in {'ollama','codex-acp','claude-acp'} or not isinstance(row.get('model'),str) or not row['model']:
         raise ValueError('Invalid implementation provider/model')
     if row['provider']=='ollama':
@@ -56,9 +68,22 @@ def resolve(project,name,home=None):
     return row
 
 
+def resolve_pool(project,names,home=None):
+    members=[resolve(project,name,home) for name in names]
+    row={'name':'approved-worker-pool','provider':'pool','model':'goose-selected','profiles':members}
+    row['sha256']=fingerprint(row)
+    return validate(row)
+
+
 def apply_environment(env,snapshot,provider,model):
     """Goose shares Ollama transport settings with in-process summoned workers."""
     validate(snapshot)
+    if snapshot and snapshot['provider']=='pool':
+        if provider.endswith('-acp'):raise ValueError('Selectable pools currently require a Goose coordinator, not native ACP')
+        local=next((r for r in snapshot['profiles'] if r['provider']=='ollama'),None)
+        result=apply_environment(env,local,provider,model) if local else dict(env)
+        result['FLOW_V2_IMPLEMENTATION_POOL']=json.dumps(snapshot,sort_keys=True)
+        return result
     if not snapshot or snapshot['provider']!='ollama':return env
     if provider=='ollama' and model!=snapshot['model']:
         raise ValueError('A distinct local coordinator would share worker transport settings; use a native coordinator or the same local model')
@@ -66,7 +91,8 @@ def apply_environment(env,snapshot,provider,model):
     env.pop('GOOSE_MAX_TOKENS',None)
     if snapshot['output_tokens']==-1 and env.get('GOOSE_PATH_ROOT'):
         import yaml
-        stored=Path(env['GOOSE_PATH_ROOT'])/'config.yaml'
+        stored=Path(env['GOOSE_PATH_ROOT'])/'config/config.yaml'
+        if not stored.is_file():stored=Path(env['GOOSE_PATH_ROOT'])/'config.yaml'
         if stored.is_file():
             settings=yaml.safe_load(stored.read_text()) or {}
             if not isinstance(settings,dict):raise ValueError('Invalid persistent Goose configuration; reconcile before execution')
@@ -83,6 +109,24 @@ def bind(bundle,snapshot):
     validate(snapshot)
     if snapshot is None:return
     import yaml
+    if snapshot['provider']=='pool':
+        import copy
+        recipe_root=Path(bundle)/'recipes'
+        template=yaml.safe_load((recipe_root/'lead-developer.yaml').read_text())
+        allowed=[]
+        for member in snapshot['profiles']:
+            name='implement-'+member['name']
+            role=copy.deepcopy(template)
+            role['title']=name
+            role['description']='Approved implementation choice: '+member['provider']+' / '+member['model']
+            role['settings'].update(goose_provider=member['provider'],goose_model=member['model'])
+            (recipe_root/(name+'.yaml')).write_text(yaml.safe_dump(role,sort_keys=False))
+            allowed.append(name)
+        for existing in recipe_root.glob('*.yaml'):
+            if existing.stem not in allowed+['quality-reviewer']:existing.unlink()
+        catalog=Path(bundle)/'catalog.json'
+        catalog.write_text(json.dumps({'implementation_pool':snapshot,'roles':[{'role':'implement-'+m['name'],**m} for m in snapshot['profiles']]},indent=2)+'\n')
+        return
     path=Path(bundle)/'recipes/lead-developer.yaml'
     recipe=yaml.safe_load(path.read_text());recipe['settings'].update(goose_provider=snapshot['provider'],goose_model=snapshot['model'])
     class RecipeDumper(yaml.SafeDumper):pass
@@ -99,6 +143,8 @@ def bind(bundle,snapshot):
 def preflight_scope(sandbox,tools,snapshot):
     """Allow only the local read-only readiness probe; worker policies stay intact."""
     validate(snapshot)
+    if snapshot and snapshot['provider']=='pool':
+        snapshot=next((r for r in snapshot['profiles'] if r['provider']=='ollama'),None)
     if not snapshot or snapshot['provider']!='ollama':return None
     port=urlparse(snapshot['endpoint']).port or 80
     path=Path(tools)/'local-preflight.sb'

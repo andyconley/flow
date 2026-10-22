@@ -62,7 +62,7 @@ class DelegationTests(unittest.TestCase):
     kwargs['stdout'].write(json.dumps({'type':'message','message':{'role':'assistant','content':[{'type':'text','text':json.dumps(report)}]}})+'\n');kwargs['stdout'].flush()
     return SimpleNamespace(pid=123,returncode=0,poll=lambda:0)
    try:
-    with patch('poc.knowledge.local_model_digest',return_value='a'*64),patch('poc.runtime_env.environment',return_value={'PATH':'/usr/bin','GOOSE_PATH_ROOT':str(self.root/'goose')}),patch('poc.native_delegation.subprocess.Popen',side_effect=launch),patch('poc.native_delegation.ProcessScope',Scope):broker.run()
+    with patch('poc.knowledge_tools.attach',side_effect=lambda cmd,env:(cmd,env)),patch('poc.knowledge.local_model_digest',return_value='a'*64),patch('poc.runtime_env.environment',return_value={'PATH':'/usr/bin','GOOSE_PATH_ROOT':str(self.root/'goose')}),patch('poc.native_delegation.subprocess.Popen',side_effect=launch),patch('poc.native_delegation.ProcessScope',Scope):broker.run()
     self.assertEqual(broker.result['state'],'completed',broker.result);self.assertEqual(broker.result['report'],report)
    finally:broker.close()
 

@@ -254,6 +254,7 @@ def main(argv=None):
     create.add_argument('--predecessor-revision', help='Exact current predecessor closure revision; required with --predecessor-work')
     create.add_argument('--provider', default='chatgpt_codex')
     create.add_argument('--model', default='gpt-5.6-sol')
+    create.add_argument('--implementation-pool', nargs='+', help='Freeze profile names as an approved Goose-selectable implementation pool')
     create.add_argument('--implementation-profile', help='Freeze a runtime profile for the implementation worker; coordinator and independent reviewer remain separately configured')
     create.add_argument('--budget-seconds', type=int, default=600)
     brief = sub.add_parser('brief'); brief.add_argument('--file', required=True, type=Path)
@@ -351,6 +352,12 @@ def main(argv=None):
                 if old:
                     parser.error('Work item already exists; inspect status or resume it')
                 options = {'provider': args.provider, 'model': args.model, 'budget_seconds': args.budget_seconds}
+                if args.implementation_pool and args.implementation_profile:
+                    parser.error('Choose either an implementation profile or an explicitly approved pool')
+                if args.implementation_pool:
+                    from .implementation_profiles import resolve_pool,apply_environment
+                    options['implementation_profile']=resolve_pool(project,args.implementation_pool)
+                    apply_environment({},options['implementation_profile'],args.provider,args.model)
                 if args.implementation_profile:
                     from .implementation_profiles import resolve as resolve_profile, apply_environment
                     options['implementation_profile']=resolve_profile(project,args.implementation_profile)

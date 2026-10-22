@@ -85,10 +85,14 @@ class GooseJob:
    cmd=cmd[3:];cmd[0]=str(goose_binary())
    # Summon inherits session extensions, not recipe.extensions. Local workers
    # need the developer extension retained on their parent session.
-   if not selected or selected['provider']!='ollama':
+   if not selected or selected['provider'] not in {'ollama','pool'}:
     position=cmd.index('developer');del cmd[position-1:position+1]
    env=native_env;env['GOOSE_PROVIDER']=provider;env['GOOSE_MODEL']=self.model;env['GOOSE_RECIPE_PATH']=str(role_bundle/'recipes');env['GOOSE_NATIVE_ACP_COMPLETION']='true'
    env['FLOW_V2_ROLE_SOURCES']=json.dumps(sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml')))
+   if self.implementation_profile and self.implementation_profile['provider']=='pool':
+    env['FLOW_V2_FROZEN_PROVIDER_POOL']='1'
+    if kind=='implement':env['FLOW_V2_ROLE_SOURCES']=json.dumps(['implement-'+r['name'] for r in self.implementation_profile['profiles']])
+    elif kind=='review':env['FLOW_V2_ROLE_SOURCES']=json.dumps(['quality-reviewer'])
    cmd[cmd.index('--max-turns')+1]='8'
   if s.get('response_schema'):
    native_contract='\n\nFINAL response: exactly one JSON document matching this schema; no prose, headings or Markdown fences. '+('Do not call final_output; it is not a native tool. ' if provider.endswith('-acp') else '')+'Schema: '+json.dumps(s['response_schema'],sort_keys=True)
@@ -174,6 +178,9 @@ class GooseJob:
    stopped=scope.stop() if alive else None
    record.update(status=boundary['kind'],native_error=boundary,reason=boundary['error'].get('message','Explicit native permission/scope boundary'),exit=code,quiescent=not scope.observe(),stop=stopped,finished=time.time())
    self._observe(record,s,kind,index);store(p,record);return record
+  if code and provider=='chatgpt_codex' and 'Unattended OAuth is disabled' in err.read_text():
+   record.update(status='permission_required',source='goose_auth',submitted=True,reason='Goose chatgpt_codex authentication is unavailable. Complete interactive Goose configure with the same private GOOSE_PATH_ROOT, then explicitly resume. Unattended OAuth was disabled; inspect preserved effects before resuming.',exit=code,quiescent=not alive,finished=time.time())
+   self._observe(record,s,kind,index);store(p,record);return record
   record.update(status='completed' if code==0 and not alive else 'blocked',exit=code,quiescent=not alive,processes=scope.known,alive=list(alive),output=str(output),stderr=str(err),finished=time.time())
   broker=getattr(self,'_delegation',None)
   if broker:
@@ -249,14 +256,20 @@ Research/planning authority only. No implementation, install, deployment, new lo
  def _role_operation(self,s,kind):
   roles=[p.stem for p in (self.role_bundle/'recipes').glob('*.yaml')]
   implementation_instruction='Delegate actual implementation, normally using lead-developer, and consume its result.'
+  parameter_instruction='Use the delegate parameters object only when refining a role assignment; preserve the approved scope.'
   if self.implementation_profile:
    implementation_instruction=('Use the callable MCP delegate_implementation tool (flow-delegation-mcp) to start the bound lead-developer. Poll delegation_status while running, then consume its completed report. Do not search for a summon shell command or edit directly. ' if self.provider.endswith('-acp') else 'Delegate actual implementation to source lead-developer using its frozen implementation profile. ')+'Do not edit directly or override its provider/model. Consume the worker result.'
+  if self.implementation_profile and self.implementation_profile['provider']=='pool':
+   choices=self.implementation_profile['profiles']
+   parameter_instruction='Task and project_context parameters are frozen defaults. Do not send parameters, provider, model, extensions, working_dir or temperature overrides. Use instructions only to clarify the approved assignment.'
+   implementation_instruction='Choose the best suitable approved implementation source using Goose summon delegate; explain your selection, actually dispatch it, then consume its result. Do not implement yourself. Approved choices: '+json.dumps([{'source':'implement-'+r['name'],'provider':r['provider'],'model':r['model']} for r in choices])+'. Do not override recipe provider/model or task scope.'
+   roles=['implement-'+r['name'] for r in choices]+['quality-reviewer']
   prompt=f"""You are Goose's implementation coordinator. Use the converted role recipes available through summon; select appropriate roles and configured providers yourself. Available roles: {', '.join(sorted(roles))}.
 Approved task: {s['task']}
 Workspace: {s['workspace']}
 Project context: {s.get('project_context','')}
 Operation: {kind}. {implementation_instruction if kind=='implement' else ('Use callable MCP delegate_review to start the fixed private quality-reviewer in a FRESH session. Poll delegation_status until terminal; consume its verdict. Do not perform review yourself.' if self.implementation_profile and self.provider.endswith('-acp') else 'Delegate quality-reviewer in a FRESH session to inspect the actual candidate and independently run tests. Do not silently fix the candidate.')}
-Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. Use the delegate parameters object only when refining a role assignment; preserve the approved scope. Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
+Every delegate call must select a converted role with source; do not use role-less ad-hoc delegates, which have no development extensions. Recipes default to this approved task and project_context. {parameter_instruction} Both roles have normal broad development tools under the same workspace permissions. No role-specific tool restrictions. No nested coordinators or background work. Use existing signed-in providers; no new login, API billing fallback or global settings changes. Existing credential and external-action approvals apply. Stop and report actual scope/permission blockers immediately; do not reinterpret them as correction work.
 Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
 Candidate revision: {s.get('candidate','not yet checked')}
@@ -267,6 +280,13 @@ Return only JSON with outcome, findings (array) and test_results (object). Outco
   if result['status']!='completed':
    return result if kind=='implement' else {'outcome':result['status'],'blocked':True,'passed':False,'candidate':s.get('candidate'),'runtime':result,'reason':result.get('reason','Native review did not complete')}
   value=final_object(result['output'])
+  if self.implementation_profile and self.implementation_profile['provider']=='pool':
+   observed=delegations(result['output'])
+   allowed={('implement-'+r['name']):r for r in self.implementation_profile['profiles']} if kind=='implement' else {'quality-reviewer':{'provider':'claude-acp','model':'opus'}}
+   calls=[row for row in observed if row.get('source') in allowed and row.get('response_observed')]
+   result['approved_pool_dispatches']=[{**row,'frozen_selection':allowed[row['source']]} for row in calls]
+   if not calls:
+    return {'status':'blocked','outcome':'blocked','blocked':True,'passed':False,'reason':'Required Goose pool dispatch/result consumption was not observed','runtime':result}
   delegated=result.get('bound_delegation',{}).get('report',{})
   if kind=='review' and delegated and value.get('outcome')=='approve' and delegated.get('verdict')!='approve':
    return {'outcome':'blocked','blocked':True,'passed':False,'candidate':s.get('candidate'),'reason':'Coordinator approval contradicts independent reviewer verdict','runtime':result}

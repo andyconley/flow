@@ -19,9 +19,51 @@ class ProviderPreflightTests(unittest.TestCase):
         self.env = {'HOME':str(self.home), 'CODEX_HOME':str(self.home/'codex'),
                     'CODEX_PATH':'/fixture/codex', 'FLOW_V2_CLAUDE_BINARY':'/fixture/claude',
                     'CLAUDE_CONFIG_DIR':str(self.home/'claude'), 'PATH':'/fixture/bin'}
+        self.env['GOOSE_PATH_ROOT']=str(self.home/'goose')
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        cache.parent.mkdir(parents=True)
+        cache.write_text(json.dumps({'access_token':'fixture-only','refresh_token':'fixture-only','expires_at':'2099-01-01T00:00:00Z'}))
+        cache.chmod(0o600)
         self.profile = self.root/'worker.sb'
     def recipe(self, name, provider, model):
-        (self.bundle/'recipes'/(name+'.yaml')).write_text(yaml.safe_dump({'settings':{'goose_provider':provider,'goose_model':model}}))
+        (self.bundle/'recipes'/(name+'.yaml')).write_text(yaml.safe_dump({'instructions':'fixture role','settings':{'goose_provider':provider,'goose_model':model}}))
+    def test_goose_missing_cache_does_not_consult_native_codex(self):
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        cache.unlink()
+        with patch('poc.provider_preflight.subprocess.run') as run:
+            with self.assertRaisesRegex(PreflightError, 'Goose chatgpt_codex'):
+                check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+            run.assert_not_called()
+
+    def test_goose_cache_survives_changed_home_without_credential_copy(self):
+        env={**self.env,'HOME':str(self.root/'other-home')}
+        with patch('poc.provider_preflight.subprocess.run') as run:
+            row=check(self.bundle,'chatgpt_codex','gpt',self.profile,env)
+            run.assert_not_called()
+        self.assertIn('Goose private OAuth',row['providers'][0]['readiness'])
+        self.assertFalse(Path(env['HOME']).exists())
+
+    def test_expired_goose_cache_with_refresh_is_not_a_new_login_requirement(self):
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        cache.write_text(json.dumps({'access_token':'fixture-only','refresh_token':'fixture-only','expires_at':'2000-01-01T00:00:00Z'}))
+        before=cache.read_bytes()
+        with patch('poc.provider_preflight.subprocess.run') as run:
+            row=check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+            run.assert_not_called()
+        self.assertIn('noninteractive refresh required',row['providers'][0]['readiness'])
+        self.assertEqual(cache.read_bytes(),before)
+
+    def test_goose_invalid_cache_blocks_without_secret_disclosure(self):
+        cache=Path(self.env['GOOSE_PATH_ROOT'])/'config/chatgpt_codex/tokens.json'
+        for contents in ('not-json', '{}', '{"access_token":"SECRET","refresh_token":"SECRET","expires_at":"malformed-date"}'):
+            cache.write_text(contents)
+            with self.assertRaises(PreflightError) as error:
+                check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+            self.assertNotIn('SECRET',str(error.exception))
+        cache.chmod(0o644)
+        with self.assertRaises(PreflightError):
+            check(self.bundle,'chatgpt_codex','gpt',self.profile,self.env)
+
     def test_all_bound_roles_and_coordinator_checked_before_dispatch(self):
         self.recipe('implement', 'codex-acp', 'gpt')
         self.recipe('review', 'claude-acp', 'opus')
@@ -105,7 +147,7 @@ class ProviderPreflightTests(unittest.TestCase):
         state={'task':'approved','workspace':str(workspace),'project_context':'','job_id':'preflight'}
         state['inputs']=task_input_digest('approved',workspace)
         job=goose_job.GooseJob(provider='codex-acp',role_bundle=self.bundle)
-        with patch.object(goose_job,'ROOT',self.root), patch('poc.knowledge_tools.require_ready'), \
+        with patch.object(goose_job,'ROOT',self.root), patch('poc.goose_job.goose_binary',return_value=Path('/fixture/goose')), patch('poc.knowledge_tools.require_ready'), \
                 patch('poc.native_runtime.prepare',return_value=(self.profile,self.env)), \
                 patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],1,'')) as readiness, \
                 patch('poc.goose_job.subprocess.Popen') as launch:

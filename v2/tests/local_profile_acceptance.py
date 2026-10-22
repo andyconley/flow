@@ -37,8 +37,10 @@ def api(path,body=None):
  return json.load(urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=30))
 
 def run_case(root,model,binary,live=False,native_review=False):
+ from poc.goose_artifact import metadata
+ permitted={metadata(ROOT)['binary_sha256'],'e07d4c3771351af306117ee4db069c3c09e4588859e55f6606f28cbd23833318'}
  with Path(binary).open('rb') as stream:
-  if hashlib.file_digest(stream,'sha256').hexdigest()!='e07d4c3771351af306117ee4db069c3c09e4588859e55f6606f28cbd23833318':raise RuntimeError('Acceptance requires the verified shipped Goose binary')
+  if hashlib.file_digest(stream,'sha256').hexdigest() not in permitted:raise RuntimeError('Acceptance requires a provenance-verified Goose binary')
  root=Path(root).resolve();root.mkdir(parents=True,exist_ok=True)
  receipt=root/'receipt.json'
  if receipt.exists():raise RuntimeError('Existing acceptance receipt; inspect it before any retry: '+str(receipt))
