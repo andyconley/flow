@@ -11,6 +11,7 @@ permissions:
 concurrency:
   # Rejected refs must not displace a pending main release before jobs skip.
   group: ${{ github.ref == 'refs/heads/main' && 'release' || format('release-rejected-{0}', github.run_id) }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -27,6 +28,11 @@ jobs:
       previous_sha: ${{ steps.baseline.outputs.previous_commit }}
       plan_artifact_name: ${{ steps.names.outputs.plan_artifact_name }}
     steps:
+      - name: Require exact main ref before release analysis
+        env:
+          FLOW_RELEASE_REF: ${{ github.ref }}
+        run: test "$FLOW_RELEASE_REF" = refs/heads/main
+
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.sha }}

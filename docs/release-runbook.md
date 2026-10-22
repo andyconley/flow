@@ -37,8 +37,12 @@ gh workflow run release.yml --repo andyconley/flow --ref main
 Record the resulting run's exact `headSha` and follow it through public
 verification. The run uses the selected `main` SHA, unchanged semantic version
 selection, all candidate and publication checks, and the existing serialized
-release concurrency group. Other refs use a separate per-run group, skip
-release analysis and cannot reach publication or displace a pending main run.
+release concurrency group. Other refs normally use a separate per-run group
+and skip analysis. GitHub expression comparisons are case-insensitive, so a
+case-sensitive shell check also rejects case-variant refs before checkout.
+The queue retains pending runs (`queue: max`) instead of replacing them,
+including when a case-variant ref collides with the main group. Release runs
+still execute one at a time; existing runs are never canceled by recovery.
 A queued recovery does not cancel an existing release; if another
 run published first, normal analysis can produce a green no-release result.
 

@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -27,6 +28,7 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertIsNone(events['workflow_dispatch'])  # No source/version/bypass inputs.
         self.assertEqual(workflow['concurrency'],{
             'group':"${{ github.ref == 'refs/heads/main' && 'release' || format('release-rejected-{0}', github.run_id) }}",
+            'queue':'max',
             'cancel-in-progress':False})
         analyze=workflow['jobs']['analyze']
         self.assertEqual(analyze['if'],"github.ref == 'refs/heads/main'")
@@ -36,6 +38,15 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertNotIn('inputs',json.dumps(workflow))
         # All existing downstream gate assertions also apply to manual runs.
         self.test_every_publisher_depends_on_verified_exact_build_and_candidate()
+
+    def test_recovery_ref_admission_is_case_sensitive_before_checkout(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/release.yml').read_text())
+        step=workflow['jobs']['analyze']['steps'][0]
+        self.assertEqual(step['env'],{'FLOW_RELEASE_REF':'${{ github.ref }}'})
+        for ref in ('refs/heads/main','refs/heads/MAIN','refs/heads/MaIn','refs/heads/topic','refs/tags/main'):
+            with self.subTest(ref=ref):
+                result=subprocess.run(['bash','-eu','-c',step['run']],env={**os.environ,'FLOW_RELEASE_REF':ref},capture_output=True)
+                self.assertEqual(result.returncode==0,ref=='refs/heads/main')
 
     def test_bootstrap_rejects_legacy_release_before_running_its_installer(self):
         script=(ROOT/'install.sh').read_text().split("<<'PYTHON'\n",1)[1].split('\nPYTHON',1)[0]
