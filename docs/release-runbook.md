@@ -19,6 +19,33 @@ Amend or remove that unreleased commit before retrying. If it has already
 reached shared history, stop and choose an explicit history-repair procedure
 with the repository administrator.
 
+## Missing push-triggered run
+
+The same gated workflow supports manual recovery on `main`; it accepts no
+version, tag, source or bypass inputs. Check the current `main` SHA, all active
+Release runs, tags and GitHub releases before dispatching. A delayed push run
+may already be queued or publishing. If one exists, follow it rather than
+starting another run. Do not use this procedure to retry a failed publisher or
+an uncertain publication; reconcile those using the sections below first.
+
+When no release is underway and the push-triggered run is missing:
+
+```bash
+gh workflow run release.yml --repo andyconley/flow --ref main
+```
+
+Record the resulting run's exact `headSha` and follow it through public
+verification. The run uses the selected `main` SHA, unchanged semantic version
+selection, all candidate and publication checks, and the existing serialized
+release concurrency group. Other refs normally use a separate per-run group
+and skip analysis. GitHub expression comparisons are case-insensitive, so a
+case-sensitive shell check also rejects case-variant refs before checkout.
+The queue retains pending runs (`queue: max`) instead of replacing them,
+including when a case-variant ref collides with the main group. Release runs
+still execute one at a time; existing runs are never canceled by recovery.
+A queued recovery does not cancel an existing release; if another
+run published first, normal analysis can produce a green no-release result.
+
 ## Candidate validation failed
 
 **Symptoms:** `validate-candidate` is red; `publish` and `verify-published` are
