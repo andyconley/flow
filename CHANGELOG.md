@@ -2,6 +2,16 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.54.2](https://github.com/andyconley/flow/compare/v0.54.1...v0.54.2) (2026-10-22)
+
+### Bug Fixes
+
+* recover invalid research handoffs and retain verification evidence ([#149](https://github.com/andyconley/flow/issues/149)) ([b578b09](https://github.com/andyconley/flow/commit/b578b09232e43a95c7d3fb4362e3cd434638b30d))
+
+### Maintenance
+
+* **ci:** add main-only gated release recovery dispatch ([#148](https://github.com/andyconley/flow/issues/148)) ([ddf4716](https://github.com/andyconley/flow/commit/ddf4716e38887092d1175c824b50cb6b51791464))
+
 ### Highlights
 
 - Show the selected Flow release, source and mode clearly while preserving legacy recovery state and keeping installer JSON output clean.
