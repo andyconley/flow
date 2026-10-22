@@ -4,6 +4,17 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Show the selected Flow release, source and mode clearly while preserving legacy recovery state and keeping installer JSON output clean.
+
+
+## [0.54.1](https://github.com/andyconley/flow/compare/v0.54.0...v0.54.1) (2026-10-22)
+
+### Bug Fixes
+
+* clarify selected release and retained legacy installer state ([#147](https://github.com/andyconley/flow/issues/147)) ([8ed2f86](https://github.com/andyconley/flow/commit/8ed2f86b97f110eb7ed8ef814619cccf4d4c93f4))
+
+### Highlights
+
 - Goose can choose approved Codex, Claude and local Ollama workers with immutable dispatch, independent private review and provider-matched authentication readiness.
 
 
