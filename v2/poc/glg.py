@@ -26,24 +26,27 @@ class BriefChecker:
         self.artifacts = artifacts
 
     def run_state(self, state):
-        command = validate_brief(self.artifacts.read(state['brief_ref'])['payload'])['check_command']
+        from .verification import preflight, evidence
+        brief = validate_brief(self.artifacts.read(state['brief_ref'])['payload'])
+        readiness = preflight(state['workspace'], brief)
+        def finish(result):
+            return evidence(brief, state['workspace'], state['brief_ref'], {**result, 'environment': readiness})
+        if not readiness['ready']:
+            return finish({'passed': False, 'outcome': 'scope_required', 'reason': '; '.join(readiness['errors'])+'; '+readiness['instruction']})
         remaining = state['deadline'] - time.time()
         if remaining <= 0:
-            return {'passed': False, 'outcome': 'blocked', 'reason': 'Workflow time budget exhausted'}
+            return finish({'passed': False, 'outcome': 'timeout', 'reason': 'Workflow time budget exhausted'})
+        command = readiness['command']
         try:
-            from .project_python import check_command
-            command = check_command(state['workspace'], command)
             result = subprocess.run(command, cwd=state['workspace'], capture_output=True,
-                                    text=True, timeout=min(60, remaining))
+                                    text=True, timeout=remaining)
         except subprocess.TimeoutExpired:
-            return {'passed': False, 'outcome': 'blocked', 'reason': 'Check time budget exhausted; inspect any subprocess effects before retry'}
+            return finish({'passed': False, 'outcome': 'timeout', 'reason': 'Check timed out; inspect subprocess effects before retry'})
         except (OSError, ValueError) as error:
-            if isinstance(error, PermissionError):
-                raise
-            return {'passed': False, 'outcome': 'scope_required',
-                    'reason': f'Check configuration needs attention: {error}'}
-        return {'passed': result.returncode == 0, 'exit': result.returncode,
-                'stdout': result.stdout, 'stderr': result.stderr, 'command': command}
+            if isinstance(error, PermissionError): raise
+            return finish({'passed': False, 'outcome': 'scope_required', 'reason': str(error)})
+        return finish({'passed': result.returncode == 0, 'exit': result.returncode,
+                'stdout': result.stdout, 'stderr': result.stderr, 'command': command})
 
 
 class NativeHarness:
@@ -221,7 +224,7 @@ def summarize(snapshot, artifacts):
                                            'resume', '--decision-file', 'DECISION.json'])}
     return {'work_id': values.get('work_id'),
             'implementation_profile':values.get('runtime_options',{}).get('implementation_profile'), 'phase': values.get('lifecycle_phase'),
-            'delivery_phase': values.get('phase'), 'outcome': values.get('outcome'),
+            'delivery_phase': values.get('phase'), 'outcome': work_outcome(values, pending),
             'termination': 'intentional-stop' if intentional else 'blocked' if blocked else None,
             'blocker': {'stage': stage, 'reason': reason, 'result': detail} if blocked else None,
             'budget': budget, 'recover_review': recovery,
@@ -233,6 +236,28 @@ def summarize(snapshot, artifacts):
             'stage_assignments':values.get('shaping_assignment_refs',{}),'stage_results':values.get('shaping_refs',{}),
             'stage_outcome':values.get('stage_result'),
             'next_action': 'Inspect referenced revision problems' if problems else 'Inspect candidate and approve recover_review with an explicit new budget' if recovery else 'Budget expired; resume is rejected. Stop or create a separately approved successor' if pending and budget['expired'] else 'Respond to pending decision' if pending else 'Inspect blocker/closure' if not snapshot.next else 'Resume the checkpoint'}
+
+
+def work_outcome(values, pending):
+    kinds = {p['value'].get('kind') for p in pending}
+    if 'reconcile-effect' in kinds: return 'uncertain'
+    if 'repair-brief' in kinds: return 'brief-invalid'
+    if values.get('lifecycle_phase') == 'stopped': return 'stopped'
+    if values.get('outcome'): return values['outcome']
+    stage = values.get('stage_result', {}).get('status')
+    if stage and stage != 'completed': return stage
+    if pending: return 'awaiting-approval'
+    if values.get('shaping_refs'): return 'research-complete'
+    return None
+
+
+def outcome_exit(summary):
+    """Zero means successful command handling, never implicit work completion."""
+    kinds = {row.get('value', {}).get('kind') for row in summary.get('pending', [])}
+    if 'reconcile-effect' in kinds: return 3
+    if 'repair-brief' in kinds: return 2
+    if summary.get('outcome') in {'timeout', 'uncertain', 'failed', 'blocked', 'scope_required', 'permission_required', 'stopped'}: return 2
+    return 0
 
 
 def main(argv=None):
@@ -404,9 +429,7 @@ def main(argv=None):
                            'context_ref': context_ref, 'runtime_options': options,
                            'budget_seconds': args.budget_seconds, 'budget_policy': PAUSE_POLICY, 'lifecycle_phase': 'shaping'}
                 if args.brief_file:
-                    brief = validate_brief(read_json(args.brief_file))
-                    from .project_python import check_command
-                    check_command(project, brief['check_command'])
+                    brief = validate_brief(read_json(args.brief_file), executable=False)
                     if context.get('legacy_handoff'):
                         brief['historical_references'] = [*brief.get('historical_references', []), context['legacy_handoff']]
                     initial['brief_ref'] = artifacts.publish('briefs', 'brief', brief)
@@ -456,12 +479,11 @@ def main(argv=None):
                 graph.update_state(config, {'acceptance': 'accepted', 'decision_refs': [*decisions, ref]}, as_node='delivery')
                 graph.invoke(None, config)
             else:
-                if saved.values.get('lifecycle_phase') not in {'shaping', 'awaiting-approval'} or not saved.next:
+                repairing = any(item.get('value', {}).get('kind') == 'repair-brief' for item in summarize(saved, artifacts)['pending'])
+                if (saved.values.get('lifecycle_phase') not in {'shaping', 'awaiting-approval'} and not (repairing and args.command in {'brief', 'stop'})) or not saved.next:
                     parser.error('Shaping commands apply only before implementation approval; start a successor work item for changed scope')
                 if args.command == 'brief':
-                    brief = validate_brief(read_json(args.file))
-                    from .project_python import check_command
-                    check_command(project, brief['check_command'])
+                    brief = validate_brief(read_json(args.file), executable=False)
                     legacy = artifacts.read(old['context_ref'])['payload'].get('legacy_handoff')
                     if legacy and legacy not in brief.get('historical_references', []):
                         brief['historical_references'] = [*brief.get('historical_references', []), legacy]
@@ -489,8 +511,8 @@ def main(argv=None):
                 elif args.command == 'approve':
                     if not old.get('brief_ref') or args.revision != old['brief_ref']['revision']:
                         parser.error('Approval revision must match the exact currently proposed brief')
-                    from .project_python import check_command
-                    check_command(project, validate_brief(artifacts.read(old['brief_ref'])['payload'])['check_command'])
+                    from .verification import require_ready
+                    require_ready(project, validate_brief(artifacts.read(old['brief_ref'])['payload']))
                     response = {'action': 'approve', 'actor': args.actor, 'brief_ref': old['brief_ref']}
                 else:
                     response = {'action': args.command, 'actor': args.actor, 'reason': args.reason}
@@ -501,7 +523,9 @@ def main(argv=None):
                             parser.error('Stage approval revision does not match the current stage result')
                         response['stage_ref']=reference
                 graph.invoke(Command(resume=response), config)
-            print(json.dumps(summarize(graph.get_state(config, subgraphs=True), artifacts), indent=2, default=str))
+            summary = summarize(graph.get_state(config, subgraphs=True), artifacts)
+            print(json.dumps(summary, indent=2, default=str))
+            return outcome_exit(summary)
     except (ArtifactError, OSError, ValueError, KeyError, sqlite3.Error) as error:
         parser.error(str(error))
 

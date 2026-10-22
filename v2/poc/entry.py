@@ -45,4 +45,4 @@ def main(argv=None):
         return workflow(args)
 
 
-if __name__=='__main__': main()
+if __name__=='__main__': raise SystemExit(main())

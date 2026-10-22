@@ -116,16 +116,63 @@ class Artifacts:
         return leaves[0] if leaves else (None, None)
 
 
-def validate_brief(value):
-    if not isinstance(value, dict):
-        raise ArtifactError('Brief must be a JSON object')
-    for key in ('goal', 'scope', 'acceptance_criteria'):
-        if not value.get(key):
-            raise ArtifactError(f'Brief requires {key}')
-    checks = value.get('check_command')
-    if not isinstance(checks, list) or not checks or any(not isinstance(x, str) or not x for x in checks):
-        raise ArtifactError('check_command must be a nonempty argv array')
-    for key in ('scope', 'acceptance_criteria'):
-        if not isinstance(value[key], (str, list)):
-            raise ArtifactError(f'{key} must be text or an array')
+# Shared with the coordinator: definitions may describe planned verification;
+# only executable briefs may cross the implementation approval boundary.
+BRIEF_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'goal': {'type': 'string', 'minLength': 1},
+        'scope': {'anyOf': [{'type': 'string', 'minLength': 1}, {'type': 'array', 'minItems': 1, 'items': {'type': 'string', 'minLength': 1}}]},
+        'acceptance_criteria': {'anyOf': [{'type': 'string', 'minLength': 1}, {'type': 'array', 'minItems': 1, 'items': {'type': 'string', 'minLength': 1}}]},
+        'check_command': {'type': 'array', 'minItems': 1, 'items': {'type': 'string', 'minLength': 1}},
+        'verification_plan': {'type': 'string', 'minLength': 1},
+        'prerequisites': {'type': 'array', 'items': {'type': 'string', 'minLength': 1}},
+        'coverage': {'type': 'array', 'items': {'type': 'object', 'properties': {
+            'criterion': {'type': 'string', 'minLength': 1},
+            'method': {'enum': ['automated', 'manual', 'uncovered']},
+            'evidence': {'type': 'string', 'minLength': 1}},
+            'required': ['criterion', 'method', 'evidence'], 'additionalProperties': False}},
+        'check_scope': {'enum': ['smoke', 'acceptance']},
+    },
+    'required': ['goal', 'scope', 'acceptance_criteria', 'check_command'],
+}
+
+
+def _schema_errors(value, schema, path='brief'):
+    errors = []
+    if 'anyOf' in schema:
+        if not any(not _schema_errors(value, option, path) for option in schema['anyOf']): errors.append(path+' has an invalid type or empty value')
+    types = {'object': dict, 'array': list, 'string': str}
+    if 'type' in schema and not isinstance(value, types[schema['type']]):
+        return [path+' must be '+schema['type']]
+    if 'enum' in schema and value not in schema['enum']: errors.append(path+' has an unsupported value')
+    if isinstance(value, str) and (len(value.strip()) < schema.get('minLength', 0) or '\x00' in value): errors.append(path+' must be nonempty text without NUL')
+    if isinstance(value, list):
+        if len(value) < schema.get('minItems', 0): errors.append(path+' must be nonempty')
+        for index, item in enumerate(value): errors.extend(_schema_errors(item, schema.get('items', {}), f'{path}[{index}]'))
+    if isinstance(value, dict):
+        for key in schema.get('required', []):
+            if key not in value: errors.append(path+' requires '+key)
+        for key, item in value.items():
+            if key in schema.get('properties', {}): errors.extend(_schema_errors(item, schema['properties'][key], path+'.'+key))
+            elif schema.get('additionalProperties') is False: errors.append(path+' has unknown field '+key)
+    return errors
+
+
+def brief_schema(executable=True):
+    if executable: return BRIEF_SCHEMA
+    return {**BRIEF_SCHEMA, 'required': ['goal', 'scope', 'acceptance_criteria'],
+            'anyOf': [{'required': ['check_command']}, {'required': ['verification_plan']}]}
+
+
+def validate_brief(value, executable=True):
+    schema = brief_schema(executable)
+    errors = _schema_errors(value, schema)
+    if not executable and isinstance(value, dict) and 'check_command' not in value and not value.get('verification_plan'):
+        errors.append('brief requires verification_plan when check_command is not yet defined')
+    if isinstance(value, dict) and 'coverage' in value and not errors:
+        criteria = value['acceptance_criteria']; criteria = [criteria] if isinstance(criteria, str) else criteria
+        names = [row['criterion'] for row in value['coverage']]
+        if len(set(names)) != len(names) or set(names) != set(criteria): errors.append('coverage must map every acceptance criterion exactly once')
+    if errors: raise ArtifactError('; '.join(errors))
     return value

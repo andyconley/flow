@@ -34,10 +34,10 @@ def main():
     setup();out=ROOT/'artifacts'/args.job;out.mkdir(parents=True,exist_ok=True)
     def check(path):
         remaining=remaining_deadline[0]-time.time()
-        if remaining<=0:return {'passed':False,'outcome':'blocked','reason':'Workflow time budget exhausted'}
+        if remaining<=0:return {'passed':False,'outcome':'timeout','reason':'Workflow time budget exhausted'}
         from .project_python import check_command
-        try:result=subprocess.run(check_command(path,command),cwd=path,capture_output=True,text=True,timeout=min(60,remaining))
-        except subprocess.TimeoutExpired:return {'passed':False,'outcome':'blocked','reason':'Independent check time budget exhausted'}
+        try:result=subprocess.run(check_command(path,command),cwd=path,capture_output=True,text=True,timeout=remaining)
+        except subprocess.TimeoutExpired:return {'passed':False,'outcome':'timeout','reason':'Independent check time budget exhausted'}
         except (OSError,ValueError) as error:return {'passed':False,'outcome':'scope_required','reason':str(error)}
         return {'passed':result.returncode==0,'exit':result.returncode,'stdout':result.stdout,'stderr':result.stderr}
     with SqliteSaver.from_conn_string(str(out/'workflow.sqlite')) as saver:
@@ -55,5 +55,6 @@ def main():
     handoff['outcome']=result.get('outcome',result.get('phase','paused'))
     (out/'handoff.json').write_text(json.dumps(handoff,indent=2,default=str)+'\n')
     print(json.dumps({'phase':result.get('phase'),'outcome':result.get('outcome'),'interrupts':str(result.get('__interrupt__',[]))}))
+    return 0 if result.get('phase') == 'reviewed-and-ready' else 3 if result.get('phase') == 'uncertain' else 2
 
-if __name__=='__main__':main()
+if __name__=='__main__':raise SystemExit(main())
