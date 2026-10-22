@@ -4,6 +4,17 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Goose can choose approved Codex, Claude and local Ollama workers with immutable dispatch, independent private review and provider-matched authentication readiness.
+
+
+## [0.54.0](https://github.com/andyconley/flow/compare/v0.53.0...v0.54.0) (2026-10-22)
+
+### Features
+
+* let Goose select approved native and local workers ([#146](https://github.com/andyconley/flow/issues/146)) ([1299757](https://github.com/andyconley/flow/commit/1299757e9018f6fe21f931307df6a52bdf6c6e60))
+
+### Highlights
+
 - Explicit worker profiles and open-ended local output. Qualification used a deterministic coordinator; private Claude ACP needs sign-in. Publishing does not activate installs or model defaults.
 
 
