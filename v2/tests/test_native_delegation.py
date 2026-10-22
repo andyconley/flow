@@ -69,8 +69,10 @@ class DelegationTests(unittest.TestCase):
  def test_bound_recipe_multiline_parameters_parse_in_real_goose(self):
   from poc.native_delegation import write_bound_recipe
   from poc.runtime_env import goose_binary
+  binary=goose_binary()
+  if not binary.is_file():self.skipTest('Qualified Goose needed for offline recipe validation')
   role={'version':'1.0.0','title':'fixture','description':'serialization regression','instructions':'Context:\n{{ task | indent(2) }}','prompt':'{{ task | indent(2) }}','parameters':[{'key':'task','input_type':'string','requirement':'required','description':'approved task','default':'{\n  "goal": "preserve quotes and lines"\n}'}]}
   path=self.root/'bound.yaml';write_bound_recipe(path,role)
   env={**os.environ,'GOOSE_PATH_ROOT':str(self.root/'goose-config')}
-  result=subprocess.run([str(goose_binary()),'recipe','validate',str(path)],env=env,text=True,capture_output=True,timeout=15)
+  result=subprocess.run([str(binary),'recipe','validate',str(path)],env=env,text=True,capture_output=True,timeout=15)
   self.assertEqual(result.returncode,0,result.stderr+result.stdout)

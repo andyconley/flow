@@ -1979,9 +1979,10 @@ index 0000000000000000000000000000000000000000..1d70fd350096f28a738011613cdb9b8e
 +    agent.abort();
 +}
 diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goose/src/agents/platform_extensions/summon.rs
+index dbe9776bbf0926c1fec656a493cc92768194c988..42fb71c8dc67f07c81a67a9c9715c333ef00529c 100644
 --- a/crates/goose/src/agents/platform_extensions/summon.rs
 +++ b/crates/goose/src/agents/platform_extensions/summon.rs
-@@ -23,6 +23,8 @@
+@@ -23,6 +23,8 @@ use rmcp::model::{
      MetaObject, ServerCapabilities, Tool,
  };
  use serde::Deserialize;
@@ -1990,11 +1991,10 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
  use std::collections::HashMap;
  use std::path::{Path, PathBuf};
  use std::time::{Duration, Instant};
-@@ -33,6 +35,79 @@
- pub static EXTENSION_NAME: &str = "summon";
+@@ -34,6 +36,79 @@ pub static EXTENSION_NAME: &str = "summon";
  
  const SUBAGENT_DESCRIPTION_BUDGET: usize = 160;
-+
+ 
 +// Flow opts into source-bound delegation. Stock Goose remains unchanged when
 +// no policy is supplied; an invalid policy fails closed before creating a child.
 +fn flow_role_sources() -> Result<Option<Vec<String>>, String> {
@@ -2067,10 +2067,11 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
 +    // The caller parses this very buffer, never reopening the checked path.
 +    Ok(Some((verified, parent)))
 +}
- 
++
  fn kind_plural(kind: SourceType) -> &'static str {
      match kind {
-@@ -458,7 +533,7 @@
+         SourceType::Subrecipe => "Subrecipes",
+@@ -458,7 +533,7 @@ impl SummonClient {
      }
  
      fn create_delegate_tool(&self) -> Tool {
@@ -2079,7 +2080,7 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
              "type": "object",
              "properties": {
                  "instructions": {
-@@ -507,6 +582,11 @@
+@@ -507,6 +582,11 @@ impl SummonClient {
              }
          });
  
@@ -2091,7 +2092,7 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
          Tool::new(
              "delegate",
              "Delegate a task to a subagent that runs independently with its own context.\n\n\
-@@ -956,6 +1036,10 @@
+@@ -956,6 +1036,10 @@ impl SummonClient {
      }
  
      fn validate_delegate_params(&self, params: &DelegateParams) -> Result<(), String> {
@@ -2102,7 +2103,7 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
          if params.instructions.is_none() && params.source.is_none() {
              return Err("Must provide 'instructions' or 'source' (or both)".to_string());
          }
-@@ -1020,8 +1104,16 @@
+@@ -1020,8 +1104,16 @@ impl SummonClient {
              .resolve_source(session_id, source_name, working_dir)
              .await?
              .ok_or_else(|| format!("Source '{}' not found", source_name))?;
@@ -2121,7 +2122,7 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
              SourceType::Recipe | SourceType::Subrecipe => {
                  self.build_recipe_from_source(&source, params, session_id)
                      .await?
-@@ -1033,6 +1125,7 @@
+@@ -1033,6 +1125,7 @@ impl SummonClient {
                      source_name, source.source_type
                  ));
              }
@@ -2129,7 +2130,7 @@ diff --git a/crates/goose/src/agents/platform_extensions/summon.rs b/crates/goos
          };
  
          if let Some(extra_instructions) = &params.instructions {
-@@ -1476,6 +1569,137 @@
+@@ -1476,6 +1569,137 @@ fn resolve_working_dir(parent_dir: &Path, requested: &str) -> Result<PathBuf, an
  
  #[cfg(test)]
  mod tests {
@@ -2615,6 +2616,97 @@ index f8d1cadc4baaa09212ede5b5e36e0ed5507bc0cf..6df2e59e6ca433f41d60658dc4d5d07f
                  command: resolved_command,
                  args: vec![],
                  env: vec![],
+diff --git a/crates/goose/src/providers/chatgpt_codex.rs b/crates/goose/src/providers/chatgpt_codex.rs
+index 3bca2396b0d8f16a779dd2e62c2f7ffbef6d3daa..bb9f8562c52d5b5f482e31162bb40ab41aa8ed39 100644
+--- a/crates/goose/src/providers/chatgpt_codex.rs
++++ b/crates/goose/src/providers/chatgpt_codex.rs
+@@ -830,13 +830,17 @@ impl ChatGptCodexAuthProvider {
+     }
+ 
+     async fn get_valid_token(&self) -> Result<TokenData> {
++        self.get_valid_token_with_issuer(ISSUER).await
++    }
++
++    async fn get_valid_token_with_issuer(&self, issuer: &str) -> Result<TokenData> {
+         if let Some(mut token_data) = self.cache.load() {
+             if token_data.expires_at > Utc::now() + chrono::Duration::seconds(60) {
+                 return Ok(token_data);
+             }
+ 
+             tracing::debug!("Token expired, attempting refresh");
+-            match refresh_access_token_with_issuer(ISSUER, &token_data.refresh_token).await {
++            match refresh_access_token_with_issuer(issuer, &token_data.refresh_token).await {
+                 Ok(new_tokens) => {
+                     token_data.access_token = new_tokens.access_token;
+                     token_data.refresh_token = new_tokens.refresh_token;
+@@ -855,11 +859,16 @@ impl ChatGptCodexAuthProvider {
+                 }
+                 Err(e) => {
+                     tracing::warn!("Token refresh failed, will re-authenticate: {}", e);
+-                    self.cache.clear();
++                    if std::env::var("GOOSE_CHATGPT_CODEX_NONINTERACTIVE").as_deref() != Ok("1") {
++                        self.cache.clear();
++                    }
+                 }
+             }
+         }
+ 
++        if std::env::var("GOOSE_CHATGPT_CODEX_NONINTERACTIVE").as_deref() == Ok("1") {
++            anyhow::bail!("Goose chatgpt_codex authentication unavailable. Complete interactive goose configure using the same GOOSE_PATH_ROOT, then explicitly resume. Unattended OAuth is disabled.");
++        }
+         tracing::info!("Starting OAuth flow for ChatGPT Codex");
+         let token_data = perform_oauth_flow(self.state.as_ref()).await?;
+         self.cache.save(&token_data)?;
+@@ -1097,6 +1106,49 @@ mod tests {
+             .unwrap_or_default()
+     }
+ 
++    #[tokio::test]
++    #[serial_test::serial]
++    async fn unattended_refresh_failure_preserves_cache_and_never_starts_oauth() {
++        let root = tempfile::tempdir().unwrap();
++        let root_path = root.path().to_string_lossy().to_string();
++        let _guard = env_lock::lock_env([
++            ("GOOSE_PATH_ROOT", Some(root_path.as_str())),
++            ("GOOSE_CHATGPT_CODEX_NONINTERACTIVE", Some("1")),
++        ]);
++        let server = MockServer::start().await;
++        Mock::given(method("POST")).and(path("/oauth/token"))
++            .respond_with(ResponseTemplate::new(400).set_body_string("fixture revoked token"))
++            .expect(1).mount(&server).await;
++        let provider = ChatGptCodexAuthProvider::new(Arc::new(ChatGptCodexAuthState::new()));
++        provider.cache.save(&TokenData {
++            access_token: "fixture-only-access".to_string(),
++            refresh_token: "fixture-only-refresh".to_string(),
++            id_token: None, expires_at: Utc::now() - chrono::Duration::hours(1), account_id: None,
++        }).unwrap();
++        let before = std::fs::read(&provider.cache.cache_path).unwrap();
++        let result = tokio::time::timeout(std::time::Duration::from_secs(3),
++            provider.get_valid_token_with_issuer(&server.uri())).await;
++        let error = result.expect("must not wait for browser callback").err().unwrap();
++        assert!(error.to_string().contains("Unattended OAuth is disabled"));
++        assert_eq!(std::fs::read(&provider.cache.cache_path).unwrap(), before);
++    }
++
++    #[tokio::test]
++    #[serial_test::serial]
++    async fn unattended_missing_auth_fails_without_oauth() {
++        let root = tempfile::tempdir().unwrap();
++        let root_path = root.path().to_string_lossy().to_string();
++        let _guard = env_lock::lock_env([
++            ("GOOSE_PATH_ROOT", Some(root_path.as_str())),
++            ("GOOSE_CHATGPT_CODEX_NONINTERACTIVE", Some("1")),
++        ]);
++        let provider = ChatGptCodexAuthProvider::new(Arc::new(ChatGptCodexAuthState::new()));
++        let result = tokio::time::timeout(std::time::Duration::from_secs(1), provider.get_valid_token()).await;
++        let error = result.expect("must not wait for browser callback").err().unwrap();
++        assert!(error.to_string().contains("Unattended OAuth is disabled"));
++        assert!(!TokenCache::new().has_token());
++    }
++
+     #[test]
+     #[serial_test::serial]
+     fn inventory_configured_uses_oauth_token_cache() {
 diff --git a/crates/goose/src/providers/claude_acp.rs b/crates/goose/src/providers/claude_acp.rs
 index 7271c5f1146e5c5492b10f4f23de9da5e46c583a..1618c58c7a03083b0a6b0048c87a08d0d0d7d82f 100644
 --- a/crates/goose/src/providers/claude_acp.rs
@@ -3807,93 +3899,3 @@ index 121de50d9e3408e335fcb7dbe7e17d006b7b30d6..3f71cb9312bc4cfa6cc02b7334b4fef6
    - Test multi-turn thinking preservation for providers that reject replayed reasoning_content
    - Test Z.AI Coding Plan streamed tool calls and interruption recovery
    - Validate ACP thinking-effort discovery, forwarding, and provider switching
-diff --git a/crates/goose/src/providers/chatgpt_codex.rs b/crates/goose/src/providers/chatgpt_codex.rs
---- a/crates/goose/src/providers/chatgpt_codex.rs
-+++ b/crates/goose/src/providers/chatgpt_codex.rs
-@@ -830,13 +830,17 @@
-     }
- 
-     async fn get_valid_token(&self) -> Result<TokenData> {
-+        self.get_valid_token_with_issuer(ISSUER).await
-+    }
-+
-+    async fn get_valid_token_with_issuer(&self, issuer: &str) -> Result<TokenData> {
-         if let Some(mut token_data) = self.cache.load() {
-             if token_data.expires_at > Utc::now() + chrono::Duration::seconds(60) {
-                 return Ok(token_data);
-             }
- 
-             tracing::debug!("Token expired, attempting refresh");
--            match refresh_access_token_with_issuer(ISSUER, &token_data.refresh_token).await {
-+            match refresh_access_token_with_issuer(issuer, &token_data.refresh_token).await {
-                 Ok(new_tokens) => {
-                     token_data.access_token = new_tokens.access_token;
-                     token_data.refresh_token = new_tokens.refresh_token;
-@@ -855,11 +859,16 @@
-                 }
-                 Err(e) => {
-                     tracing::warn!("Token refresh failed, will re-authenticate: {}", e);
--                    self.cache.clear();
-+                    if std::env::var("GOOSE_CHATGPT_CODEX_NONINTERACTIVE").as_deref() != Ok("1") {
-+                        self.cache.clear();
-+                    }
-                 }
-             }
-         }
- 
-+        if std::env::var("GOOSE_CHATGPT_CODEX_NONINTERACTIVE").as_deref() == Ok("1") {
-+            anyhow::bail!("Goose chatgpt_codex authentication unavailable. Complete interactive goose configure using the same GOOSE_PATH_ROOT, then explicitly resume. Unattended OAuth is disabled.");
-+        }
-         tracing::info!("Starting OAuth flow for ChatGPT Codex");
-         let token_data = perform_oauth_flow(self.state.as_ref()).await?;
-         self.cache.save(&token_data)?;
-@@ -1095,6 +1104,49 @@
-                     .collect()
-             })
-             .unwrap_or_default()
-+    }
-+
-+    #[tokio::test]
-+    #[serial_test::serial]
-+    async fn unattended_refresh_failure_preserves_cache_and_never_starts_oauth() {
-+        let root = tempfile::tempdir().unwrap();
-+        let root_path = root.path().to_string_lossy().to_string();
-+        let _guard = env_lock::lock_env([
-+            ("GOOSE_PATH_ROOT", Some(root_path.as_str())),
-+            ("GOOSE_CHATGPT_CODEX_NONINTERACTIVE", Some("1")),
-+        ]);
-+        let server = MockServer::start().await;
-+        Mock::given(method("POST")).and(path("/oauth/token"))
-+            .respond_with(ResponseTemplate::new(400).set_body_string("fixture revoked token"))
-+            .expect(1).mount(&server).await;
-+        let provider = ChatGptCodexAuthProvider::new(Arc::new(ChatGptCodexAuthState::new()));
-+        provider.cache.save(&TokenData {
-+            access_token: "fixture-only-access".to_string(),
-+            refresh_token: "fixture-only-refresh".to_string(),
-+            id_token: None, expires_at: Utc::now() - chrono::Duration::hours(1), account_id: None,
-+        }).unwrap();
-+        let before = std::fs::read(&provider.cache.cache_path).unwrap();
-+        let result = tokio::time::timeout(std::time::Duration::from_secs(3),
-+            provider.get_valid_token_with_issuer(&server.uri())).await;
-+        let error = result.expect("must not wait for browser callback").err().unwrap();
-+        assert!(error.to_string().contains("Unattended OAuth is disabled"));
-+        assert_eq!(std::fs::read(&provider.cache.cache_path).unwrap(), before);
-+    }
-+
-+    #[tokio::test]
-+    #[serial_test::serial]
-+    async fn unattended_missing_auth_fails_without_oauth() {
-+        let root = tempfile::tempdir().unwrap();
-+        let root_path = root.path().to_string_lossy().to_string();
-+        let _guard = env_lock::lock_env([
-+            ("GOOSE_PATH_ROOT", Some(root_path.as_str())),
-+            ("GOOSE_CHATGPT_CODEX_NONINTERACTIVE", Some("1")),
-+        ]);
-+        let provider = ChatGptCodexAuthProvider::new(Arc::new(ChatGptCodexAuthState::new()));
-+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), provider.get_valid_token()).await;
-+        let error = result.expect("must not wait for browser callback").err().unwrap();
-+        assert!(error.to_string().contains("Unattended OAuth is disabled"));
-+        assert!(!TokenCache::new().has_token());
-     }
- 
-     #[test]
