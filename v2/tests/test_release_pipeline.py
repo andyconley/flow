@@ -19,6 +19,22 @@ from release_verify_published import verify_public_manifest
 
 
 class ReleasePipelineTests(unittest.TestCase):
+    def test_manual_recovery_uses_main_exact_sha_and_serialized_normal_gates(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/release.yml').read_text())
+        events=workflow.get('on',workflow.get(True))
+        self.assertEqual(set(events),{'push','workflow_dispatch'})
+        self.assertEqual(events['push'],{'branches':['main']})
+        self.assertIsNone(events['workflow_dispatch'])  # No source/version/bypass inputs.
+        self.assertEqual(workflow['concurrency'],{'group':'release','cancel-in-progress':False})
+        analyze=workflow['jobs']['analyze']
+        self.assertEqual(analyze['if'],"github.ref == 'refs/heads/main'")
+        checkout=next(step for step in analyze['steps'] if step.get('uses','').startswith('actions/checkout@'))
+        self.assertEqual(checkout['with']['ref'],'${{ github.sha }}')
+        self.assertEqual(checkout['with']['persist-credentials'],False)
+        self.assertNotIn('inputs',json.dumps(workflow))
+        # All existing downstream gate assertions also apply to manual runs.
+        self.test_every_publisher_depends_on_verified_exact_build_and_candidate()
+
     def test_bootstrap_rejects_legacy_release_before_running_its_installer(self):
         script=(ROOT/'install.sh').read_text().split("<<'PYTHON'\n",1)[1].split('\nPYTHON',1)[0]
         tag='v0.51.0';base='https://github.com/andyconley/flow/releases/download/'+tag+'/'

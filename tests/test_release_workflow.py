@@ -32,10 +32,6 @@ def workflow_contract_findings(text: str) -> set[str]:
 
     findings = set()
     analyze = block("analyze", "validate-candidate")
-    if "  workflow_dispatch:\n" not in text or "if: github.ref == 'refs/heads/main'" not in analyze:
-        findings.add("main-only-recovery")
-    if "  group: release\n  cancel-in-progress: false\n" not in text:
-        findings.add("serialized-recovery")
     candidate = block("validate-candidate", "publish")
     publish = block("publish", "verify-published")
     verify = block("verify-published", None)
@@ -106,8 +102,6 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 
     def test_required_source_mutations_are_detected(self) -> None:
         mutations = {
-            "main-only-recovery": lambda text: text.replace("    if: github.ref == 'refs/heads/main'\n", "", 1),
-            "serialized-recovery": lambda text: text.replace("cancel-in-progress: false", "cancel-in-progress: true", 1),
             "publish-dependency": lambda text: text.replace("needs: [analyze, validate-candidate]", "needs: analyze", 1),
             "analysis-credential": lambda text: text.replace("FLOW_RELEASE_MODE: preview", "FLOW_RELEASE_MODE: preview\n          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", 1),
             "exact-checkout": lambda text: text.replace("ref: ${{ github.sha }}", "ref: main", 1),
@@ -162,6 +156,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 
     def test_no_bypass_or_failure_tolerant_publication_constructs(self) -> None:
         forbidden = (
+            "workflow_dispatch:",
             "continue-on-error",
             "always()",
             "git push --force",
@@ -172,13 +167,6 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertNotIn(value, self.text)
         self.assertIn("cancel-in-progress: false", self.text)
-
-    def test_recovery_has_no_release_or_source_override_inputs(self) -> None:
-        header = self.text[:self.text.index("jobs:\n")]
-        self.assertIn("  push:\n    branches: [main]\n  workflow_dispatch:\n", header)
-        self.assertNotIn("inputs:", header)
-        self.assertIn("if: github.ref == 'refs/heads/main'", self.job_block("analyze", "validate-candidate"))
-        self.assertIn("ref: ${{ github.sha }}", self.job_block("analyze", "validate-candidate"))
 
     def test_publisher_failure_is_reconciled_without_retry_or_mutation(self) -> None:
         publish = self.job_block("publish", "verify-published")
