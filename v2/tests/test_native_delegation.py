@@ -56,7 +56,7 @@ class DelegationTests(unittest.TestCase):
    broker=Delegation({'task':'frozen task','workspace':str(workspace)},profile,self.root,native,'/fixture/goose',self.root/('evidence-'+operation),operation=operation)
    def launch(command,**kwargs):
     self.assertEqual(command[command.index('--provider')+1],profile['provider']);self.assertEqual(command[command.index('--model')+1],profile['model']);self.assertEqual(kwargs['cwd'],workspace);self.assertNotIn('--text',command)
-    bound=json.loads(Path(command[command.index('--recipe')+1]).read_text());self.assertIn('frozen task',bound['prompt'])
+    bound=yaml.safe_load(Path(command[command.index('--recipe')+1]).read_text());self.assertIn('frozen task',bound['prompt'])
     if operation=='implement':self.assertEqual(kwargs['env']['GOOSE_INPUT_LIMIT'],'32768');self.assertNotIn('GOOSE_MAX_TOKENS',kwargs['env'])
     else:self.assertEqual(kwargs['env']['CLAUDE_CONFIG_DIR'],'/private/claude');self.assertEqual(kwargs['env']['CODEX_HOME'],'/private/codex');self.assertEqual(kwargs['env']['GOOSE_NATIVE_ACP_COMPLETION'],'true')
     kwargs['stdout'].write(json.dumps({'type':'message','message':{'role':'assistant','content':[{'type':'text','text':json.dumps(report)}]}})+'\n');kwargs['stdout'].flush()
@@ -65,3 +65,12 @@ class DelegationTests(unittest.TestCase):
     with patch('poc.knowledge.local_model_digest',return_value='a'*64),patch('poc.runtime_env.environment',return_value={'PATH':'/usr/bin','GOOSE_PATH_ROOT':str(self.root/'goose')}),patch('poc.native_delegation.subprocess.Popen',side_effect=launch),patch('poc.native_delegation.ProcessScope',Scope):broker.run()
     self.assertEqual(broker.result['state'],'completed',broker.result);self.assertEqual(broker.result['report'],report)
    finally:broker.close()
+
+ def test_bound_recipe_multiline_parameters_parse_in_real_goose(self):
+  from poc.native_delegation import write_bound_recipe
+  from poc.runtime_env import goose_binary
+  role={'version':'1.0.0','title':'fixture','description':'serialization regression','instructions':'Context:\n{{ task | indent(2) }}','prompt':'{{ task | indent(2) }}','parameters':[{'key':'task','input_type':'string','requirement':'required','description':'approved task','default':'{\n  "goal": "preserve quotes and lines"\n}'}]}
+  path=self.root/'bound.yaml';write_bound_recipe(path,role)
+  env={**os.environ,'GOOSE_PATH_ROOT':str(self.root/'goose-config')}
+  result=subprocess.run([str(goose_binary()),'recipe','validate',str(path)],env=env,text=True,capture_output=True,timeout=15)
+  self.assertEqual(result.returncode,0,result.stderr+result.stdout)

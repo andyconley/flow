@@ -14,6 +14,13 @@ from .lifecycle import ProcessScope
 TOOLS=[{'name':'delegate_implementation','description':'Start the ONE approved implementation with its frozen local worker. No arguments or task/provider overrides. If running, use delegation_status until terminal; never implement it yourself.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}},
        {'name':'delegation_status','description':'Wait up to 15 seconds and return the approved worker status/result. Repeat while running. Does not start another worker.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}]
 
+def write_bound_recipe(path,role):
+    import yaml
+    class LiteralDumper(yaml.SafeDumper):pass
+    LiteralDumper.add_representer(str,lambda dumper,value:dumper.represent_scalar('tag:yaml.org,2002:str',value,style='|' if '\n' in value else None))
+    Path(path).write_text(yaml.dump(role,Dumper=LiteralDumper,sort_keys=False,allow_unicode=True))
+
+
 class Delegation:
     def __init__(self,state,profile,bundle,env,binary,evidence,operation='implement'):
         validate(profile)
@@ -89,7 +96,7 @@ class Delegation:
             if self.operation=='review':prompt+='\nCandidate: '+str(self.state.get('candidate'))+'\nIndependent checks: '+json.dumps(self.state.get('test_results',{}))+'\nInspect/test the actual candidate independently. Do not edit or fix it.'
             prompt+='\nReturn only JSON matching this schema: '+json.dumps(role['response']['json_schema'])
             role['prompt']=prompt
-            bound=self.evidence/'role.json';bound.write_text(json.dumps(role,indent=2)+'\n')
+            bound=self.evidence/'role.yaml';write_bound_recipe(bound,role)
             command=[self.binary,'run','--no-profile','--recipe',str(bound),'--provider',self.profile['provider'],'--model',self.profile['model'],'--output-format','stream-json','--name','flow-bound-'+self.operation]
             remaining=max(0,self.state.get('deadline',time.time()+600)-time.time())
             if remaining<=0:raise RuntimeError('Approved execution budget exhausted before delegation')
