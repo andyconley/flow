@@ -27,6 +27,7 @@ preserved; ambiguous ownership or edited managed surfaces block migration.
 ## Update and recover
 
 ```sh
+flow installation status --json    # selected version, source, mode and legacy labels
 flow update --check --json
 flow update                       # reuses knowledge assets or asks for consent
 # unattended: flow update --knowledge download (or explicit --knowledge defer)
@@ -38,6 +39,8 @@ and patched Goose assets. Node dependencies use npm ci and package-lock
 integrity. Every downloaded asset is checked before activation. Code and Python
 environments live in versioned directories under `~/.flow/v2/releases/`;
 launchers select `~/.flow/v2/current`. Deleting your original checkout is safe.
+`flow installation status` reads the selected manifest through that pointer, without network or provisioning. Old `~/.flow/config.toml` (`[install].version`) and a real `~/.flow/source` directory are retained legacy state, not v2 version/source authority. A separate clone such as `~/personal/flow` is independent: release updates never pull, stash or reset it, and dirty clone changes do not block release updates. `flow status` remains work-item status and also includes installation identity.
+
 Mutable state stays under `~/.flow/v2/state/`. Updates refuse active operations.
 Rollback restores the prior selection and native surfaces, preserving history;
 post-install user edits must be reconciled instead of overwritten.

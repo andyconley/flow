@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import urllib.request
 import uuid
 from .release_http import github_json
@@ -219,13 +220,13 @@ def prepare_release(release, root):
         target=state/name; target.mkdir(exist_ok=True); (runtime/name).symlink_to(target)
     python=v2/'.venv/bin/python'
     env={k:v for k,v in os.environ.items() if k not in {'GITHUB_TOKEN','GH_TOKEN','FLOW_RELEASE_READ_TOKEN','GIT_ASKPASS','SSH_ASKPASS'}}
-    subprocess.run([sys.executable,'-m','venv',str(v2/'.venv')],check=True,env=env)
-    subprocess.run([str(python),'-m','pip','install','--no-index','--find-links',str(release/'wheels'),'--require-hashes','--no-deps','-r',str(release/'wheels/requirements.lock')],check=True,env=env)
-    subprocess.run([str(python),'-m','pip','check'],check=True,env=env)
+    subprocess.run([sys.executable,'-m','venv',str(v2/'.venv')],check=True,stdout=sys.stderr,stderr=sys.stderr,env=env)
+    subprocess.run([str(python),'-m','pip','install','--no-index','--find-links',str(release/'wheels'),'--require-hashes','--no-deps','-r',str(release/'wheels/requirements.lock')],check=True,stdout=sys.stderr,stderr=sys.stderr,env=env)
+    subprocess.run([str(python),'-m','pip','check'],check=True,stdout=sys.stderr,stderr=sys.stderr,env=env)
     adapters=runtime/'adapters'; adapters.mkdir()
     shutil.copyfile(v2/'adapters.package.json',adapters/'package.json');shutil.copyfile(v2/'adapters.package-lock.json',adapters/'package-lock.json')
-    subprocess.run(['npm','ci','--ignore-scripts','--prefix',str(adapters)],check=True,env={**env,'npm_config_cache':str(root/'cache/npm')})
-    subprocess.run([str(python),'-m','poc.goose_artifact','--extract'],cwd=v2,check=True,env=env)
+    subprocess.run(['npm','ci','--ignore-scripts','--prefix',str(adapters)],check=True,stdout=sys.stderr,stderr=sys.stderr,env={**env,'npm_config_cache':str(root/'cache/npm')})
+    subprocess.run([str(python),'-m','poc.goose_artifact','--extract'],cwd=v2,check=True,stdout=sys.stderr,stderr=sys.stderr,env=env)
 
 
 def switch(root,target):
@@ -339,7 +340,7 @@ def provision_knowledge(release,root,mode,model_policy='offline'):
         import time
         command=[str(release/'v2/.venv/bin/python'),'-m','poc.install_knowledge','--root',str(root/'state/knowledge'),'--mode',mode,'--result',str(result)]
         if model_protocol:command.extend(['--model-policy',model_policy])
-        child=subprocess.Popen(command,cwd=release/'v2',env=env,pass_fds=(int(env['FLOW_INSTALL_KNOWLEDGE_FD']),),start_new_session=True)
+        child=subprocess.Popen(command,cwd=release/'v2',env=env,stdout=sys.stderr,stderr=sys.stderr,pass_fds=(int(env['FLOW_INSTALL_KNOWLEDGE_FD']),),start_new_session=True)
         try:scope=ProcessScope(child.pid)
         except BaseException:
             import signal
@@ -483,13 +484,66 @@ def active_release(home):
     if not current.exists():return {'version':None,'runtime':None}
     runtime=current.resolve()
     try:version=json.loads((runtime/'release-manifest.json').read_text())['version']
-    except (OSError,ValueError,KeyError):version='unknown'
+    except (OSError,ValueError,KeyError,TypeError):version='unknown'
     return {'version':version,'runtime':str(runtime)}
+
+
+
+def installation_status(home, running_source=None):
+    """Read selection metadata only: no Git, provisioning, writes or legacy migration."""
+    home=Path(home).resolve();root=home/'.flow/v2';pointer=root/'current'
+    present=pointer.exists() or pointer.is_symlink()
+    manifest={};problem=None;runtime=None
+    if present:
+        try:
+            target=pointer.resolve(strict=True);runtime=str(target)
+            if not pointer.is_symlink() or not target.is_relative_to((root/'releases').resolve()):
+                raise ValueError('Not a managed release pointer')
+            manifest=json.loads((target/'release-manifest.json').read_text())
+            if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',manifest.get('version','')) or not re.fullmatch(r'[a-f0-9]{40}',manifest.get('source_sha','')):
+                raise ValueError('Incomplete release identity')
+        except (OSError,ValueError,TypeError,AttributeError,RuntimeError):
+            problem='Selected pointer or release manifest is missing, invalid or unreadable; inspect before retrying. Legacy metadata was not substituted.'
+    mode='invalid-selection' if problem else ('managed-release' if present else 'no-managed-release')
+    result={'mode':mode,'version':manifest.get('version') if not problem else 'unknown',
+            'source_sha':manifest.get('source_sha') if not problem else None,
+            'runtime':runtime,'code':str(Path(runtime)/'v2') if runtime else None,
+            'selection_pointer':str(pointer),'authority':'release-manifest.json in the target captured from selection_pointer',
+            'checkout_policy':'Release updates download verified published assets. Separate Git checkouts are not pulled or modified; no stash, commit or reset is needed.'}
+    if problem:result['problem']=problem
+    if not present:result['next_action']='No managed v2 release is selected. Install v2 with curl -fsSL https://raw.githubusercontent.com/andyconley/flow/main/install.sh | bash. A restored pre-v2 launcher may still use retained legacy state.'
+    legacy=home/'.flow/config.toml'
+    if legacy.exists() or legacy.is_symlink():
+        metadata={'path':str(legacy),'role':'legacy-v1; not authoritative for v2','preserved':True}
+        try:
+            install=tomllib.loads(legacy.read_text()).get('install',{})
+            metadata.update(version=install.get('version') if isinstance(install.get('version'),str) else None,
+                            mode=install.get('mode') if isinstance(install.get('mode'),str) else None)
+        except (OSError,ValueError,AttributeError):metadata['read_status']='unreadable or malformed; preserved unchanged'
+        result['legacy_config']=metadata
+    source=home/'.flow/source'
+    if source.exists() or source.is_symlink():
+        result['retained_legacy_source']={'path':str(source),'kind':'symlink' if source.is_symlink() else ('directory' if source.is_dir() else 'file'),
+                                           'role':'retained legacy state; not the v2 selected source','preserved':True}
+    if running_source is not None:
+        code=Path(running_source).resolve();matches=bool(result['code'] and code==Path(result['code']).resolve() and mode=='managed-release')
+        result['invocation']={'code':str(code),'matches_selected':matches,
+                              'mode':'managed-release' if matches else ('unselected-release' if (code.parent/'release-manifest.json').is_file() else 'source-checkout')}
+    return result
+
+
+def selection_summary(selection, *, status_command=True):
+    message='Selected mode '+selection['mode']+'; selected v2 version '+str(selection['version'] or 'none')+'; source '+str(selection['code'] or 'none')+'; pointer '+selection['selection_pointer']+'.'
+    if selection.get('legacy_config'):
+        legacy=selection['legacy_config'];message+=' Retained '+legacy['path']+' is legacy v1 (version '+str(legacy.get('version') or 'unknown')+'), not the v2 version authority.'
+    if selection.get('retained_legacy_source'):message+=' '+selection['retained_legacy_source']['path']+' is retained legacy state, not the selected v2 source.'
+    advice='Use flow installation status for details.' if status_command else 'Use flow --version to check the restored launcher; older restored versions may not support installation status.'
+    return message+' Separate Git checkouts are unchanged; release updates do not require git pull or stashing. '+advice
 
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=['install','update','rollback'])
+    parser.add_argument('action',choices=['install','update','rollback','status'])
     parser.add_argument('--home',type=Path,default=Path.home());parser.add_argument('--bundle',type=Path)
     parser.add_argument('--repository',default=REPOSITORY);parser.add_argument('--version');parser.add_argument('--check',action='store_true');parser.add_argument('--json',action='store_true')
     parser.add_argument('--knowledge',choices=('ask','download','offline','defer'),default='ask',help='Reuse working knowledge; otherwise ask for download consent. Noninteractive runs must explicitly download, use verified offline assets, or defer.')
@@ -500,18 +554,27 @@ def main(argv=None):
     if (args.non_interactive or args.json) and args.knowledge_model=='ask':args.knowledge_model='offline'
     before=active_release(args.home);manifest=None
     try:
-        if args.action=='rollback': result=rollback(args.home)
+        if args.action=='status':
+            result=installation_status(args.home,ROOT)
+        elif args.action=='rollback':
+            with contextlib.redirect_stdout(sys.stderr):result=rollback(args.home)
         else:
             supported()
             if args.bundle:manifest=json.loads((args.bundle/'release-manifest.json').read_text());urls=None
             else:manifest,urls=latest(args.repository,args.version)
             if args.check:
                 validate(manifest);result={'latest':manifest['version'],'source_sha':manifest['source_sha'],'supported_targets':manifest['supported_targets']}
-            else:result=install_release(args.home,manifest,urls=urls,bundle=args.bundle,knowledge_mode=args.knowledge,knowledge_runner=lambda release,root,mode:provision_knowledge(release,root,mode,model_policy=args.knowledge_model))
+                print('Flow '+args.action+' CHECK ONLY: available version '+manifest['version']+'; active version '+str(before['version'] or 'none')+'; no activation.',file=sys.stderr)
+            else:
+                with contextlib.redirect_stdout(sys.stderr):
+                    result=install_release(args.home,manifest,urls=urls,bundle=args.bundle,knowledge_mode=args.knowledge,knowledge_runner=lambda release,root,mode:provision_knowledge(release,root,mode,model_policy=args.knowledge_model))
         if args.action in ('install','update') and not args.check:
             after=active_release(args.home)
             result['activation']={'outcome':'activated' if result.get('changed') else 'unchanged','requested_version':manifest['version'],'current_version':after['version'],'previous_version':before['version']}
             print('Flow '+args.action+(' UPDATED' if result.get('changed') else ' NOT UPDATED (already selected)')+': active version '+str(after['version'] or 'none')+'; knowledge '+str(result.get('knowledge',{}).get('state','unknown'))+'.',file=sys.stderr)
+        if args.action!='status':
+            result['installation']=installation_status(args.home)
+            print(selection_summary(result['installation'],status_command=args.action!='rollback'),file=sys.stderr)
         print(json.dumps(result,indent=2));return 0
     except (ValueError,OSError,subprocess.SubprocessError) as error:
         summary=''
@@ -519,7 +582,7 @@ def main(argv=None):
             after=active_release(args.home)
             selection='Runtime selection unchanged.' if after==before else 'Runtime selection changed; inspect before retrying.'
             summary='Flow '+args.action+(' NOT UPDATED (failed)' if after==before else ' FAILED')+': requested '+str(manifest['version'] if manifest else args.version or 'latest')+'; active version '+str(after['version'] or 'none')+'. '+selection+'\n'
-        parser.exit(1,str(error)+'\n'+summary)
+        parser.exit(1,str(error)+'\n'+summary+selection_summary(installation_status(args.home),status_command=args.action!='rollback')+'\n')
 
 
 if __name__=='__main__': main()

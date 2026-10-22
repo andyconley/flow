@@ -40,6 +40,49 @@ read-only for workflow mutation. Use `create --legacy-run ID` where applicable
 or create a distinct successor after inspecting the preserved evidence and
 quiescence. Prior approvals are never new execution authority.
 
+## Active identity and retained legacy state
+
+```sh
+flow --version
+flow installation status --json
+flow doctor --json
+```
+
+`flow installation status` is a read-only, offline installation check requiring
+no work ID, Node probe, knowledge reconciliation or provider login. It reports
+`mode`, selected `version`, `source_sha`, runtime/code paths and the authoritative
+`~/.flow/v2/current` pointer. `invocation` distinguishes the code being executed
+from the selected install: a source checkout or an older unselected release is
+not presented as active. `flow --project PROJECT --work ID status` is work-item
+status and includes an `installation` object; it is not the installation command.
+
+An old `[install].version` (for example `v0.49.1`) in `~/.flow/config.toml` is
+labeled **legacy v1, not authoritative for v2**. A real `~/.flow/source` release
+directory is likewise retained legacy state, not the selected v2 source. These
+files are not rewritten, relinked or deleted merely to make their versions look
+current: they may be needed when rolling back to a pre-v2 installation. The rollback result reports the restored pointer's manifest rather than the
+last install receipt or old TOML. Restoring an older release may also restore
+a CLI that predates `flow installation status`; use `flow --version` then, and
+retain the rollback JSON as the selection record. If rollback restores pre-v2
+state, that result explicitly reports no managed release; it does not invent a
+v2 version from legacy fields. The restored pre-v2 CLI may lack the new command.
+A broken pointer or invalid manifest is reported as invalid selection without a
+legacy-version fallback.
+
+A separate clone such as `~/personal/flow` is not an installer input. Run
+`flow update` from any working directory; no `git pull`, stash, reset or checkout
+cleanup is needed. Release updates leave staged, unstaged and untracked clone
+files alone. Use the selected code path in status to locate the running release;
+use Git separately only when intentionally maintaining that independent clone.
+
+Install/update/check/rollback results include `installation` identity. In
+`update --check`, `latest` and its `source_sha` describe the available target;
+`installation.version` and `installation.source_sha` describe what is selected
+now. Check-only output explicitly says no activation occurred. Human
+summaries on stderr label selected mode/source and retained legacy fields.
+Preparation and knowledge-worker logs go to stderr; stdout remains one JSON
+result, including with `--json`. Failed updates report the still-selected runtime.
+
 ## Stable layout and updates
 
 - `~/.flow/v2/releases/TAG-SHA-ID/`: immutable release code and its own Python/npm dependencies.
@@ -66,8 +109,11 @@ time visible; retries never run early to fit the budget. Maintainers can set
 allows one full hourly reset. Metadata errors never print tokens or response
 bodies. Public consumer checks stay anonymous and still must pass.
 
-No installation/update starts provider inference, account login or a live smoke
-run. Native clients own sign-in; any later worker auth pause is separate from
+Installation/update does not start coding/review-provider inference, account login
+or a live agent smoke run. Knowledge provisioning may run the already selected
+local extraction model and build a new audited generation when its pipeline
+fingerprint changes, even while reusing downloaded assets. Authored notes and
+settings are preserved; generated snapshot selection can advance after audit. Native clients own sign-in; any later worker auth pause is separate from
 release readiness. After updating, open a fresh native host session to refresh
 skills. The host delegates all stage coordination through the CLI graph; it does
 not research or plan the work itself.

@@ -240,7 +240,7 @@ def main(argv=None):
     utility = dispatch(sys.argv[1:] if argv is None else argv)
     if utility is not None:
         return utility
-    parser = argparse.ArgumentParser(description=__doc__, epilog='Reports/discovery: metrics, cost, harvest, normalize, runs, run, archive, backlog, gaps, projects, model. These also support the --project prefix.')
+    parser = argparse.ArgumentParser(description=__doc__, epilog='Installation identity (no work ID): flow installation status --json. Reports/discovery: metrics, cost, harvest, normalize, runs, run, archive, backlog, gaps, projects, model. These also support the --project prefix.')
     parser.add_argument('--version', action='version', version='Flow 2.0.0 (Goose/LangGraph)')
     parser.add_argument('--project', required=True, type=Path)
     parser.add_argument('--work')
@@ -338,6 +338,8 @@ def main(argv=None):
                 options = checkpoint['channel_values']['runtime_options']
                 graph = build(artifacts, NativeHarness(options), BriefChecker(artifacts)).compile(checkpointer=saver)
                 result = summarize(graph.get_state(config, subgraphs=True), artifacts)
+                from .managed import installation_status
+                result['installation'] = installation_status(Path.home(), ROOT)
                 result['checkpoint_view'] = 'latest_committed_snapshot'
                 result['operator_active'] = operator_active(state_dir)
                 if result['operator_active']:
