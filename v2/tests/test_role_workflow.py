@@ -165,7 +165,7 @@ class RoleWorkflowTests(unittest.TestCase):
         job=GooseJob(role_bundle=ROOT/'role-bundle')
         with patch('poc.goose_job.subprocess.Popen') as launch:
             result=job._run(state,'implement','prompt')
-        self.assertEqual(result['status'],'blocked');launch.assert_not_called()
+        self.assertEqual(result['status'],'timeout');launch.assert_not_called()
 
     def test_entrypoint_writes_minimal_handoff_and_completed_resume_is_idle(self):
         import contextlib

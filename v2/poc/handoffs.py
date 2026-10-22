@@ -113,7 +113,7 @@ class Handoffs:
             raise ArtifactError('Implementation result requires status')
         if kind in {'check', 'review'} and not isinstance(result.get('passed'), bool):
             raise ArtifactError('Check/review result requires passed boolean')
-        if kind in {'define','solution','plan'} and (result.get('status') not in {'completed','blocked','permission_required','scope_required','uncertain','pending'} or
+        if kind in {'define','solution','plan'} and (result.get('status') not in {'completed','blocked','permission_required','scope_required','uncertain','pending','timeout','failed'} or
                 (result.get('status')=='completed' and not isinstance(result.get('content'),str))):
             raise ArtifactError('Stage result requires an explicit status and substantive content')
 

@@ -83,3 +83,40 @@ Codex configuration validation leaves inference availability to dispatch.
 
 See [predecessor linkage](GLG_PREDECESSORS.md) for dedicated successor history links.
 Linkage never imports predecessor approval or overloads artifact supersession.
+
+### Research handoff repair and verification evidence
+
+A stage's substantive research and raw result are immutable work-item artifacts
+under `.glg/work/<work>/shaping` and `results`. If its proposed brief is invalid,
+Flow pauses with `kind=repair-brief`, field diagnostics, the coordinator's shared
+schema, and exact research/repair references. Inspect those references and use
+`flow --project PROJECT --work WORK brief --file repaired.json`. Alternatively,
+resume with `{"action":"brief","brief_ref":{"path":"...","revision":"..."}}`.
+This repairs the failed transition using the completed operation result; it does
+not launch the specialists again. Repeated resume without a decision stays paused.
+An uncertain operation still requires evidence-based reconciliation before replay.
+Revised briefs supersede their predecessors and require approval of the new exact
+revision. Approval shows the verification expectations and previous revision.
+
+Definition drafts may use `verification_plan` without an argv through create or
+brief revision commands. Implementation approval and plan-stage readiness require a nonempty executable `check_command` argv. Publishing/editing a brief
+validates its structure. Approval and execution preflight check the real cwd,
+PATH, command executable, project Python selection, and optional `prerequisites`
+(executable names/paths). Resolve setup outside the timed check with existing
+authorization; Flow performs no implicit install or credential change. A checker
+must itself build fresh outputs and assert domain requirements where needed.
+
+Optional `coverage` maps every acceptance criterion exactly once to `automated`,
+`manual`, or `uncovered`, with an evidence description. `check_scope` is `smoke`
+or `acceptance`; omitted mappings remain uncovered and omitted scope is smoke.
+Check evidence retains the exact brief/candidate revision, environment, output,
+exit, coverage, manual review and gaps. A passing smoke command is not full
+acceptance. Manual criteria require actual human review; closure acceptance
+remains a separate exact-revision decision.
+
+Work commands return 2 for invalid briefs or failed/blocked/timed-out outcomes
+and 3 for uncertain effects requiring reconciliation. Zero can also mean a
+successfully handled command paused awaiting approval: inspect JSON `outcome`,
+`pending` and `stage_outcome` before announcing completion. Read-only status is
+observational. Flow cannot force external caller wrappers to propagate its exit
+status: wrappers must preserve the child status and inspect its structured outcome.

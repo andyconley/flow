@@ -40,7 +40,7 @@ class GooseJob:
    return {'status':'scope_required','submitted':False,'reason':'Implementation profile differs from approved work configuration'}
   if s['inputs']!=task_input_digest(s['task'],s['workspace'],s.get('project_context','')):return {'status':'scope_required' if self.role_bundle else 'blocked','reason':'approved task/check inputs changed'}
   budget=min(self.timeout,max(0,s['deadline']-time.time())) if self.role_bundle and s.get('deadline') is not None else self.timeout
-  if budget<=0:return {'status':'blocked','reason':'Approved workflow time budget exhausted; no execution submitted'}
+  if budget<=0:return {'status':'timeout','reason':'Approved workflow time budget exhausted; no execution submitted'}
   index=f"{s.get('corrections',0)+1}-{s.get('resume_epoch',0)}" if self.role_bundle else s.get('attempt',0)+1; p=ROOT/'artifacts'/s['job_id']/f'{kind}-{index}.json';p.parent.mkdir(parents=True,exist_ok=True)
   if p.exists():
    prior=json.loads(p.read_text())
@@ -138,7 +138,7 @@ class GooseJob:
   record['context_configuration']['application_basis']='captured launch environment; Goose Ollama maps GOOSE_INPUT_LIMIT to num_ctx'
   if self.role_bundle and s.get('deadline') is not None:
    budget=min(budget,max(0,s['deadline']-time.time()))
-   if budget<=0:return {'status':'blocked','reason':'Approved workflow time budget exhausted during preflight; no execution submitted','submitted':False}
+   if budget<=0:return {'status':'timeout','reason':'Approved workflow time budget exhausted during preflight; no execution submitted','submitted':False}
   store(p,record) # Native invocation intent; a crash now requires reconciliation.
   with output.open('w') as out,err.open('w') as errors:
    child=subprocess.Popen(cmd,cwd=s['workspace'],env=env,stdout=out,stderr=errors,start_new_session=True)
@@ -164,7 +164,7 @@ class GooseJob:
      break
     if time.monotonic()>deadline:
      stopped=scope.stop();child.wait(timeout=5)
-     record.update(status='blocked',reason='timeout; do not resubmit without reconciliation',stop=stopped);self._observe(record,s,kind,index);store(p,record);return record
+     record.update(status='timeout' if not scope.observe() else 'uncertain',reason='timeout; do not resubmit without reconciliation',stop=stopped);self._observe(record,s,kind,index);store(p,record);return record
     if time.monotonic()>=next_observation:
      from .knowledge import home as knowledge_home,trigger
      try:
@@ -242,7 +242,7 @@ class GooseJob:
 
  def shape(self,s,stage,assignment):
   from .project_context import render
-  from .artifacts import Artifacts
+  from .artifacts import Artifacts, brief_schema
   roles={'define':'business-analyst','solution':'solution-architect','plan':'lead-developer'}
   context=render(Artifacts(s['workspace'],s['work_id']).read(s['context_ref'])['payload'])
   task=json.dumps({'stage':stage,'assignment':assignment,'approval':s['stage_authorization_ref']},sort_keys=True)
@@ -253,9 +253,26 @@ class GooseJob:
 Delegate through converted role source {roles[stage]} and other configured specialists as appropriate. You own research coordination, comparison, synthesis and the proposed stage result. Do not ask the host model to do research, delegate specialists or write the plan. Ask consequential questions in findings for the human.
 Assignment: {task}
 Project context: {context}
-Research/planning authority only. No implementation, install, deployment, new login or automatic approval. Preserve existing scope and permission boundaries. Return only JSON with outcome completed|blocked|permission_required|scope_required, content containing substantive findings and limitations. Plan may additionally return brief with goal, scope, acceptance_criteria and check_command argv. Human approval remains mandatory; no stage result grants implementation authority.'''
-  contract={'type':'object','properties':{'outcome':{'type':'string'},'content':{'type':'string'},'brief':{'type':'object'}},'required':['outcome','content'],'additionalProperties':False}
+Research/planning authority only. No implementation, install, deployment, new login or automatic approval. Preserve existing scope and permission boundaries. Return only JSON with outcome completed|blocked|permission_required|scope_required, content containing substantive findings and limitations. Plan may additionally return brief matching the supplied schema, including executable check_command argv. Earlier stages may describe planned verification in content. Map every acceptance criterion using coverage (automated, manual or uncovered with evidence), declare check_scope smoke or acceptance and prerequisite executable names. Never claim a smoke command proves all requirements. Preserve research in content for targeted brief-only repair. Human approval remains mandatory; no stage result grants implementation authority.'''
+  contract={'type':'object','properties':{'outcome':{'type':'string'},'content':{'type':'string'},'brief':brief_schema(executable=stage=='plan')},'required':['outcome','content'],'additionalProperties':False}
   result=self._run({**state,'response_schema':contract},'shape-'+stage,prompt)
+  # Retain raw evidence in the project work item, independent of runtime cleanup.
+  result=dict(result)
+  for channel in ('output','stderr'):
+   if result.get(channel):
+    try:result[channel+'_content']=Path(result[channel]).read_text()
+    except OSError as error:result[channel+'_retention_error']=str(error)
+  if result.get('status')=='blocked' and result.get('exit')==0 and result.get('quiescent') is True and result.get('response_contract',{}).get('passed') is False:
+   # A rejected brief must not discard otherwise valid completed research.
+   # Never salvage provider failures, uncertain effects or malformed envelopes.
+   import jsonschema
+   report=final_object(result['output'])
+   envelope={**contract,'properties':{**contract['properties'],'brief':{}}}
+   try:jsonschema.validate(report,envelope)
+   except (jsonschema.ValidationError,jsonschema.SchemaError):pass
+   else:
+    if 'brief' in report and report.get('outcome') in {'completed','blocked','permission_required','scope_required'} and isinstance(report.get('content'),str) and report['content'].strip():
+     return {'status':report['outcome'],'content':report['content'],'brief':report['brief'],'runtime':result}
   if result['status']!='completed':return result
   report=final_object(result['output'])
   status=report.get('outcome')

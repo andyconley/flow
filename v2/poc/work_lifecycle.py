@@ -1,10 +1,10 @@
 """Shaping, approvals, existing delivery subgraph and closure; one LangGraph thread."""
 import json
 import time
-from .artifacts import ArtifactError, atomic_write, validate_brief
+from .artifacts import ArtifactError, atomic_write, validate_brief, brief_schema
 from .contracts import State, task_input_digest, digest_tree
-from .project_python import check_command
 from .handoffs import Handoffs
+from .verification import require_ready
 from .project_context import render
 from .workflow import build as delivery
 from langgraph.graph import StateGraph, START, END
@@ -30,6 +30,8 @@ def build(artifacts, harness, checker):
         decision = interrupt({'kind': 'approve-brief' if brief else 'shape-request',
                               'work_id': s['work_id'], 'request': s.get('request'),
                               'brief_ref': brief_ref, 'brief': brief,
+                              'verification_expectations': {key: brief.get(key) for key in ('check_command', 'coverage', 'check_scope', 'prerequisites')} if brief else None,
+                              'previous_brief_ref': artifacts.read(brief_ref)['supersedes'] if brief_ref else None,
                               'proposed_budget_seconds': s.get('budget_seconds', 600),
                               'implementation_profile': s.get('runtime_options',{}).get('implementation_profile'),
                               'budget_policy': s.get('budget_policy', 'legacy-wall-clock'),
@@ -56,8 +58,7 @@ def build(artifacts, harness, checker):
         if action == 'brief':
             reference = decision['brief_ref']
             record = artifacts.read(reference)
-            validate_brief(record['payload'])
-            check_command(s['workspace'], record['payload']['check_command'])
+            validate_brief(record['payload'], executable=False)
             if record['kind'] != 'briefs' or record['supersedes'] != brief_ref:
                 raise ArtifactError('Brief must explicitly supersede the currently proposed revision')
             return {'brief_ref': reference, 'lifecycle_phase': 'awaiting-approval'}
@@ -91,7 +92,7 @@ def build(artifacts, harness, checker):
                 if not brief:
                     raise ArtifactError('Publish a complete brief before approving implementation')
                 validate_brief(brief)
-                check_command(s['workspace'], brief['check_command'])
+                require_ready(s['workspace'], brief)
                 if decision.get('brief_ref') != brief_ref:
                     raise ArtifactError('Approval must name the exact proposed brief revision')
             decisions = s.get('decision_refs', [])
@@ -135,16 +136,38 @@ def build(artifacts, harness, checker):
                 'origin':'goose-langgraph','runtime':result.get('runtime',{}),'authorization_ref':s['stage_authorization_ref']},
                 supersedes=s.get('shaping_refs',{}).get(stage))
             update['shaping_refs']={**s.get('shaping_refs',{}),stage:ref}
-            if result.get('brief'):
-                brief=validate_brief(result['brief'])
-                check_command(s['workspace'], brief['check_command'])
+            if 'brief' in result:
+                proposed = result['brief']
+                repair_ref = None
+                while True:
+                    try:
+                        brief = validate_brief(proposed, executable=stage == 'plan')
+                        break
+                    except ArtifactError as error:
+                        repair_ref = artifacts.publish('shaping', 'brief-repair-'+operation, {
+                            'research_ref': ref, 'result_refs': refs, 'proposed_brief': proposed,
+                            'errors': str(error), 'research_outcome': 'completed', 'brief_outcome': 'invalid'}, supersedes=repair_ref)
+                        decision = interrupt({'kind': 'repair-brief', 'outcome': 'brief-invalid',
+                            'research_outcome': 'completed', 'research_ref': ref, 'repair_ref': repair_ref,
+                            'errors': str(error), 'schema': brief_schema(executable=stage == 'plan'),
+                            'instruction': 'Repair only the proposed brief; research is retained. Use brief --file or resume with action=brief and exact brief_ref.'})
+                        if isinstance(decision, dict) and decision.get('action') == 'stop' and decision.get('actor'):
+                            stopped = artifacts.publish('decisions', 'stop-'+operation, {**decision, 'target_ref': repair_ref})
+                            return {**update, 'decision_refs': [*s.get('decision_refs', []), stopped], 'lifecycle_phase': 'stopped'}
+                        if not isinstance(decision, dict) or decision.get('action') != 'brief':
+                            raise ArtifactError('Targeted repair requires action=brief with an immutable brief_ref')
+                        repaired = artifacts.read(decision['brief_ref'])
+                        if repaired['kind'] != 'briefs' or repaired['supersedes'] != s.get('brief_ref'):
+                            raise ArtifactError('Repair must supersede the currently proposed brief')
+                        proposed = repaired['payload']
                 update['brief_ref']=artifacts.publish('briefs','brief',brief,supersedes=s.get('brief_ref'))
                 update['lifecycle_phase']='awaiting-approval'
         return update
 
     def prepare(s):
         brief = validate_brief(artifacts.read(s['brief_ref'])['payload'])
-        check_command(s['workspace'], brief['check_command'])
+        readiness = require_ready(s['workspace'], brief)
+        artifacts.publish('shaping', 'preflight-'+s['brief_ref']['revision'][:16], readiness)
         context = artifacts.read(s['context_ref'])['payload']
         decision = artifacts.read(s['approval_ref'])['payload']
         if decision['action'] != 'approve' or decision['target_ref'] != s['brief_ref']:
@@ -199,7 +222,7 @@ def build(artifacts, harness, checker):
     b.add_node('closure', closure)
     b.add_edge(START, 'approval')
     b.add_conditional_edges('approval', lambda s: 'prepare' if s['lifecycle_phase'] == 'approved' else 'coordinate-stage' if s['lifecycle_phase']=='coordinate-stage' else END if s['lifecycle_phase'] == 'stopped' else 'approval')
-    b.add_edge('coordinate-stage','approval')
+    b.add_conditional_edges('coordinate-stage', lambda s: END if s['lifecycle_phase'] == 'stopped' else 'approval')
     b.add_edge('prepare', 'delivery')
     b.add_edge('delivery', 'closure')
     b.add_edge('closure', END)

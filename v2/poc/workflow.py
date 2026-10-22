@@ -56,6 +56,8 @@ def build(harness, checker, boundary=None):
         result, refs = call(s, 'review', lambda: harness.review(s))
         if result.get('outcome') in ESCALATIONS:
             phase = result['outcome']
+        elif result.get('outcome') in {'timeout', 'uncertain', 'failed'}:
+            phase = result['outcome']
         elif result.get('blocked'):
             phase = 'blocked'
         elif digest_tree(s['workspace']) != s['candidate'] or result.get('candidate') != s['candidate']:
@@ -101,7 +103,7 @@ def build(harness, checker, boundary=None):
         return 'pause' if s['phase'] in ESCALATIONS else dispatch('check') if s['phase'] == 'completed' else 'reconcile' if s['phase'] == 'uncertain' else 'correct' if s['phase']=='correction' else END
 
     def after_check(s):
-        return 'pause' if s['phase'] in ESCALATIONS else END if s['phase']=='blocked' else dispatch('review') if s['check']['passed'] else 'correct'
+        return 'pause' if s['phase'] in ESCALATIONS else END if s['phase'] in {'blocked', 'timeout', 'uncertain', 'failed'} else dispatch('review') if s['check']['passed'] else 'correct'
 
     b = StateGraph(State)
     for name, fn in [('authorize', authorize), ('implement', implement), ('reconcile', reconcile),
