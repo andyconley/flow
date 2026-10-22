@@ -97,7 +97,9 @@ class Delegation:
             prompt+='\nReturn only JSON matching this schema: '+json.dumps(role['response']['json_schema'])
             role['prompt']=prompt
             bound=self.evidence/'role.yaml';write_bound_recipe(bound,role)
-            command=[self.binary,'run','--no-profile','--recipe',str(bound),'--provider',self.profile['provider'],'--model',self.profile['model'],'--output-format','stream-json','--name','flow-bound-'+self.operation]
+            command=[self.binary,'run','--no-profile','--with-builtin','developer','--recipe',str(bound),'--provider',self.profile['provider'],'--model',self.profile['model'],'--output-format','stream-json','--name','flow-bound-'+self.operation]
+            from .knowledge_tools import attach
+            command,worker_env=attach(command,worker_env)
             remaining=max(0,self.state.get('deadline',time.time()+600)-time.time())
             if remaining<=0:raise RuntimeError('Approved execution budget exhausted before delegation')
             with (self.evidence/'worker.jsonl').open('w') as out,(self.evidence/'worker.stderr').open('w') as err:
