@@ -36,6 +36,26 @@ class ProviderPreflightTests(unittest.TestCase):
             result = check(self.bundle, 'chatgpt_codex', 'gpt', self.profile, self.env, time.time()+60)
         self.assertTrue(result['passed']); self.assertEqual(len(result['providers']),4)
         self.assertEqual(calls.call_count,2)  # account checks dedup; models remain explicit
+    def test_auth_uses_workspace_and_claude_only_real_home(self):
+        self.recipe('worker', 'codex-acp', 'gpt')
+        self.recipe('review', 'claude-acp', 'opus')
+        workspace=self.root/'approved';workspace.mkdir()
+        env={**self.env,'FLOW_V2_CLAUDE_USER_HOME':'/fixture/real-user'}
+        before=dict(env)
+        def run(command, **kwargs):
+            self.assertEqual(kwargs['cwd'],workspace)
+            self.assertEqual(command[:3],['/usr/bin/sandbox-exec','-f',str(self.profile)])
+            effective=kwargs['env']
+            self.assertEqual(effective['HOME'], '/fixture/real-user' if command[3]=='/fixture/claude' else env['HOME'])
+            self.assertEqual(effective['CLAUDE_CONFIG_DIR'],env['CLAUDE_CONFIG_DIR'])
+            self.assertEqual(effective['CODEX_HOME'],env['CODEX_HOME'])
+            return subprocess.CompletedProcess(command,0,'{"loggedIn":true}')
+        with patch('poc.provider_preflight.subprocess.run',side_effect=run) as calls:
+            check(self.bundle,'chatgpt_codex','gpt',self.profile,env,workspace=workspace)
+        self.assertEqual(calls.call_count,2)
+        self.assertEqual(env,before)
+        self.assertFalse((self.home/'codex/auth.json').exists())
+
     def test_unsigned_review_provider_blocks_even_when_implementation_signed_in(self):
         self.recipe('implement', 'codex-acp', 'gpt'); self.recipe('review','claude-acp','opus')
         with patch('poc.provider_preflight.subprocess.run', return_value=subprocess.CompletedProcess([],0,'{"loggedIn":false}')):
@@ -87,10 +107,11 @@ class ProviderPreflightTests(unittest.TestCase):
         job=goose_job.GooseJob(provider='codex-acp',role_bundle=self.bundle)
         with patch.object(goose_job,'ROOT',self.root), patch('poc.knowledge_tools.require_ready'), \
                 patch('poc.native_runtime.prepare',return_value=(self.profile,self.env)), \
-                patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],1,'')), \
+                patch('poc.provider_preflight.subprocess.run',return_value=subprocess.CompletedProcess([],1,'')) as readiness, \
                 patch('poc.goose_job.subprocess.Popen') as launch:
             result=job._run_impl(state,'implement','approved prompt')
             retried=job._run_impl(state,'implement','approved prompt')
+        self.assertEqual(readiness.call_args.kwargs['cwd'],str(workspace))
         self.assertEqual(retried['status'],'permission_required')
         self.assertEqual(result['status'],'permission_required');self.assertFalse(result['submitted'])
         launch.assert_not_called()

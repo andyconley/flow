@@ -21,6 +21,7 @@ class ClaudeConfigTests(unittest.TestCase):
                 executable.write_text('#!/bin/sh\n'
                     'if [ "$1" = --setting-sources ]; then shift 2; fi\n'
                     'if [ "$1" = auth ]; then\n'
+                    f'  test "$HOME" = "{real_home}" || exit 88\n'
                     '  /bin/mkdir -p "$CLAUDE_CONFIG_DIR/.claude.json.lock"\n'
                     '  printf "{}" > "$CLAUDE_CONFIG_DIR/.claude.json"\n'
                     '  /bin/rmdir "$CLAUDE_CONFIG_DIR/.claude.json.lock"\n'
@@ -40,6 +41,12 @@ class ClaudeConfigTests(unittest.TestCase):
                 result = subprocess.run([str(wrapper), '--fixture'], env=env, capture_output=True, text=True, check=True)
                 config = root/'runtime/claude-home'
                 self.assertEqual(result.stdout, str(config))
+                self.assertEqual(env['FLOW_V2_CLAUDE_USER_HOME'],str(real_home))
+                self.assertEqual(env['HOME'],str(run/'native-runtime/home'))
+                self.assertEqual(env['CODEX_HOME'],str(root/'runtime/codex-home'))
+                self.assertEqual(env['TMPDIR'],str(run/'native-runtime/tmp'))
+                self.assertIn('--setting-sources \"\" --disable-slash-commands',wrapper.read_text())
+                self.assertIn('disableAllHooks',wrapper.read_text())
                 self.assertEqual((config/'.claude.json').read_text(), '{}')
                 self.assertEqual(config.stat().st_mode & 0o777, 0o700)
                 self.assertFalse(Path(first_marker).exists())

@@ -69,7 +69,7 @@ class GooseJob:
    from .provider_preflight import check as provider_check,PreflightError
    try:
     profile, native_env = prepare(Path(s['workspace']), p.parent, role_bundle,**options)
-    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'))
+    record['provider_preflight']=provider_check(role_bundle,provider,self.model,profile,native_env,s.get('deadline'),workspace=s['workspace'])
    except PreflightError as error:
     return {'status':error.status,'reason':str(error),'source':'provider_preflight','submitted':False}
    except (OSError,ValueError,KeyError) as error:

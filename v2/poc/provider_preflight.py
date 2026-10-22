@@ -31,10 +31,10 @@ def planned(bundle, provider, model):
     return sorted(providers)
 
 
-def _auth(command, profile, env, timeout, label):
+def _auth(command, profile, env, timeout, label, workspace=None):
     try:
         result = subprocess.run(['/usr/bin/sandbox-exec', '-f', str(profile), *command],
-                                env=env, capture_output=True, text=True, timeout=timeout)
+                                env=env, cwd=workspace or env.get('HOME'), capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise PreflightError('permission_required', label+' readiness check unavailable: '+str(error)) from error
     if result.returncode:
@@ -42,7 +42,7 @@ def _auth(command, profile, env, timeout, label):
     return result.stdout
 
 
-def check(bundle, provider, model, profile, env, deadline=None):
+def check(bundle, provider, model, profile, env, deadline=None, *, workspace=None):
     """No model invocation or workspace writes. Successful checks are observations only."""
     rows = []
     limit = min(deadline, time.time()+30) if deadline is not None else time.time()+30
@@ -64,13 +64,14 @@ def check(bundle, provider, model, profile, env, deadline=None):
                 readiness = 'explicit credential-free local configuration; inference availability is checked by the provider at dispatch'
             else:
                 if key not in authenticated:
-                    _auth([env['CODEX_PATH'], 'login', 'status'], profile, env, timeout, 'Codex')
+                    _auth([env['CODEX_PATH'], 'login', 'status'], profile, env, timeout, 'Codex', workspace)
                     authenticated.add(key)
                 readiness = 'native account status'
         elif selected == 'claude-acp':
             if 'claude' not in authenticated:
+                claude_env = {**env, 'HOME':env['FLOW_V2_CLAUDE_USER_HOME']} if env.get('FLOW_V2_CLAUDE_USER_HOME') else env
                 raw = _auth([env['FLOW_V2_CLAUDE_BINARY'], '--setting-sources', '', 'auth', 'status', '--json'],
-                            profile, env, timeout, 'Claude')
+                            profile, claude_env, timeout, 'Claude', workspace)
                 try:
                     logged_in = json.loads(raw).get('loggedIn') is True
                 except (ValueError, AttributeError):
