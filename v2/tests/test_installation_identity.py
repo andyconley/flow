@@ -19,8 +19,9 @@ class InstallationIdentityTests(unittest.TestCase):
         self.assertEqual(r['legacy_config']['version'],'v0.49.1');self.assertEqual(r['retained_legacy_source']['kind'],'directory')
         self.assertTrue(r['invocation']['matches_selected']);self.assertNotIn('never print me',json.dumps(r));self.assertEqual(self.legacy.read_bytes(),before)
     def test_status_is_read_only_offline_and_disambiguates_invoked_checkout(self):
+        checkout=self.home/'independent-checkout/v2';checkout.mkdir(parents=True)
         before=sorted(str(p) for p in self.home.rglob('*'));out=io.StringIO()
-        with patch('poc.knowledge.trigger',side_effect=AssertionError('status must not provision')),patch('poc.managed.latest',side_effect=AssertionError('status must not fetch')),patch('poc.managed.subprocess.run',side_effect=AssertionError('status must not run Git')),contextlib.redirect_stdout(out):
+        with patch.object(entry,'ROOT',checkout),patch('poc.knowledge.trigger',side_effect=AssertionError('status must not provision')),patch('poc.managed.latest',side_effect=AssertionError('status must not fetch')),patch('poc.managed.subprocess.run',side_effect=AssertionError('status must not run Git')),contextlib.redirect_stdout(out):
             self.assertEqual(entry.main(['installation','status','--home',str(self.home),'--json']),0)
         r=json.loads(out.getvalue());self.assertEqual(r['invocation']['mode'],'source-checkout');self.assertFalse(r['invocation']['matches_selected']);self.assertEqual(before,sorted(str(p) for p in self.home.rglob('*')))
     def test_version_and_doctor_label_selected_release_without_provisioning(self):
