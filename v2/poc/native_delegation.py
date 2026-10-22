@@ -85,10 +85,12 @@ class Delegation:
             worker_env['GOOSE_PATH_ROOT']=str(self.evidence/'goose');worker_env['GOOSE_DISABLE_KEYRING']='1';worker_env['PYTHONPATH']=self.env.get('PYTHONPATH','');worker_env['PATH']=self.env['PATH']
             import yaml
             role=yaml.safe_load(recipe.read_text())
-            prompt=role['instructions']+'\nPerform only the approved '+self.operation+' role in this disposable workspace. Preserve frozen tests; no publication or global changes. Report honestly.\n'+self.state['task']
+            prompt=role['instructions']+'\nYou ARE the already-delegated role. Use your tools directly; do not start another coordinator or delegate again.\nPerform only the approved '+self.operation+' role in this disposable workspace. Preserve frozen tests; no publication or global changes. Report honestly.\n'+self.state['task']
             if self.operation=='review':prompt+='\nCandidate: '+str(self.state.get('candidate'))+'\nIndependent checks: '+json.dumps(self.state.get('test_results',{}))+'\nInspect/test the actual candidate independently. Do not edit or fix it.'
             prompt+='\nReturn only JSON matching this schema: '+json.dumps(role['response']['json_schema'])
-            command=[self.binary,'run','--no-profile','--recipe',str(recipe),'--provider',self.profile['provider'],'--model',self.profile['model'],'--text',prompt,'--output-format','stream-json','--name','flow-bound-'+self.operation]
+            role['prompt']=prompt
+            bound=self.evidence/'role.json';bound.write_text(json.dumps(role,indent=2)+'\n')
+            command=[self.binary,'run','--no-profile','--recipe',str(bound),'--provider',self.profile['provider'],'--model',self.profile['model'],'--output-format','stream-json','--name','flow-bound-'+self.operation]
             remaining=max(0,self.state.get('deadline',time.time()+600)-time.time())
             if remaining<=0:raise RuntimeError('Approved execution budget exhausted before delegation')
             with (self.evidence/'worker.jsonl').open('w') as out,(self.evidence/'worker.stderr').open('w') as err:
@@ -96,7 +98,12 @@ class Delegation:
                 self.scope=ProcessScope(child.pid)
                 with self.lock:self.result.update(pid=child.pid,processes=self.scope.known);self.save()
                 try:
+                    next_record=0
                     while child.poll() is None:
+                        self.scope.observe()
+                        if time.monotonic()>=next_record:
+                            with self.lock:self.result['processes']=self.scope.known;self.save()
+                            next_record=time.monotonic()+1
                         if self.stop_requested.is_set() or time.time()>self.state.get('deadline',time.time()+remaining):
                             self.scope.stop();child.wait(timeout=10);raise RuntimeError('Operator cancellation or approved deadline stopped worker')
                         time.sleep(.1)

@@ -55,7 +55,8 @@ class DelegationTests(unittest.TestCase):
    native={'PATH':'/usr/bin','HOME':'/isolated/codex-home','CODEX_HOME':'/private/codex','CLAUDE_CONFIG_DIR':'/private/claude','FLOW_V2_CLAUDE_USER_HOME':'/real/user'}
    broker=Delegation({'task':'frozen task','workspace':str(workspace)},profile,self.root,native,'/fixture/goose',self.root/('evidence-'+operation),operation=operation)
    def launch(command,**kwargs):
-    self.assertEqual(command[command.index('--provider')+1],profile['provider']);self.assertEqual(command[command.index('--model')+1],profile['model']);self.assertEqual(kwargs['cwd'],workspace)
+    self.assertEqual(command[command.index('--provider')+1],profile['provider']);self.assertEqual(command[command.index('--model')+1],profile['model']);self.assertEqual(kwargs['cwd'],workspace);self.assertNotIn('--text',command)
+    bound=json.loads(Path(command[command.index('--recipe')+1]).read_text());self.assertIn('frozen task',bound['prompt'])
     if operation=='implement':self.assertEqual(kwargs['env']['GOOSE_INPUT_LIMIT'],'32768');self.assertNotIn('GOOSE_MAX_TOKENS',kwargs['env'])
     else:self.assertEqual(kwargs['env']['CLAUDE_CONFIG_DIR'],'/private/claude');self.assertEqual(kwargs['env']['CODEX_HOME'],'/private/codex');self.assertEqual(kwargs['env']['GOOSE_NATIVE_ACP_COMPLETION'],'true')
     kwargs['stdout'].write(json.dumps({'type':'message','message':{'role':'assistant','content':[{'type':'text','text':json.dumps(report)}]}})+'\n');kwargs['stdout'].flush()

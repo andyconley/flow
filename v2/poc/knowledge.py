@@ -177,7 +177,7 @@ def worker_command(root,stage,action,*args):
     env=clean_env(scratch);env.update(FLOW_KNOWLEDGE_HOME=str(root),FLOW_KNOWLEDGE_STAGE=str(stage),FLOW_KNOWLEDGE_MODEL=cfg.get('model','qwen3:4b'),FLOW_KNOWLEDGE_OLLAMA=cfg.get('ollama','http://127.0.0.1:11434'),FLOW_KNOWLEDGE_CACHE=cfg['cache'])
     log=stage/'worker.log';stage.mkdir(parents=True,exist_ok=True);(scratch/'home').mkdir(exist_ok=True)
     with log.open('a') as f:
-        child=subprocess.Popen([python,'-m','poc.knowledge_runtime.worker',action,*args],cwd=REPO/'v2',env=env,stdout=f,stderr=f,start_new_session=True)
+        child=subprocess.Popen([python,str(Path(__file__).with_name('knowledge_runtime')/'stdio.py'),'--worker',action,*args],cwd=stage,env=env,stdout=f,stderr=f,start_new_session=True)
         write(stage/'worker.json',{'pid':child.pid,'action':action,'state':'running'})
         try:code=child.wait(timeout=900)
         except subprocess.TimeoutExpired:
