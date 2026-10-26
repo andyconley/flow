@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.54.3](https://github.com/andyconley/flow/compare/v0.54.2...v0.54.3) (2026-10-25)
+
+### Bug Fixes
+
+* require initial specialist expertise search ([#151](https://github.com/andyconley/flow/issues/151)) ([2080bcf](https://github.com/andyconley/flow/commit/2080bcf5f56d49ae30540415ad774a35c3875cbe)), closes [#150](https://github.com/andyconley/flow/issues/150)
+
 ## [0.54.2](https://github.com/andyconley/flow/compare/v0.54.1...v0.54.2) (2026-10-22)
 
 ### Bug Fixes
