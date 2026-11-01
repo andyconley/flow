@@ -2,6 +2,21 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+### Highlights
+
+- Constrain Flow to Codex and Claude subscriptions while retaining knowledge ingestion and text search without Ollama.
+
+
+## [0.55.0](https://github.com/andyconley/flow/compare/v0.54.3...v0.55.0) (2026-11-01)
+
+### Features
+
+* constrain workers and knowledge to native subscriptions ([#152](https://github.com/andyconley/flow/issues/152)) ([9bf52f3](https://github.com/andyconley/flow/commit/9bf52f3b24eba46b9dfa099aee81c07d20e69d1c))
+
+### Bug Fixes
+
+* reconcile native searches and recover interrupted caches ([#153](https://github.com/andyconley/flow/issues/153)) ([6969407](https://github.com/andyconley/flow/commit/696940798e2108534a9d38c29553f08136349ca5))
+
 ## [0.54.3](https://github.com/andyconley/flow/compare/v0.54.2...v0.54.3) (2026-10-25)
 
 ### Bug Fixes
