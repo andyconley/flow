@@ -265,6 +265,7 @@ def snapshot(root):
     return p
 
 def query(root,query,mode='hybrid',role=None):
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
     from .provider_policy import native_knowledge
     if native_knowledge():
         import sqlite3,re
@@ -287,7 +288,6 @@ def query(root,query,mode='hybrid',role=None):
             results.append(item)
         return {'results':results,'search_type':'text','requested_mode':mode,'semantic_search':'disabled','snapshot':p.name,'ingestion':'lexical'}
 
-    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
     p=snapshot(root)
     # Native BM CLI can write initialization metadata; private per-read copy keeps
     # published generations immutable even when multiple agents read concurrently.
