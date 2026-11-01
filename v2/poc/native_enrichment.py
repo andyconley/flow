@@ -21,7 +21,7 @@ def validate(raw,catalog):
     if not isinstance(raw,dict) or set(raw)!={'sources'} or not isinstance(raw['sources'],list):raise ValueError('Invalid native enrichment result')
     lookup={r['id']:r for r in catalog};accepted={};rejected=[]
     for source in raw['sources']:
-        if not isinstance(source,dict) or set(source)!={'source_id','relationships'} or source['source_id'] not in lookup or source['source_id'] in accepted:raise ValueError('Invalid/duplicate enrichment source')
+        if not isinstance(source,dict) or set(source)!={'source_id','relationships'} or not isinstance(source.get('source_id'),str) or source['source_id'] not in lookup or source['source_id'] in accepted:raise ValueError('Invalid/duplicate enrichment source')
         row=lookup[source['source_id']];edges=source['relationships']
         if not isinstance(edges,list) or len(edges)>2:raise ValueError('Invalid relationship count')
         accepted[row['id']]=[];seen=set()

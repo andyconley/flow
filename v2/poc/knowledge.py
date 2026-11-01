@@ -265,12 +265,14 @@ def snapshot(root):
     return p
 
 def query(root,query,mode='hybrid',role=None):
-    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
     from .provider_policy import native_knowledge
-    if native_knowledge():
-        import sqlite3,re
+    native=native_knowledge()
+    if native:
         if mode not in ('text','hybrid','vector'):raise ValueError('Invalid search mode')
         if mode=='vector':raise ValueError('Vector search is disabled by native-only policy; use text search')
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
+    if native:
+        import sqlite3,re
         p=snapshot(root)
         terms=re.findall(r'\w+',query)
         if not terms:return {'results':[],'search_type':'text','requested_mode':mode}

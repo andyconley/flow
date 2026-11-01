@@ -27,7 +27,6 @@ class NativePolicy(unittest.TestCase):
     with self.assertRaises(ValueError):implementation_profiles.validate(pool)
     recipes=home/'bundle/recipes';recipes.mkdir(parents=True);(recipes/'old.yaml').write_text('settings:\n  goose_provider: ollama\n  goose_model: tiny\n')
     with self.assertRaises(provider_preflight.PreflightError):provider_preflight.planned(recipes.parent,'codex-acp','current')
-if __name__=='__main__':unittest.main()
 
 class NativeKnowledgeInstallation(unittest.TestCase):
  def test_model_probe_is_never_required_and_existing_runtime_is_reused(self):
@@ -95,7 +94,23 @@ class EnrichmentCacheDurability(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);stage,raw=self.setup_corpus(root);module.enrich(stage,lambda *args:raw)
    cache=next((root/'native-enrichment-cache').iterdir())
-   for damaged in ['', '{partial', '{}', '{"sources":[]}']:
+   damaged_cases=['', '{partial', '{}', '{"sources":[]}', *[json.dumps({'sources':[{'source_id':bad,'relationships':[]}]}) for bad in ([],{},None,123)]]
+   for damaged in damaged_cases:
     cache.write_text(damaged);runner=Mock(return_value=raw);result=module.enrich(stage,runner)
     runner.assert_called_once();self.assertEqual(result['origin'],'native-subscription');self.assertEqual(json.loads(cache.read_text()),raw)
-   self.assertEqual(len(list(cache.parent.glob('*.corrupt-*'))),4)
+   self.assertEqual(len(list(cache.parent.glob('*.corrupt-*'))),len(damaged_cases))
+
+class NativeInputRejection(unittest.TestCase):
+ def test_structurally_invalid_source_ids_raise_validation_errors(self):
+  for bad in ([],{},None,123):
+   with self.subTest(source_id=bad),self.assertRaises(ValueError):module.validate({'sources':[{'source_id':bad,'relationships':[]}]},[{'id':'flow:entry/one'}])
+ def test_unsupported_modes_do_not_trigger_or_read_a_snapshot(self):
+  from poc import knowledge as k
+  import os
+  with tempfile.TemporaryDirectory() as t:
+   with patch('poc.provider_policy.native_knowledge',return_value=True),patch.object(k,'trigger') as trigger,patch.object(k,'snapshot') as snapshot,patch.dict(os.environ,{},clear=True):
+    for mode in ('vector','unsupported'):
+     with self.subTest(mode=mode),self.assertRaises(ValueError):k.query(Path(t),'review',mode)
+    trigger.assert_not_called();snapshot.assert_not_called()
+
+if __name__=='__main__':unittest.main()
