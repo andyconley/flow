@@ -28,6 +28,8 @@ def goose_binary(source=ROOT):
 
 
 def environment(project=None, provider=None, model=None):
+    from .provider_policy import require
+    if provider is not None:require(provider)
     env = {key: value for key, value in os.environ.items() if key in ['PATH','USER','LOGNAME','SHELL','LANG','LC_ALL','TERM','SSL_CERT_FILE']}
     env.update(HOME=str((ROOT/'runtime/home').resolve()), GOOSE_PATH_ROOT=str((ROOT/'runtime/goose-home').resolve()),
                GOOSE_DISABLE_KEYRING='1', GOOSE_MODE='auto',
@@ -74,7 +76,8 @@ def setup():
     # name the canonical targets, not a replaceable release's logical aliases.
     import json
     mutable=[str((ROOT/'runtime'/name).resolve()) for name in ('goose-home','codex-home','home','tmp','claude-home')]
-    profile+='\n# MANAGED_MUTABLE_START\n(allow file-read* file-write* '+''.join('(subpath '+json.dumps(path)+') ' for path in mutable)+')\n# MANAGED_MUTABLE_END\n'
+    mutable.extend(str((ROOT/name).resolve()) for name in ('workspaces','artifacts'))
+    profile+='\n; MANAGED_MUTABLE_START\n(allow file-read* file-write* '+''.join('(subpath '+json.dumps(path)+') ' for path in mutable)+')\n; MANAGED_MUTABLE_END\n'
     (ROOT/'runtime/scope.sb').write_text(profile)
     return ROOT/'runtime/scope.sb'
 

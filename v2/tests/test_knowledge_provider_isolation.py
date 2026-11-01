@@ -16,7 +16,7 @@ class KnowledgeProviderIsolationTests(unittest.TestCase):
             store = root / 'knowledge'
             store.mkdir()
             (store / 'settings.json').write_text(json.dumps({'ollama': 'http://127.0.0.1:11435'}))
-            with patch.object(runtime_env, 'ROOT', root), patch.dict(os.environ, {
+            with patch.object(Path, 'home', return_value=root/'home'), patch.object(runtime_env, 'ROOT', root), patch.dict(os.environ, {
                 'FLOW_KNOWLEDGE_HOME': str(store), 'OLLAMA_HOST': 'http://127.0.0.1:11434'
             }), patch('poc.device_context.ollama_environment', return_value={}):
                 self.assertEqual('http://127.0.0.1:11434', runtime_env.environment(provider='ollama')['OLLAMA_HOST'])

@@ -5,20 +5,25 @@ from .policy import verify_compatibility,install,authored_text
 verify_compatibility()
 stage=Path(os.environ['FLOW_KNOWLEDGE_STAGE']).resolve();cache=Path(os.environ['FLOW_KNOWLEDGE_CACHE'])
 os.environ.update(BASIC_MEMORY_CONFIG_DIR=str(stage/'config'),BASIC_MEMORY_HOME=str(stage/'notes'),HOME=str(stage/'home'),BASIC_MEMORY_SEMANTIC_EMBEDDING_CACHE_DIR=str(cache),BASIC_MEMORY_DEFAULT_SEARCH_TYPE='text',BASIC_MEMORY_SEMANTIC_SEARCH_ENABLED='true',BASIC_MEMORY_SEMANTIC_EMBEDDING_PROVIDER='fastembed',BASIC_MEMORY_SEMANTIC_EMBEDDING_MODEL='BAAI/bge-small-en-v1.5',BASIC_MEMORY_SEMANTIC_EMBEDDING_DIMENSIONS='384',HF_HUB_OFFLINE='1',COCOINDEX_DB=str(stage/'state/cocoindex'),FLOW_BM_TRACE=str(stage/'index-trace.jsonl'))
-import onnxruntime
-onnxruntime.disable_telemetry_events()
 action=sys.argv[1]
-if action=='build':
-    from . import enrich
-    enrich.run()
+lexical=action=='build-text'
+if lexical:
+    os.environ['BASIC_MEMORY_SEMANTIC_SEARCH_ENABLED']='false'
+else:
+    import onnxruntime
+    onnxruntime.disable_telemetry_events()
+if action in ('build','build-text'):
+    if not lexical:
+        from . import enrich
+        enrich.run()
     (stage/'config').mkdir(exist_ok=True)
-    config={'projects':{'managed':{'path':str(stage/'notes'),'mode':'local'}},'default_project':'managed','database_backend':'sqlite','semantic_search_enabled':True,'semantic_vector_index':'pgvector','semantic_embedding_provider':'fastembed','semantic_embedding_model':'BAAI/bge-small-en-v1.5','semantic_embedding_dimensions':384,'semantic_embedding_cache_dir':str(cache),'ensure_frontmatter_on_sync':False,'auto_update':False,'cloud_promo_opt_out':True,'logfire_enabled':False,'logfire_send_to_logfire':False,'default_search_type':'text'}
+    config={'projects':{'managed':{'path':str(stage/'notes'),'mode':'local'}},'default_project':'managed','database_backend':'sqlite','semantic_search_enabled':not lexical,'semantic_vector_index':'pgvector','semantic_embedding_provider':'fastembed','semantic_embedding_model':'BAAI/bge-small-en-v1.5','semantic_embedding_dimensions':384,'semantic_embedding_cache_dir':str(cache),'ensure_frontmatter_on_sync':False,'auto_update':False,'cloud_promo_opt_out':True,'logfire_enabled':False,'logfire_send_to_logfire':False,'default_search_type':'text'}
     (stage/'config/config.json').write_text(json.dumps(config))
     install()
     from basic_memory.cli.main import app
-    app(['reindex','-p','managed','--full'],standalone_mode=False)
+    app(['reindex','-p','managed','--full',*(['--search'] if lexical else [])],standalone_mode=False)
     from .audit import audit
-    (stage/'audit.json').write_text(json.dumps(audit(stage)))
+    (stage/'audit.json').write_text(json.dumps(audit(stage,check_vectors=not lexical)))
 elif action=='query':
     cfg=json.loads((stage/'config/config.json').read_text());cfg['projects']['managed']['path']=str(stage/'notes');cfg['skip_initialization_sync']=True
     (stage/'config/config.json').write_text(json.dumps(cfg))

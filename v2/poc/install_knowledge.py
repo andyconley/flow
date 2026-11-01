@@ -79,7 +79,8 @@ def model_requirement(model,endpoint,error,profile=None):
 
 
 def resolve_model_mode(root,mode,policy='ask',*,interactive=None,choose=None):
-    if mode!='download':return mode,'offline'
+    from .provider_policy import native_knowledge
+    if native_knowledge() or mode!='download':return mode,'offline'
     model,endpoint=model_selection(root)
     try:checked_model_digest(root,model,endpoint);return mode,'offline'
     except (ModelIdentityMismatch,k.LocalModelRequiredError):raise
@@ -125,6 +126,19 @@ def verify_provisioned_model(root,model,endpoint,approved_digest):
 
 def provision(root, mode='ask', *, interactive=None, choose=None, model_policy='offline'):
     """No detached worker: installation succeeds only after an audited snapshot."""
+    from .provider_policy import native_knowledge
+    if native_knowledge():
+        root=Path(root)
+        if mode=='defer':return {'state':'deferred','ready':False,'mode':'native-lexical','reason':'Knowledge explicitly deferred; no local inference assets are required'}
+        cfg=k.read(root/'settings.json',{})
+        if not cfg.get('python') or not Path(cfg['python']).is_file():
+            raise ValueError('Native knowledge needs the existing pinned Basic Memory Python runtime. Use --knowledge defer to retain installation without it; no Ollama or embedding assets will be acquired.')
+        with k.locked(root):k.reconcile_shared(root)
+        state=k.process(root)
+        if state.get('state')!='ready' or state.get('pending'):raise ValueError('Native lexical knowledge did not become ready: '+json.dumps(state))
+        result={**state,'ready':True,'mode':'native-lexical'}
+        k.write(root/'install-status.json',result)
+        return result
     root = Path(root)
     current = k.read(root/'settings.json', {})
     candidate = k.read(root/'provisioned-runtime.json', {})

@@ -22,6 +22,11 @@ class PreflightError(ValueError):
 
 
 def planned(bundle, provider, model, sources=None):
+    from .provider_policy import require as policy_require
+    def require(selected):
+        try:policy_require(selected)
+        except ValueError as error:raise PreflightError("scope_required",str(error)) from error
+    require(provider)
     providers = {(provider, model)}
     recipes=Path(bundle)/'recipes'
     if sources is not None:
@@ -37,6 +42,7 @@ def planned(bundle, provider, model, sources=None):
         selected_model = settings.get('goose_model')
         if not isinstance(selected, str) or not selected or not isinstance(selected_model, str) or not selected_model:
             raise PreflightError('scope_required', 'Role recipe lacks an explicit provider/model: '+path.name)
+        require(selected)
         providers.add((selected, selected_model))
     return sorted(providers)
 
