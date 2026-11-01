@@ -34,6 +34,8 @@ def local_codex_provider():
     config=tomllib.loads(path.read_text());name=config.get('model_provider')
     row=config.get('model_providers',{}).get(name,{})
     if row.get('requires_openai_auth') is not False:return None
+    from .provider_policy import require
+    require('local-codex')
     url=urlparse(row.get('base_url',''))
     if url.scheme!='http' or url.hostname not in ('127.0.0.1','localhost','::1') or url.username or url.password:return None
     if not name or not re.fullmatch(r'[A-Za-z0-9_-]+',name):raise ValueError('Local provider ID must be a simple TOML key')
@@ -58,7 +60,7 @@ def prepare(workspace, run_dir, role_bundle, provider=None, model=None, check_co
             wrapper.chmod(0o755)
     debug = ROOT/'runtime'/f'{run_dir.name}-native-claude.debug'
     profile = (ROOT/'runtime/scope.sb').read_text().replace(' (remote ip "localhost:11434")', '')
-    profile=re.sub(r'# MANAGED_MUTABLE_START.*?# MANAGED_MUTABLE_END\n','',profile,flags=re.S)
+    profile=re.sub(r'[;#] MANAGED_MUTABLE_START.*?[;#] MANAGED_MUTABLE_END\n','',profile,flags=re.S)
     local_port=local_codex_endpoint()
     if namespace_endpoint:
         from urllib.parse import urlparse

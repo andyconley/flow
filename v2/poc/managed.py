@@ -323,6 +323,8 @@ def provision_knowledge(release,root,mode,model_policy='offline'):
         print('Flow knowledge DEFERRED: '+json.dumps(deferred),file=sys.stderr,flush=True)
         return deferred
     from .install_knowledge import resolve_model_mode
+    from .provider_policy import native_knowledge
+    if mode=='ask' and native_knowledge():mode='offline'
     if mode=='ask':
         # setsid() removes the worker's controlling terminal. Read consent in
         # this foreground parent, never from curl's piped installer script.

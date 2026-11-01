@@ -16,6 +16,8 @@ def validate(snapshot):
     if not isinstance(snapshot,dict):raise ValueError('Implementation profile must be an object')
     row={k:v for k,v in snapshot.items() if k!='sha256'}
     if snapshot.get('sha256')!=fingerprint(row):raise ValueError('Implementation profile snapshot changed; create a new work item')
+    from .provider_policy import require
+    if row.get('provider') != 'pool':require(row.get('provider'))
     if row.get('provider') == 'pool':
         members=row.get('profiles')
         if not isinstance(members,list) or not members:raise ValueError('Approved worker pool is empty')

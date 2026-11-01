@@ -11,6 +11,14 @@ def require_ready():
     root=knowledge.home()
     uncertain=root.parent.parent/'knowledge-provision-uncertain.json'
     if uncertain.exists():raise KnowledgeUnavailable('Install/update knowledge execution remains uncertain; inspect '+str(uncertain)+' and reconcile recorded processes before retry. No agent was launched.')
+    from .provider_policy import native_knowledge
+    if native_knowledge():
+        if not (root/'base.json').exists() and not (root/'settings.json').exists():return
+        cfg=knowledge.read(knowledge.home()/"settings.json",{})
+        if not cfg.get("python") or not Path(cfg["python"]).is_file():raise KnowledgeUnavailable("Read-only knowledge runtime unavailable; local inference remains disabled")
+        try:knowledge.snapshot(root)
+        except Exception as error:raise KnowledgeUnavailable(str(error)+"; no agent was launched") from error
+        return
     if not (root/'base.json').exists() and not (root/'settings.json').exists():return
     cfg=knowledge.read(root/'settings.json',{})
     if not cfg.get('python') or not Path(cfg['python']).is_file():

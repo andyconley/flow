@@ -131,6 +131,9 @@ def select(root: Path, stage: str, role: str | None = None, profile: str | None 
     if not isinstance(provider, dict):
         raise RuntimeConfigurationError(f"profile {profile!r} is not configured in .flow/runtime.toml")
     kind = provider.get("kind")
+    policy_path = Path.home()/".flow/user/runtime.toml"
+    if policy_path.is_file() and read_toml(policy_path).get("execution_policy",{}).get("native_only") is True and kind not in {"codex","claude"}:
+        raise RuntimeConfigurationError("Flow is constrained to Codex and Claude subscriptions; local profiles are disabled")
     if kind == "local":
         if "reasoning_effort" in provider and (not isinstance(provider["reasoning_effort"], str) or not provider["reasoning_effort"].strip()):
             raise RuntimeConfigurationError("reasoning_effort must be a nonempty provider-supported string")

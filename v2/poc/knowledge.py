@@ -140,14 +140,23 @@ def local_model_digest(endpoint,model):
 def fingerprint(root):
     cfg=read(root/'settings.json',{})
     authored={n:digest(b) for n,b in inventory(root/'notes').items()}
+    from .provider_policy import native_only
+    if native_only():cfg={'python':cfg.get('python'),'mode':'native-lexical-v1'}
     if cfg.get('model_digest'):
         observed=local_model_digest(cfg['ollama'],cfg['model'])
         if str(observed).removeprefix('sha256:')!=str(cfg['model_digest']).removeprefix('sha256:'):raise ValueError('Configured extraction model digest changed; expected '+str(cfg['model_digest'])+', observed '+str(observed)+'. Review/configure the intended model explicitly; the prior snapshot remains selected.')
         cfg={**cfg,'observed_model_digest':observed}
     # Include all pipeline code and pins, not just a manually bumped number.
-    code=[Path(__file__),*sorted(Path(__file__).with_name('knowledge_runtime').glob('*.py')),Path(__file__).with_name('knowledge_runtime')/'compatibility.json',SHARED/'requirements.lock',SHARED/'embedding.lock.json']
+    code=[Path(__file__),Path(__file__).with_name('native_enrichment.py'),*sorted(Path(__file__).with_name('knowledge_runtime').glob('*.py')),Path(__file__).with_name('knowledge_runtime')/'compatibility.json',SHARED/'requirements.lock',SHARED/'embedding.lock.json']
     return digest(json.dumps({'pipeline':PIPELINE,'code':{p.name:digest(p.read_bytes()) for p in code},'settings':cfg,'authored':authored},sort_keys=True).encode())
 def status(root):
+    from .provider_policy import native_knowledge
+    if native_knowledge():
+        current=read(root/'CURRENT.json',{});state=read(root/'status.json',{})
+        try:wanted=fingerprint(root);pending=current.get('fingerprint')!=wanted
+        except Exception as error:return {'state':'failed','pending':True,'input_error':str(error),'mode':'native-lexical'}
+        return {**state,'state':state.get('state','pending') if pending else 'ready','pending':pending,'ingestion':'lexical','search':'text','semantic_search':'disabled','enrichment':'codex-subscription','snapshot':current.get('generation'),'desired':wanted}
+
     from .knowledge_health import hint
     state={**read(root/'status.json',{'state':'pending','reason':'not processed'}),'provisioning':hint(root),'installation':read(root/'install-status.json',{}),'last_install_failure':read(root/'last-install-failure.json',{})}
     current=read(root/'CURRENT.json',{})
@@ -190,6 +199,7 @@ def worker_command(root,stage,action,*args):
         if code:raise RuntimeError(f'Knowledge {action} failed ({code}); see {log}')
 
 def process(root,builder=None):
+    from .provider_policy import native_knowledge
     """Single writer. Crash leaves private staging; CURRENT is the sole commit point."""
     with locked(root,True):
         wanted=fingerprint(root);current=read(root/'CURRENT.json',{})
@@ -211,7 +221,11 @@ def process(root,builder=None):
             write(stage/'state/generated-hashes.json',hashes)
             if builder:result=builder(stage)
             else:
-                worker_command(root,stage,'build');result=read(stage/'audit.json')
+                if native_knowledge():
+                    from .native_enrichment import enrich
+                    enrichment=enrich(stage)
+                    write(stage/'native-enrichment-summary.json',enrichment)
+                worker_command(root,stage,'build-text' if native_knowledge() else 'build');result=read(stage/'audit.json')
             if not result or not result.get('passed') or result.get('unresolved_edges'):raise ValueError('Snapshot audit failed or unresolved graph endpoints')
             after=inventory(stage/'notes')
             if set(before)!=set(after) or any(source(before[n].decode())!=source(after[n].decode()) for n in before):raise ValueError('Enrichment changed authored content or inventory')
@@ -227,6 +241,7 @@ def process(root,builder=None):
             raise
 
 def trigger(root):
+    from .provider_policy import native_knowledge
     """Debounced by writer lock and fingerprint, also reconciled on every read."""
     s=status(root)
     if not s['pending'] or s.get('input_error'):return s
@@ -250,6 +265,28 @@ def snapshot(root):
     return p
 
 def query(root,query,mode='hybrid',role=None):
+    from .provider_policy import native_knowledge
+    if native_knowledge():
+        import sqlite3,re
+        if mode not in ('text','hybrid','vector'):raise ValueError('Invalid search mode')
+        if mode=='vector':raise ValueError('Vector search is disabled by native-only policy; use text search')
+        p=snapshot(root)
+        terms=re.findall(r'\w+',query)
+        if not terms:return {'results':[],'search_type':'text','requested_mode':mode}
+        expression=' OR '.join('"'+term+'"' for term in terms[:32])
+        with sqlite3.connect('file:'+str(p/'config/memory.db')+'?mode=ro',uri=True) as c:
+            c.row_factory=sqlite3.Row
+            sql='SELECT title,permalink,file_path,metadata FROM search_index WHERE search_index MATCH ? AND type=?'
+            args=[expression,'entity']
+            if role:sql+=" AND file_path IN (SELECT file_path FROM entity WHERE json_extract(entity_metadata,'$.role')=?)";args.append(role)
+            rows=c.execute(sql+' ORDER BY bm25(search_index) LIMIT 5',args).fetchall()
+        results=[]
+        for row in rows:
+            item=dict(row);note=p/'notes'/Path(item['file_path']).name
+            if note.is_file():item['content']=source(note.read_text())
+            results.append(item)
+        return {'results':results,'search_type':'text','requested_mode':mode,'semantic_search':'disabled','snapshot':p.name,'ingestion':'lexical'}
+
     if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
     p=snapshot(root)
     # Native BM CLI can write initialization metadata; private per-read copy keeps
