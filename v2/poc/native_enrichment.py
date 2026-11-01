@@ -1,6 +1,6 @@
 """One bounded, tool-free Codex subscription call; exact-quote validated edges only."""
 from pathlib import Path
-import hashlib,json,re,subprocess,time
+import hashlib,json,re,subprocess,time,uuid
 import yaml
 from . import knowledge as k
 
@@ -21,7 +21,7 @@ def validate(raw,catalog):
     if not isinstance(raw,dict) or set(raw)!={'sources'} or not isinstance(raw['sources'],list):raise ValueError('Invalid native enrichment result')
     lookup={r['id']:r for r in catalog};accepted={};rejected=[]
     for source in raw['sources']:
-        if not isinstance(source,dict) or set(source)!={'source_id','relationships'} or source['source_id'] not in lookup or source['source_id'] in accepted:raise ValueError('Invalid/duplicate enrichment source')
+        if not isinstance(source,dict) or set(source)!={'source_id','relationships'} or not isinstance(source.get('source_id'),str) or source['source_id'] not in lookup or source['source_id'] in accepted:raise ValueError('Invalid/duplicate enrichment source')
         row=lookup[source['source_id']];edges=source['relationships']
         if not isinstance(edges,list) or len(edges)>2:raise ValueError('Invalid relationship count')
         accepted[row['id']]=[];seen=set()
@@ -45,14 +45,25 @@ def enrich(stage,runner=None):
     schema={'type':'object','properties':{'sources':{'type':'array','items':source}},'required':['sources'],'additionalProperties':False}
     request={'version':VERSION,'provider':'codex-acp','prompt_sha256':sha(prompt),'schema':schema}
     key=sha(json.dumps(request,sort_keys=True));cache=stage.parent.parent/'native-enrichment-cache'/key
-    if cache.is_file():raw=json.loads(cache.read_text());origin='validated-cache'
-    else:
+    raw=None
+    if cache.is_file():
+        try:
+            cached=json.loads(cache.read_text())
+            cached_sources,_=validate(cached,owned)
+            if set(cached_sources)!={r['id'] for r in owned}:raise ValueError('Incomplete enrichment cache')
+            raw=cached
+        except (ValueError,UnicodeDecodeError):
+            # Preserve crash residue for diagnosis, then regenerate through the
+            # same approved backend. A bad cache must never poison every retry.
+            cache.replace(cache.with_name(cache.name+'.corrupt-'+uuid.uuid4().hex))
+    if raw is None:
         if runner:raw=runner(prompt,schema,stage)
         else:raw=call(prompt,schema,stage)
         origin='native-subscription'
+    else:origin='validated-cache'
     accepted,rejected=validate(raw,owned)
     if set(accepted)!={r['id'] for r in owned}:raise ValueError('Native enrichment omitted a source; previous snapshot retained')
-    if not cache.exists():cache.parent.mkdir(parents=True,exist_ok=True);cache.write_text(json.dumps(raw,sort_keys=True))
+    if origin!='validated-cache':k.write(cache,raw)
     lookup={r['id']:r for r in catalog};count=0
     for row in owned:
         lines=[k.START,'## Relations','','Native Codex subscription suggestions; applicability and authority remain with authored cards.','']

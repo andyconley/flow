@@ -27,7 +27,6 @@ class NativePolicy(unittest.TestCase):
     with self.assertRaises(ValueError):implementation_profiles.validate(pool)
     recipes=home/'bundle/recipes';recipes.mkdir(parents=True);(recipes/'old.yaml').write_text('settings:\n  goose_provider: ollama\n  goose_model: tiny\n')
     with self.assertRaises(provider_preflight.PreflightError):provider_preflight.planned(recipes.parent,'codex-acp','current')
-if __name__=='__main__':unittest.main()
 
 class NativeKnowledgeInstallation(unittest.TestCase):
  def test_model_probe_is_never_required_and_existing_runtime_is_reused(self):
@@ -55,3 +54,63 @@ class NativeKnowledgeInstallation(unittest.TestCase):
     self.assertEqual(command[command.index('--mode')+1],'offline');Path(command[command.index('--result')+1]).write_text(json.dumps({'state':'ready','ready':True}));return Mock(pid=123,returncode=0,poll=lambda:0)
    with patch('poc.provider_policy.native_knowledge',return_value=True),patch('poc.knowledge_health.doctor',side_effect=AssertionError('local doctor')),patch.object(gate,'checked_model_digest',side_effect=AssertionError('local probe')),patch.object(managed.subprocess,'Popen',side_effect=launch),patch('poc.lifecycle.ProcessScope'),patch.dict(os.environ,{'FLOW_INSTALL_KNOWLEDGE_FD':'0'}):
     self.assertTrue(managed.provision_knowledge(release,root,'ask')['ready'])
+
+class NativeSearchReconciliation(unittest.TestCase):
+ def test_external_edits_schedule_reconciliation_before_native_search(self):
+  self.search(readonly=False)
+ def test_readonly_native_search_does_not_start_reconciliation(self):
+  self.search(readonly=True)
+ def search(self,readonly):
+  import sqlite3,os
+  from poc import knowledge as k
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);stage=root/'generations/old';(stage/'notes').mkdir(parents=True);(stage/'config').mkdir();(root/'notes').mkdir()
+   (root/'notes/one.md').write_text('Externally edited guidance')
+   (stage/'notes/one.md').write_text('Previously published guidance')
+   (root/'CURRENT.json').write_text(json.dumps({'generation':'old'}));(stage/'receipt.json').write_text(json.dumps({'audit':{'passed':True}}))
+   with sqlite3.connect(stage/'config/memory.db') as c:
+    c.execute('CREATE VIRTUAL TABLE search_index USING fts5(title,permalink,file_path,metadata,type)');c.execute('INSERT INTO search_index VALUES (?,?,?,?,?)',('Guidance','one','one.md','{}','entity'))
+   env={'FLOW_KNOWLEDGE_READONLY':'1'} if readonly else {}
+   with patch('poc.provider_policy.native_knowledge',return_value=True),patch.object(k,'trigger',return_value={'pending':True}) as trigger,patch.dict(os.environ,env,clear=True):
+    result=k.query(root,'guidance','text')
+   if readonly:trigger.assert_not_called()
+   else:trigger.assert_called_once_with(root)
+   self.assertEqual(result['results'][0]['content'],'Previously published guidance')
+
+class EnrichmentCacheDurability(unittest.TestCase):
+ def setup_corpus(self,root):
+  stage=root/'generations/test';(stage/'notes').mkdir(parents=True)
+  for name in ['one','two']:(stage/'notes'/(name+'.md')).write_text('---\ntitle: '+name+'\ncard_id: flow:entry/'+name+'\npermalink: '+name+'\n---\n\nAuthored guidance remains intact.\n')
+  raw={'sources':[{'source_id':'flow:entry/'+name,'relationships':[]} for name in ['one','two']]}
+  return stage,raw
+ def test_new_cache_is_published_through_atomic_json_writer(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);stage,raw=self.setup_corpus(root)
+   with patch.object(module.k,'write',wraps=module.k.write) as write:module.enrich(stage,lambda *args:raw)
+   writes=[call.args for call in write.call_args_list if call.args[0].parent.name=='native-enrichment-cache']
+   self.assertEqual(len(writes),1);self.assertEqual(writes[0][1],raw);self.assertEqual(json.loads(writes[0][0].read_text()),raw)
+ def test_corrupt_or_incomplete_cache_is_quarantined_and_retry_recovers(self):
+  from unittest.mock import Mock
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);stage,raw=self.setup_corpus(root);module.enrich(stage,lambda *args:raw)
+   cache=next((root/'native-enrichment-cache').iterdir())
+   damaged_cases=['', '{partial', '{}', '{"sources":[]}', *[json.dumps({'sources':[{'source_id':bad,'relationships':[]}]}) for bad in ([],{},None,123)]]
+   for damaged in damaged_cases:
+    cache.write_text(damaged);runner=Mock(return_value=raw);result=module.enrich(stage,runner)
+    runner.assert_called_once();self.assertEqual(result['origin'],'native-subscription');self.assertEqual(json.loads(cache.read_text()),raw)
+   self.assertEqual(len(list(cache.parent.glob('*.corrupt-*'))),len(damaged_cases))
+
+class NativeInputRejection(unittest.TestCase):
+ def test_structurally_invalid_source_ids_raise_validation_errors(self):
+  for bad in ([],{},None,123):
+   with self.subTest(source_id=bad),self.assertRaises(ValueError):module.validate({'sources':[{'source_id':bad,'relationships':[]}]},[{'id':'flow:entry/one'}])
+ def test_unsupported_modes_do_not_trigger_or_read_a_snapshot(self):
+  from poc import knowledge as k
+  import os
+  with tempfile.TemporaryDirectory() as t:
+   with patch('poc.provider_policy.native_knowledge',return_value=True),patch.object(k,'trigger') as trigger,patch.object(k,'snapshot') as snapshot,patch.dict(os.environ,{},clear=True):
+    for mode in ('vector','unsupported'):
+     with self.subTest(mode=mode),self.assertRaises(ValueError):k.query(Path(t),'review',mode)
+    trigger.assert_not_called();snapshot.assert_not_called()
+
+if __name__=='__main__':unittest.main()

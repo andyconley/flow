@@ -266,10 +266,13 @@ def snapshot(root):
 
 def query(root,query,mode='hybrid',role=None):
     from .provider_policy import native_knowledge
-    if native_knowledge():
-        import sqlite3,re
+    native=native_knowledge()
+    if native:
         if mode not in ('text','hybrid','vector'):raise ValueError('Invalid search mode')
         if mode=='vector':raise ValueError('Vector search is disabled by native-only policy; use text search')
+    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
+    if native:
+        import sqlite3,re
         p=snapshot(root)
         terms=re.findall(r'\w+',query)
         if not terms:return {'results':[],'search_type':'text','requested_mode':mode}
@@ -287,7 +290,6 @@ def query(root,query,mode='hybrid',role=None):
             results.append(item)
         return {'results':results,'search_type':'text','requested_mode':mode,'semantic_search':'disabled','snapshot':p.name,'ingestion':'lexical'}
 
-    if os.environ.get('FLOW_KNOWLEDGE_READONLY')!='1':trigger(root)
     p=snapshot(root)
     # Native BM CLI can write initialization metadata; private per-read copy keeps
     # published generations immutable even when multiple agents read concurrently.
