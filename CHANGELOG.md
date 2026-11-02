@@ -4,6 +4,17 @@ All notable changes to flow are generated from Conventional Commits. Longer desi
 
 ### Highlights
 
+- Patch body-parser and fast-uri in the native adapter dependency tree without upgrading the pinned SDKs.
+
+
+## [0.55.1](https://github.com/andyconley/flow/compare/v0.55.0...v0.55.1) (2026-11-01)
+
+### Bug Fixes
+
+* patch native adapter runtime dependencies ([#154](https://github.com/andyconley/flow/issues/154)) ([378b90b](https://github.com/andyconley/flow/commit/378b90b55734eabb70ae5dc44d41a4a6ea67279c))
+
+### Highlights
+
 - Constrain Flow to Codex and Claude subscriptions while retaining knowledge ingestion and text search without Ollama.
 
 
