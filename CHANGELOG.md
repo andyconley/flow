@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.56.1](https://github.com/andyconley/flow/compare/v0.56.0...v0.56.1) (2026-11-03)
+
+### Bug Fixes
+
+* preserve operation history and failed attempt evidence ([#156](https://github.com/andyconley/flow/issues/156)) ([d03f508](https://github.com/andyconley/flow/commit/d03f508fc6977216040741d08a4f6e92784608a2))
+
 ## [0.56.0](https://github.com/andyconley/flow/compare/v0.55.1...v0.56.0) (2026-11-03)
 
 ### Features
