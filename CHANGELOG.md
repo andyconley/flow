@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.56.0](https://github.com/andyconley/flow/compare/v0.55.1...v0.56.0) (2026-11-03)
+
+### Features
+
+* add read-only work review and attempt evidence ([#155](https://github.com/andyconley/flow/issues/155)) ([ce3725c](https://github.com/andyconley/flow/commit/ce3725cc9e0b47fc9715b7b300be03261c05a427))
+
 ### Highlights
 
 - Patch body-parser and fast-uri in the native adapter dependency tree without upgrading the pinned SDKs.
