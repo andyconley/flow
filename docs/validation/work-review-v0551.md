@@ -49,3 +49,12 @@ The full v2 suite passes: **423 tests, 13 skips, zero failures/errors**.
 This includes six work-review tests and two new lifecycle regression tests.
 The initial run used a Python 3.12 test virtualenv plus the pinned adapter lock;
 GitHub CI provisions the fully locked Python requirements independently.
+
+## Native consumer parity correction
+
+The first PR head passed all offline tests, but macOS consumer validation caught
+stale checked-in role recipe schemas after the renderer gained structured findings.
+All 13 recipes were regenerated using `poc.role_renderer.write_bundle` through
+the existing catalog/composition path. A new offline parity test now compares
+every distributed recipe with its renderer output even when Goose is unavailable;
+the existing real-Goose rendering assertions remain intact.
