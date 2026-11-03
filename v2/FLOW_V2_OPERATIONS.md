@@ -93,3 +93,11 @@ qualify anchors at read time, so resolved findings can still visibly become
 stale. Changed code anchors are stale; superseded artifact anchors are shown
 as superseded. Missing anchors remain visible. Resolution changes are carried
 in new immutable result revisions, preserving prior review history.
+
+Timeline operations group all intent/outcome result revisions by operation ID.
+The `reference` identifies the sole unsuperseded outcome, and `records` retains
+all revision evidence in supersession order. Multiple unsuperseded heads are
+shown as `conflicting`, with explicit `heads`, rather than selecting one.
+Failed top-level implementation attempts retain their timing, receipts and
+session lineage just like wrapped review/completed attempts. Historical attempt
+evidence stays attached to its own revision; it is never blended into a successor.
