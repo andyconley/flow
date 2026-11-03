@@ -132,6 +132,10 @@ class GooseJob:
    record['delegation_capability']={'transport':'stdio over existing Unix permission','bound_model':selected_role['model'],'evidence':str(broker.evidence),'caller_overrides':False}
   from .knowledge_tools import attach
   if self.role_bundle:cmd,env=attach(cmd,env)
+  record['knowledge_attached']=env.get('FLOW_KNOWLEDGE_READONLY')=='1'
+  record['skill_availability']='available' if self.role_bundle else 'unavailable'
+  import hashlib
+  record['supplied_context']={'prompt_sha256':hashlib.sha256(prompt.encode()).hexdigest(),'state':'supplied','basis':'exact coordinator prompt; child retrieval and application require separate observations'}
   from .device_context import settings
   record['context_configuration']=settings(s['workspace'],self.model)
   record['context_configuration']['context_tokens']=int(env['GOOSE_INPUT_LIMIT']) if env.get('GOOSE_INPUT_LIMIT') else None
@@ -139,6 +143,8 @@ class GooseJob:
   if self.role_bundle and s.get('deadline') is not None:
    budget=min(budget,max(0,s['deadline']-time.time()))
    if budget<=0:return {'status':'timeout','reason':'Approved workflow time budget exhausted during preflight; no execution submitted','submitted':False}
+  from .attempt_evidence import receipt
+  record['evidence_receipt']=receipt(record,f'{s["job_id"]}/{kind}-{index}')
   store(p,record) # Native invocation intent; a crash now requires reconciliation.
   with output.open('w') as out,err.open('w') as errors:
    child=subprocess.Popen(cmd,cwd=s['workspace'],env=env,stdout=out,stderr=errors,start_new_session=True)
@@ -206,6 +212,9 @@ class GooseJob:
     record.update(status='blocked',reason='Native/task final response violates its JSON contract: '+error.message,response_contract={'passed':False})
   self._observe(record,s,kind,index);store(p,record);return record
  def _observe(self,record,s,kind,index):
+  from .attempt_evidence import receipt
+  try:record['evidence_receipt']=receipt(record,f'{s["job_id"]}/{kind}-{index}')
+  except (OSError,ValueError,TypeError,AttributeError) as error:record['evidence_receipt']={'attempt_id':f'{s["job_id"]}/{kind}-{index}','state':'unavailable','reason':str(error)}
   from .monitoring import attach,context_for_usage
   attach(record,s['workspace'],f'{s["job_id"]}-{kind}-{index}')
   try:
@@ -301,8 +310,8 @@ Every delegate call must select a converted role with source; do not use role-le
 Previous findings: {json.dumps(s.get('findings',[]))}
 Previous test results: {json.dumps(s.get('test_results',{}))}
 Candidate revision: {s.get('candidate','not yet checked')}
-Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Final acceptance belongs to the task graph. Parent 8 turns, children at most {WORKER_MAX_TURNS} Goose turns within the original approved deadline, no merge or deployment."""
-  contract={'type':'object','properties':{'outcome':{'type':'string'},'findings':{'type':'array','items':{'type':'string'}},'test_results':{'type':'object'},'candidate_revision':{'type':'string'}},'required':['outcome','findings','test_results'],'additionalProperties':False}
+Return only JSON with outcome, findings (array) and test_results (object). Outcomes: completed or correction for implementation; approve or request_changes for review; permission_required, scope_required or blocked for either. For review include candidate_revision exactly as supplied. Preserve actual failures and limitations in findings. Findings may be legacy strings or objects with id, message, evidence, anchor and optional resolution (state open/resolved/dismissed with evidence). Artifact anchors: type artifact, reference with exact path/revision. Code anchors: type code, project-relative path and SHA256 file-content revision, optional line. Report any applied_guidance separately as agent-reported application; retrieval alone does not prove application. Final acceptance belongs to the task graph. Parent 8 turns, children at most {WORKER_MAX_TURNS} Goose turns within the original approved deadline, no merge or deployment."""
+  contract={'type':'object','properties':{'outcome':{'type':'string'},'findings':{'type':'array','items':{'anyOf':[{'type':'string'},{'type':'object'}]}},'applied_guidance':{'type':'array'},'test_results':{'type':'object'},'candidate_revision':{'type':'string'}},'required':['outcome','findings','test_results'],'additionalProperties':False}
   try:result=self._run({**s,'response_schema':contract},kind,prompt)
   except PermissionError as error:result={'status':'permission_required','reason':str(error)}
   if result['status']!='completed':
@@ -318,6 +327,10 @@ Return only JSON with outcome, findings (array) and test_results (object). Outco
   delegated=result.get('bound_delegation',{}).get('report',{})
   if kind=='review' and delegated and value.get('outcome')=='approve' and delegated.get('verdict')!='approve':
    return {'outcome':'blocked','blocked':True,'passed':False,'candidate':s.get('candidate'),'reason':'Coordinator approval contradicts independent reviewer verdict','runtime':result}
+  from .review_findings import validate as validate_findings
+  try:validate_findings(value.get('findings', []))
+  except ValueError as error:
+   return {'status':'blocked','outcome':'blocked','passed':False,'reason':str(error),'runtime':result}
   outcome=value.get('outcome')
   if outcome not in {'completed','correction','approve','request_changes','permission_required','scope_required','blocked'} or not isinstance(value.get('findings'),list) or not isinstance(value.get('test_results'),dict):
    value={'outcome':'blocked','findings':['Coordinator did not return the required task result.'],'test_results':{}}

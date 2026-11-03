@@ -300,6 +300,8 @@ def main(argv=None):
     accept.add_argument('--revision', required=True, help='Exact closure revision shown by status')
     resume = sub.add_parser('resume'); resume.add_argument('--decision-file', type=Path)
     status = sub.add_parser('status'); status.add_argument('--legacy', action='store_true', help='Read the legacy run explicitly; no v2 resume compatibility implied')
+    sub.add_parser('trace', help='Read immutable work review packet; no execution or writes')
+    sub.add_parser('timeline', help='Read compact execution timeline; no execution or writes')
     sub.add_parser('index')
     args = parser.parse_args(argv)
     project = args.project.resolve()
@@ -350,11 +352,11 @@ def main(argv=None):
             parser.error(missing_checkpoint)
         # state/artifacts is a symlink in managed installations.
         imported=(ROOT/'artifacts').resolve().parent/'imported-work.json'
-        if args.command not in {'create','status','context','index'} and imported.is_file():
+        if args.command not in {'create','status','trace','timeline','context','index'} and imported.is_file():
             key=str(state_dir.relative_to(ROOT/'artifacts'))
             if key in json.loads(imported.read_text()).get('work_paths',[]):
                 parser.error('This work item was preserved from the prior installation as read-only history. Create a fresh successor; prior approvals do not authorize new execution.')
-        if args.command == 'status':
+        if args.command in {'status', 'trace', 'timeline'}:
             with checkpoint_snapshot(state_dir/'workflow.sqlite') as saver:
                 config = {'configurable': {'thread_id': args.work}, 'recursion_limit': 100}
                 checkpoint = saver.get(config)
@@ -362,13 +364,19 @@ def main(argv=None):
                     parser.error(missing_checkpoint)
                 options = checkpoint['channel_values']['runtime_options']
                 graph = build(artifacts, NativeHarness(options), BriefChecker(artifacts)).compile(checkpointer=saver)
-                result = summarize(graph.get_state(config, subgraphs=True), artifacts)
+                snapshot = graph.get_state(config, subgraphs=True)
+                result = summarize(snapshot, artifacts)
                 from .managed import installation_status
                 result['installation'] = installation_status(Path.home(), ROOT)
                 result['checkpoint_view'] = 'latest_committed_snapshot'
                 result['operator_active'] = operator_active(state_dir)
                 if result['operator_active']:
                     result['next_action'] = 'Inspect running delivery; wait for the active operator before mutations'
+                if args.command in {'trace', 'timeline'}:
+                    from .work_review import packet
+                    result = packet(artifacts, {**snapshot.values, **delivery_state(snapshot)}, result)
+                    if args.command == 'timeline':
+                        result = {key: result[key] for key in ('work_id', 'writes', 'timeline', 'current', 'timeline_order', 'diagnostics')}
                 print(json.dumps(result, indent=2, default=str))
             return
         with locked(state_dir), SqliteSaver.from_conn_string(str(state_dir / 'workflow.sqlite')) as saver, ExitStack() as guards:

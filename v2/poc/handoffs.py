@@ -109,6 +109,9 @@ class Handoffs:
     def _validate_result(kind, result):
         if not isinstance(result, dict):
             raise ArtifactError('Result must be a JSON object')
+        if 'findings' in result:
+            from .review_findings import validate
+            validate(result['findings'])
         if kind == 'implement' and 'status' not in result:
             raise ArtifactError('Implementation result requires status')
         if kind in {'check', 'review'} and not isinstance(result.get('passed'), bool):
