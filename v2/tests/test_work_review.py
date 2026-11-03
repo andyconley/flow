@@ -98,3 +98,71 @@ class WorkReviewTests(unittest.TestCase):
         self.assertEqual(record['evidence_receipt']['attempt_id'], 'job/review-2-1')
         self.assertEqual(record['evidence_receipt']['knowledge']['state'], 'available')
         self.assertEqual(record['evidence_receipt']['observations'], [])
+
+    def test_handoff_intent_and_outcome_are_one_operation_with_history(self):
+        from poc.handoffs import Handoffs
+        state = {'workspace': str(self.root), 'task': 'fixture',
+                 'brief_ref': self.artifacts.publish('briefs', 'brief', {}),
+                 'context_ref': self.artifacts.publish('contexts', 'context', {}),
+                 'approval_ref': self.artifacts.publish('decisions', 'approve', {})}
+        handoffs = Handoffs(self.artifacts)
+        state.update(handoffs.assign(state, 'implement'))
+        execute = unittest.mock.Mock(return_value={'status': 'completed', 'runtime': {'started': 10, 'finished': 20}})
+        _, refs = handoffs.call(state, 'implement', execute)
+        before = {str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        with patch('subprocess.Popen', side_effect=AssertionError('no execution')), patch.object(Artifacts, 'publish', side_effect=AssertionError('no writes')):
+            view = packet(self.artifacts, refs)
+        execute.assert_called_once()
+        self.assertEqual(len(view['timeline']), 1)
+        operation = view['timeline'][0]
+        self.assertEqual(operation['state'], 'completed')
+        self.assertEqual(operation['reference'], refs['result_ref'])
+        self.assertEqual([r['effect'] for r in operation['records']], ['uncertain', 'completed'])
+        self.assertEqual(operation['records'][1]['supersedes'], operation['records'][0]['reference'])
+        self.assertEqual(before, {str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
+    def test_failed_top_level_attempt_keeps_evidence_and_state(self):
+        for index, state in enumerate(('timeout', 'permission_required', 'scope_required', 'blocked', 'uncertain')):
+            with self.subTest(state=state):
+                attempt = {'status': state, 'reason': 'boundary', 'kind': 'implement',
+                           'started': index, 'finished': index + 1,
+                           'evidence_receipt': {'attempt_id': str(index), 'observations': []},
+                           'usage': {'sessions': [{'session_id': str(index), 'parent_session_id': 'parent', 'role': 'lead-developer'}]}}
+                from poc.goose_job import GooseJob
+                job = GooseJob()
+                with patch.object(job, '_run', return_value=attempt):
+                    result = job.implement({'task': 'fixture', 'workspace': str(self.root)})
+                self.assertIs(result, attempt)
+                self.artifacts.publish('results', f'implement-{index}-0', {'effect': 'completed', 'result': result})
+                operation = next(r for r in packet(self.artifacts, {})['timeline'] if r['operation'] == f'implement-{index}-0')
+                self.assertEqual(operation['state'], state)
+                self.assertEqual((operation['started'], operation['finished']), (index, index + 1))
+                self.assertEqual(operation['attempt_evidence'], attempt['evidence_receipt'])
+                self.assertEqual(operation['sessions'][0]['session_id'], str(index))
+                self.assertEqual(operation['sessions'][0]['parent_session_id'], 'parent')
+
+    def test_conflicting_result_leaves_are_visible_without_selecting_one(self):
+        intent = self.artifacts.publish('results', 'implement-0-0', {'effect': 'uncertain', 'result': None})
+        left = self.artifacts.publish('results', 'implement-0-0', {'effect': 'completed', 'result': {'status': 'completed'}}, intent)
+        right = self.artifacts.publish('results', 'implement-0-0', {'effect': 'completed', 'result': {'status': 'timeout'}}, intent)
+        operation = packet(self.artifacts, {})['timeline'][0]
+        self.assertEqual(operation['state'], 'conflicting')
+        self.assertIsNone(operation['reference'])
+        self.assertEqual({r['revision'] for r in operation['heads']}, {left['revision'], right['revision']})
+        self.assertEqual(len(operation['records']), 3)
+
+    def test_successor_keeps_prior_failure_evidence_in_history_only(self):
+        failed = {'status': 'timeout', 'started': 1, 'finished': 2,
+                  'evidence_receipt': {'attempt_id': 'failed'},
+                  'usage': {'sessions': [{'session_id': 'failed-session'}]}}
+        old = self.artifacts.publish('results', 'implement-0-0', {'effect': 'uncertain', 'result': failed})
+        current = self.artifacts.publish('results', 'implement-0-0', {'effect': 'completed', 'result': {
+            'status': 'completed', 'runtime': {'started': 3, 'finished': 4,
+            'evidence_receipt': {'attempt_id': 'current'},
+            'usage': {'sessions': [{'session_id': 'current-session'}]}}}}, old)
+        operation = packet(self.artifacts, {})['timeline'][0]
+        self.assertEqual(operation['reference'], current)
+        self.assertEqual(operation['attempt_evidence']['attempt_id'], 'current')
+        self.assertEqual([s['session_id'] for s in operation['sessions']], ['current-session'])
+        self.assertEqual(operation['records'][0]['attempt_evidence']['attempt_id'], 'failed')
+        self.assertEqual(operation['records'][0]['sessions'][0]['session_id'], 'failed-session')
