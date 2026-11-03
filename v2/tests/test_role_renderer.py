@@ -110,6 +110,17 @@ class RoleRendererTests(unittest.TestCase):
                 self.assertIn(task, rendered['instructions'])
                 self.assertIn(composed['body'], rendered['instructions'])
 
+    def test_distributed_recipes_match_renderer_without_goose(self):
+        # Source parity must run offline too; native validation remains separate.
+        with tempfile.TemporaryDirectory() as tmp:
+            for entry in catalog(FLOW, ROOT):
+                role = entry['role']
+                responsibility = 'implement' if role == 'lead-developer' else 'review' if role.endswith('-reviewer') else 'role'
+                composed = compose(FLOW, ROOT, role, entry['profile'], stage='review' if role.endswith('-reviewer') else 'implement')
+                composed['body'] = composed['body'].replace(str(FLOW) + '/', '')
+                _, path = write_bundle(tmp, composed, entry['provider'], responsibility=responsibility)
+                self.assertEqual(yaml.safe_load(path.read_text()), yaml.safe_load((ROOT/'role-bundle/recipes'/path.name).read_text()), role)
+
     @unittest.skipUnless(GOOSE.is_file(), "prepare the locked Goose binary for recipe validation; no inference required")
     def test_all_catalog_roles_preserve_content_and_render_in_real_goose(self):
         entries = catalog(FLOW, ROOT)

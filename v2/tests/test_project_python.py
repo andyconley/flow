@@ -42,6 +42,7 @@ class ProjectPythonTests(unittest.TestCase):
             with patch.object(native_runtime, 'ROOT', root), patch.object(runtime_env, 'ROOT', root), \
                     patch.object(native_runtime, 'build'), patch.object(native_runtime, 'goose_binary', return_value=root/'goose'), \
                     patch.object(native_runtime, 'environment', return_value={'PATH':'/usr/bin:/bin'}):
+                subprocess.run(['git', 'init', '-q', str(project)], check=True, capture_output=True)
                 (root/'runtime').mkdir(); (root/'runtime/scope.sb').write_text('(version 1)')
                 run = root/'run'; run.mkdir()
                 profile, env = native_runtime.prepare(project, run, root/'roles', check_command=['python3','-m','pytest'])

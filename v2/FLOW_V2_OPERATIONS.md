@@ -62,3 +62,34 @@ Archive list/search inspect v2 closures and preserved legacy abstracts with expl
 `backlog` reads existing project backlog files and explicit closure follow-ups without changing order. Edit a chosen project file through approved host file tools. Existing `gaps add/list/promote` remain available for the personal capability-gap ledger/framework backlog, with original provenance/promotion rules. Promotion keeps the existing legacy framework-source target; it is not silently retargeted to the v2 install. No automatic promotion occurs.
 
 No universal legacy Flow project-registry contract was established by this port. `projects` can inspect recognized existing Flow registry files or explicit `--file` without writing or claiming migration. Native application project lists remain app-owned. This is read access, not an invented replacement registry or registration service.
+
+### Read-only work review
+
+`flow --project PROJECT --work ID trace` returns a review packet from the
+committed checkpoint and existing immutable briefs, contexts, decisions,
+assignments, results, verification results and closures. Exact references are
+qualified as current (not superseded), superseded, missing or invalid. Current
+here describes revision integrity, not approval. `timeline` returns the compact
+operation view with effect, reported state, blocker, existing session lineage,
+and the checkpoint's next action. Intent/result revisions are not counted as
+separate executions. Records without timestamps have a deterministic order;
+that order does not assert chronology. Both commands use the status snapshot
+path, invoke no models, repair nothing, and keep workflow records private.
+
+New attempt records carry an evidence receipt. Supplied prompt identity,
+available knowledge/skill capabilities, observed calls, explicit empty results,
+failed calls and unobserved responses remain distinct. Receipts inspect only the
+attempt's own parent event stream: child retrieval without a visible event is
+unobserved. `applied_guidance` in a final response is an agent report, never
+proof inferred from retrieval. Older attempts have no receipt.
+
+Findings still accept strings. Structured findings use `id`, `message`,
+`evidence`, and `anchor`. An artifact anchor has `type: artifact` and an exact
+`reference` (`path`, `revision`). A code anchor has `type: code`, a
+project-relative `path`, and `revision` equal to the SHA256 of file bytes (an
+optional line is explanatory). An optional `resolution` has state `open`,
+`resolved`, or `dismissed`; the latter two require evidence. Review packets
+qualify anchors at read time, so resolved findings can still visibly become
+stale. Changed code anchors are stale; superseded artifact anchors are shown
+as superseded. Missing anchors remain visible. Resolution changes are carried
+in new immutable result revisions, preserving prior review history.

@@ -3,10 +3,13 @@ import os,signal,subprocess,time
 
 def snapshot():
  result={}
- text=subprocess.check_output(['ps','-axo','pid=,ppid=,lstart='],text=True)
+ text=subprocess.check_output(['ps','-axo','pid=,ppid=,stat=,lstart='],text=True)
  for line in text.splitlines():
   parts=line.split()
-  if len(parts)>=7:result[int(parts[0])]={'parent':int(parts[1]),'birth':' '.join(parts[2:7])}
+  # Zombies have exited and cannot execute effects or respond to signals.
+  # Container PID 1 may retain them indefinitely; they are not live workers.
+  if len(parts)>=8 and not parts[2].startswith('Z'):
+   result[int(parts[0])]={'parent':int(parts[1]),'birth':' '.join(parts[3:8])}
  return result
 
 class ProcessScope:

@@ -89,6 +89,7 @@ print('fixture succeeded')
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve(); home = root/'home'; home.mkdir()
             workspace = root/'path-nexus/.claude/worktrees/a.b with spaces'; workspace.mkdir(parents=True)
+            subprocess.run(['git', 'init', '-q', str(workspace)], check=True, capture_output=True)
             run = root/'run'; run.mkdir()
             with patch.object(runtime_env, 'ROOT', root), patch.object(native_runtime, 'ROOT', root), \
                     patch.object(Path, 'home', return_value=home), \

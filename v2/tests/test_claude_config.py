@@ -33,6 +33,7 @@ class ClaudeConfigTests(unittest.TestCase):
                     patch.object(native_runtime, 'build'), \
                     patch.object(native_runtime, 'goose_binary', return_value=root/'goose'), \
                     patch.dict(os.environ, {'FLOW_V2_CLAUDE':str(executable)}):
+                subprocess.run(['git', 'init', '-q', str(project)], check=True, capture_output=True)
                 runtime_env.setup()
                 fake(0)
                 profile, env = native_runtime.prepare(project, run, root/'roles')
