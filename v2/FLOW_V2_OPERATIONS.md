@@ -43,6 +43,8 @@ Legacy SDK/native checkpoints are not LangGraph checkpoints. Continue a legacy a
 
 V2 immutable briefs, contexts, assignments, results and closures remain at `<project>/.glg/work/<id>/`. Source-local checkpoints remain at `v2/artifacts/glg-state/<project-key>/<id>/workflow.sqlite`; retain them when rebinding installations. `.glg/INDEX.md` is a rebuildable closure projection, not workflow authority.
 
+`create` snapshots the project's `AGENTS.md`, `CODEX.md`, `CLAUDE.md` and `PROJECT.md` files from every ancestor, plus the project's `.flow/memory/STATE.md`. Exact duplicates are kept once. An ancestor that is another checkout of the same repository, such as the main checkout around a nested worktree, contributes no file the project already has. Delegated role recipes carry the task and project context as parameters, and Goose rejects recipes whose serialized parameters exceed 128 KiB. Stage and implementation context is therefore rendered within that budget: project instructions are inlined first, most specific first, and companion `STATE.md` last. Any document that does not fit is named by path and revision so a role can still read it. If the brief alone is too large, the operation stops before launch with `source: delegate_preflight` and submits nothing. Recipe and contract JSON are written as UTF-8, because Goose rejects the surrogate-pair escapes that ASCII-only JSON uses for emoji.
+
 ## Archives, backlog and registry files
 
 ```sh
