@@ -8,7 +8,21 @@ from .lifecycle import ProcessScope
 from .native_errors import boundary_error
 
 def store(path,data):
- tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(data,indent=2));tmp.replace(path)
+ # Raw UTF-8, never ASCII escapes: json.dumps writes U+1F7E2 as the surrogate
+ # pair 🟢, which Goose's recipe parser rejects as an invalid escape.
+ tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(data,indent=2,ensure_ascii=False),encoding='utf-8');tmp.replace(path)
+
+def finding_text(findings,limit=2000):
+ """Legacy-string form of reported findings, for results that failed structure checks."""
+ rows=[]
+ for item in findings if isinstance(findings,list) else []:
+  if isinstance(item,str):text=item
+  elif isinstance(item,dict):
+   text=': '.join(str(item[k]) for k in ('id','message') if item.get(k)) or json.dumps(item,ensure_ascii=False,sort_keys=True)
+   if item.get('evidence'):text+=' (evidence: '+str(item['evidence'])+')'
+  else:text=json.dumps(item,ensure_ascii=False)
+  rows.append(text[:limit])
+ return rows
 
 class GooseJob:
  def __init__(self,model='llama3.1:8b',timeout=1200,provider='ollama',native_boundary=False,role_bundle=None,namespace_compat=None,implementation_profile=None):self.implementation_profile=implementation_profile;self.role_bundle=Path(role_bundle).resolve() if role_bundle else ROOT/'role-bundle';self.model=model;self.timeout=timeout;self.provider=provider;self.native_boundary=native_boundary;self.namespace_compat=namespace_compat
@@ -53,6 +67,13 @@ class GooseJob:
   from .project_python import select
   try:python = select(s['workspace'], s.get('check_command'))
   except ValueError as error:return {'status':'scope_required','reason':str(error)}
+  bound_task=s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked'))
+  if self.role_bundle:
+   # Goose validates delegated role recipes only when the coordinator calls
+   # delegate; refuse before launch instead of failing mid-session.
+   from .project_context import delegate_parameter_error
+   oversized=delegate_parameter_error(bound_task,s.get('project_context',''))
+   if oversized:return {'status':'blocked','reason':oversized,'source':'delegate_preflight','submitted':False}
   record={'output':str(p.with_suffix('.jsonl')),'stderr':str(p.with_suffix('.stderr')),'status':'uncertain','inputs':s['inputs'],'workspace':s['workspace'],'started':time.time(),'kind':kind}
   if kind=='implement' and self.implementation_profile:record['implementation_profile']=self.implementation_profile
   if namespace_audit:record['namespace_wire_audit']=namespace_audit
@@ -66,8 +87,7 @@ class GooseJob:
    from .role_renderer import bind_bundle
    selected=self.implementation_profile if kind=='implement' else None
    role_bundle = bind_bundle(self.role_bundle, p.parent/f'{kind}-{index}-roles-{time.time_ns()}',
-                             s['task']+'\nOperation: '+kind+'\nCandidate revision: '+str(s.get('candidate','not yet checked')),
-                             s.get('project_context',''),implementation_profile=selected)
+                             bound_task,s.get('project_context',''),implementation_profile=selected)
    operation_sources=sorted(path.stem for path in (role_bundle/'recipes').glob('*.yaml'))
    pool=bool(self.implementation_profile and self.implementation_profile['provider']=='pool')
    if pool and kind in {'implement','review'}:
@@ -250,11 +270,11 @@ class GooseJob:
  def review(self,s):return self._role_operation(s,'review')
 
  def shape(self,s,stage,assignment):
-  from .project_context import render
+  from .project_context import render, context_budget
   from .artifacts import Artifacts, brief_schema
   roles={'define':'business-analyst','solution':'solution-architect','plan':'lead-developer'}
-  context=render(Artifacts(s['workspace'],s['work_id']).read(s['context_ref'])['payload'])
   task=json.dumps({'stage':stage,'assignment':assignment,'approval':s['stage_authorization_ref']},sort_keys=True)
+  context=render(Artifacts(s['workspace'],s['work_id']).read(s['context_ref'])['payload'],budget=context_budget(task))
   state={**s,'task':task,'project_context':context,'inputs':task_input_digest(task,s['workspace'],context),
          'job_id':s['job_id']+'-'+stage+'-'+s['stage_authorization_ref']['revision'][:12],
          'deadline':time.time()+s.get('budget_seconds',600),'corrections':0,'resume_epoch':0}
@@ -330,7 +350,12 @@ Return only JSON with outcome, findings (array) and test_results (object). Outco
   from .review_findings import validate as validate_findings
   try:validate_findings(value.get('findings', []))
   except ValueError as error:
-   return {'status':'blocked','outcome':'blocked','passed':False,'reason':str(error),'runtime':result}
+   # Keep what the coordinator actually reported; a malformed finding must not
+   # replace the real blocker with a schema message. Findings become legacy
+   # strings, which remain valid in the persisted result.
+   reported=finding_text(value.get('findings'))
+   reason=f"{error}; coordinator reported outcome {value.get('outcome')!r}"+(': '+' | '.join(reported) if reported else '')
+   return {'status':'blocked','outcome':'blocked','passed':False,'reason':reason,'findings':reported,'runtime':result}
   outcome=value.get('outcome')
   if outcome not in {'completed','correction','approve','request_changes','permission_required','scope_required','blocked'} or not isinstance(value.get('findings'),list) or not isinstance(value.get('test_results'),dict):
    value={'outcome':'blocked','findings':['Coordinator did not return the required task result.'],'test_results':{}}

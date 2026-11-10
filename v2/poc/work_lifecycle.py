@@ -5,7 +5,7 @@ from .artifacts import ArtifactError, atomic_write, validate_brief, brief_schema
 from .contracts import State, task_input_digest, digest_tree
 from .handoffs import Handoffs
 from .verification import require_ready
-from .project_context import render
+from .project_context import render, context_budget
 from .workflow import build as delivery
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
@@ -180,8 +180,11 @@ def build(artifacts, harness, checker):
         task = json.dumps(brief, indent=2, ensure_ascii=False)
         source_refs = {'brief_ref': s['brief_ref'], 'approval_ref': s['approval_ref'],
                        'context_ref': s['context_ref'], 'shaping_refs': s.get('shaping_refs', {})}
-        project_context = render(context) + '\nControlled input references:\n' + json.dumps(source_refs, indent=2)
-        if selected:project_context+='\nApproved implementation profile: '+json.dumps(selected,sort_keys=True)
+        suffix = '\nControlled input references:\n' + json.dumps(source_refs, indent=2)
+        if selected:suffix+='\nApproved implementation profile: '+json.dumps(selected,sort_keys=True)
+        # Delegated role recipes carry task and context as parameters, which Goose
+        # caps at 128 KiB together; documents that do not fit are referenced by path.
+        project_context = render(context, budget=context_budget(task, suffix)) + suffix
         return {**({'implementation_profile_digest':selected['sha256']} if selected else {}),
                 'task': task, 'project_context': project_context, 'check_command': brief['check_command'],
                 'inputs': task_input_digest(task, s['workspace'], project_context),

@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import yaml
+from .project_context import RECIPE_PARAMETERS
 
 # Isolate Flow's top-level Python imports from the POC's module namespace.
 COMPOSE = r'''
@@ -106,8 +107,7 @@ def render(composed, provider, model=None, responsibility="implement"):
             + '\nReturn the required final JSON. Preserve verification results and limitations; report failure truthfully.',
         'prompt': 'Execute the task assigned in the instructions.',
         'parameters': [{'key': key, 'input_type': 'string', 'requirement': 'required', 'description': description}
-                       for key, description in [('project_context', 'Project instructions, standards and relevant context'),
-                                                ('task', 'Approved assignment, scope and acceptance criteria')]],
+                       for key, description in RECIPE_PARAMETERS],
         'extensions': COMMON_EXTENSIONS,
         'settings': {'goose_provider': actual_provider, 'goose_model': actual_model, 'max_turns': 4},
         'response': {'json_schema': RESULT_SCHEMA},
