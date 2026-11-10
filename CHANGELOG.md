@@ -2,6 +2,12 @@
 
 All notable changes to flow are generated from Conventional Commits. Longer design context belongs in the documentation changed by the release.
 
+## [0.56.2](https://github.com/andyconley/flow/compare/v0.56.1...v0.56.2) (2026-11-10)
+
+### Bug Fixes
+
+* **v2:** keep delegated recipes valid for emoji and large project context ([#157](https://github.com/andyconley/flow/issues/157)) ([e544505](https://github.com/andyconley/flow/commit/e544505f7ac1462758d9d6c5b91edc9463e01184))
+
 ## [0.56.1](https://github.com/andyconley/flow/compare/v0.56.0...v0.56.1) (2026-11-03)
 
 ### Bug Fixes
