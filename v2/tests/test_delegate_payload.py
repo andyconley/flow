@@ -124,6 +124,36 @@ class ResolveTests(unittest.TestCase):
             self.assertNotIn(str(main / 'AGENTS.md'), paths)
             self.assertIn(str(worktree / 'AGENTS.md'), paths)
 
+    def test_plain_subdirectory_project_keeps_repository_root_instructions(self):
+        with tempfile.TemporaryDirectory() as t:
+            repo = Path(t).resolve() / 'repo'
+            service = repo / 'service'
+            service.mkdir(parents=True)
+            self.git('init', '-q', '-b', 'main', cwd=repo)
+            (repo / 'AGENTS.md').write_text('repository rules')
+            (service / 'AGENTS.md').write_text('service rules')
+            self.git('add', '.', cwd=repo)
+            self.git('commit', '-q', '-m', 'init', cwd=repo)
+            paths = [d['path'] for d in resolve(service)['documents'] if d['path'].startswith(str(repo))]
+            self.assertEqual([str(repo / 'AGENTS.md'), str(service / 'AGENTS.md')], paths)
+
+    def test_subdirectory_of_nested_worktree_skips_only_the_other_checkouts_counterpart(self):
+        with tempfile.TemporaryDirectory() as t:
+            main = Path(t).resolve() / 'kb'
+            (main / 'service').mkdir(parents=True)
+            self.git('init', '-q', '-b', 'main', cwd=main)
+            (main / 'AGENTS.md').write_text('main root rules')
+            (main / 'service' / 'AGENTS.md').write_text('main service rules')
+            self.git('add', '.', cwd=main)
+            self.git('commit', '-q', '-m', 'init', cwd=main)
+            worktree = main / '.claude' / 'worktrees' / 'w'
+            self.git('worktree', 'add', '-q', '-b', 'w', str(worktree), cwd=main)
+            (worktree / 'AGENTS.md').write_text('branch root rules')
+            paths = [d['path'] for d in resolve(worktree / 'service')['documents'] if d['path'].startswith(str(main))]
+            # main/service is not an ancestor, so it never loads; main/AGENTS.md is superseded
+            # by the worktree's copy; the worktree's own root and service files both load.
+            self.assertEqual([str(worktree / 'AGENTS.md'), str(worktree / 'service' / 'AGENTS.md')], paths)
+
     def test_unrelated_ancestor_documents_are_kept_and_exact_duplicates_dropped(self):
         with tempfile.TemporaryDirectory() as t:
             outer = Path(t).resolve() / 'outer'

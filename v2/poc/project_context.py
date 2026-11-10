@@ -15,20 +15,36 @@ RECIPE_PARAMETERS = (('project_context', 'Project instructions, standards and re
                      ('task', 'Approved assignment, scope and acceptance criteria'))
 
 
-def _git_common_dir(directory):
-    result = subprocess.run(['git', '-C', str(directory), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-                            capture_output=True, text=True)
-    return Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else None
+def _checkout(directory):
+    """(repository common dir, working-tree top level) for a directory, or None."""
+    result = subprocess.run(['git', '-C', str(directory), 'rev-parse', '--path-format=absolute',
+                             '--git-common-dir', '--show-toplevel'], capture_output=True, text=True)
+    lines = result.stdout.split('\n')
+    if result.returncode != 0 or len(lines) < 2 or not lines[0] or not lines[1]:
+        return None
+    return Path(lines[0]).resolve(), Path(lines[1]).resolve()
 
 
 def resolve(project):
     root = Path(project).resolve()
     documents = []
-    repository = {}
-    def same_repository(directory):
-        if 'root' not in repository:
-            repository['root'] = _git_common_dir(root)
-        return repository['root'] is not None and _git_common_dir(directory) == repository['root']
+    checkouts = {}
+    def checkout(directory):
+        if directory not in checkouts:
+            checkouts[directory] = _checkout(directory)
+        return checkouts[directory]
+    def superseded_by_own_checkout(directory, name):
+        # A worktree nested inside another checkout of its own repository sees that
+        # checkout's files as ancestors. Skip one only when it is a *separate* checkout
+        # (different working tree) and the project's checkout has the same file at the
+        # same repository path; that copy is the revision for this branch. A plain
+        # subdirectory shares its repository's working tree and keeps every ancestor.
+        own, other = checkout(root), checkout(directory)
+        if not own or not other or own[0] != other[0] or own[1] == other[1]:
+            return False
+        counterpart = own[1] / directory.relative_to(other[1])
+        # Only a counterpart this snapshot also loads (the project or one of its ancestors).
+        return (counterpart == root or counterpart in root.parents) and (counterpart / name).is_file()
     # Ancestor context first, most-specific context last. Native-client instructions
     # remain in force; this snapshot makes their sources visible at a handoff.
     for directory in [*reversed(root.parents), root]:
@@ -39,10 +55,7 @@ def resolve(project):
             path = directory / name
             if not path.is_file():
                 continue
-            if directory != root and (root / name).is_file() and same_repository(directory):
-                # A worktree nested inside another checkout of its own repository
-                # sees that checkout's copy of the same file as an ancestor. The
-                # project's own copy is the revision for this branch; skip the other.
+            if directory != root and superseded_by_own_checkout(directory, name):
                 continue
             content = path.read_text(encoding='utf-8')
             documents.append({'path': str(path), 'revision': hashlib.sha256(content.encode()).hexdigest(),
